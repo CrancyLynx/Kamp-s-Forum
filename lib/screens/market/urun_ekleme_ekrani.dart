@@ -4,7 +4,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'app_colors.dart';
+// Üst klasördeki utils'e erişim
+import '../../utils/app_colors.dart';
 
 class UrunEklemeEkrani extends StatefulWidget {
   const UrunEklemeEkrani({super.key});
@@ -25,16 +26,31 @@ class _UrunEklemeEkraniState extends State<UrunEklemeEkrani> {
   File? _imageFile;
   final ImagePicker _picker = ImagePicker();
   bool _isLoading = false;
+  bool _isPickingImage = false;
 
   Future<void> _pickImage() async {
-    final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
-    if (pickedFile != null) {
-      setState(() => _imageFile = File(pickedFile.path));
+    if (_isPickingImage) return;
+
+    setState(() => _isPickingImage = true);
+
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery, 
+        imageQuality: 70
+      );
+      if (pickedFile != null) {
+        setState(() => _imageFile = File(pickedFile.path));
+      }
+    } catch (e) {
+      debugPrint("Resim seçme hatası: $e");
+    } finally {
+      if (mounted) setState(() => _isPickingImage = false);
     }
   }
 
   Future<void> _submitProduct() async {
     if (!_formKey.currentState!.validate()) return;
+    
     if (_imageFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Lütfen bir ürün resmi ekleyin.")));
       return;
@@ -43,21 +59,24 @@ class _UrunEklemeEkraniState extends State<UrunEklemeEkrani> {
     setState(() => _isLoading = true);
 
     try {
-      final user = FirebaseAuth.instance.currentUser!;
-      final userDoc = await FirebaseFirestore.instance.collection('kullanicilar').doc(user.uid).get();
-      final userData = userDoc.data()!;
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception("Kullanıcı oturumu bulunamadı");
 
-      // 1. Resmi Yükle
+      final userDoc = await FirebaseFirestore.instance.collection('kullanicilar').doc(user.uid).get();
+      final userData = userDoc.data() ?? {}; 
+      
+      final String sellerName = userData['takmaAd'] ?? userData['ad'] ?? 'Anonim Satıcı';
+      final String? sellerAvatar = userData['avatarUrl'];
+
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final ref = FirebaseStorage.instance.ref().child('urun_resimleri/${user.uid}-$timestamp.jpg');
       await ref.putFile(_imageFile!);
       final imageUrl = await ref.getDownloadURL();
 
-      // 2. Veritabanına Ekle
       await FirebaseFirestore.instance.collection('urunler').add({
         'sellerId': user.uid,
-        'sellerName': userData['takmaAd'] ?? userData['ad'],
-        'sellerAvatar': userData['avatarUrl'],
+        'sellerName': sellerName,
+        'sellerAvatar': sellerAvatar,
         'title': _titleController.text.trim(),
         'description': _descController.text.trim(),
         'price': int.parse(_priceController.text.trim()),
@@ -68,11 +87,13 @@ class _UrunEklemeEkraniState extends State<UrunEklemeEkrani> {
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("İlan başarıyla oluşturuldu!")));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("İlan başarıyla oluşturuldu!"), backgroundColor: AppColors.success));
         Navigator.pop(context);
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Hata: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Hata: $e"), backgroundColor: AppColors.error));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -81,7 +102,7 @@ class _UrunEklemeEkraniState extends State<UrunEklemeEkrani> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("İlan Ver"), backgroundColor: AppColors.primary),
+      appBar: AppBar(title: const Text("İlan Ver"), backgroundColor: AppColors.primary, foregroundColor: Colors.white),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Form(
@@ -89,7 +110,6 @@ class _UrunEklemeEkraniState extends State<UrunEklemeEkrani> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // RESİM SEÇİCİ
               GestureDetector(
                 onTap: _pickImage,
                 child: Container(
@@ -102,13 +122,18 @@ class _UrunEklemeEkraniState extends State<UrunEklemeEkrani> {
                     image: _imageFile != null ? DecorationImage(image: FileImage(_imageFile!), fit: BoxFit.cover) : null,
                   ),
                   child: _imageFile == null 
-                      ? const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_a_photo, size: 40, color: Colors.grey), SizedBox(height: 8), Text("Kapak Fotoğrafı Ekle", style: TextStyle(color: Colors.grey))])
+                      ? Column(
+                          mainAxisAlignment: MainAxisAlignment.center, 
+                          children: [
+                            Icon(Icons.add_a_photo, size: 40, color: Colors.grey[600]), 
+                            const SizedBox(height: 8), 
+                            Text("Kapak Fotoğrafı Ekle", style: TextStyle(color: Colors.grey[600]))
+                          ]
+                        )
                       : null,
                 ),
               ),
               const SizedBox(height: 20),
-
-              // BİLGİ GİRİŞLERİ
               TextFormField(
                 controller: _titleController,
                 decoration: const InputDecoration(labelText: "İlan Başlığı", border: OutlineInputBorder()),
@@ -121,7 +146,7 @@ class _UrunEklemeEkraniState extends State<UrunEklemeEkrani> {
                     child: TextFormField(
                       controller: _priceController,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: "Fiyat (₺)", border: OutlineInputBorder(), suffixText: "TL"),
+                      decoration: const InputDecoration(labelText: "Fiyat", border: OutlineInputBorder(), suffixText: "TL"),
                       validator: (v) => v!.isEmpty ? "Fiyat gerekli" : null,
                     ),
                   ),
@@ -144,7 +169,6 @@ class _UrunEklemeEkraniState extends State<UrunEklemeEkrani> {
                 validator: (v) => v!.isEmpty ? "Açıklama gerekli" : null,
               ),
               const SizedBox(height: 30),
-              
               SizedBox(
                 width: double.infinity,
                 height: 50,

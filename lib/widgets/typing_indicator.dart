@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../app_colors.dart';
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
 
 class TypingIndicator extends StatefulWidget {
   final bool isDark;

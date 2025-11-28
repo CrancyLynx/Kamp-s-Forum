@@ -5,10 +5,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:provider/provider.dart';
 import 'dart:math' as math; // Arka plan animasyonu için
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
 
-import 'app_colors.dart';
-import 'main.dart';
-import 'widgets/app_logo.dart'; // ÖZEL LOGO WIDGET'I
+
+import '../../main.dart';
+import '../../widgets/app_logo.dart'; // ÖZEL LOGO WIDGET'I
 
 class GirisEkrani extends StatefulWidget {
   const GirisEkrani({super.key});

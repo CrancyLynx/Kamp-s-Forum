@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import '../app_colors.dart';
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
+
 
 class InAppNotification extends StatelessWidget {
   final String title;

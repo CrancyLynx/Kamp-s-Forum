@@ -8,11 +8,12 @@ import 'package:timeago/timeago.dart' as timeago;
 import 'package:image_picker/image_picker.dart'; // Resim seçici
 import 'package:firebase_storage/firebase_storage.dart'; // Storage
 import 'dart:io';
-
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
+import '../profile/kullanici_profil_detay_ekrani.dart';
+ 
 import 'gonderi_duzenleme_ekrani.dart';
-import 'kullanici_profil_detay_ekrani.dart';
-import 'app_colors.dart';
-import 'widgets/animated_list_item.dart';
+import '../../widgets/animated_list_item.dart';
 
 class GonderiDetayEkrani extends StatefulWidget {
   final String postId;

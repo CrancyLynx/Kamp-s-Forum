@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart'; 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'gonderi_detay_ekrani.dart';
-import 'dogrulama_ekrani.dart'; 
-import 'profil_ekrani.dart';
-import 'kullanici_profil_detay_ekrani.dart'; 
-import 'main.dart'; 
-import 'sohbet_detay_ekrani.dart'; 
-import 'app_colors.dart'; 
-import 'widgets/animated_list_item.dart';
+import '../forum/gonderi_detay_ekrani.dart';
+import '../auth/dogrulama_ekrani.dart'; 
+
+import '../../widgets/animated_list_item.dart';
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
+
 
 class BildirimEkrani extends StatefulWidget {
   const BildirimEkrani({super.key});

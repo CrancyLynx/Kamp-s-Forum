@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart' hide Badge; // DÜZELTME: Material'ın Badge widget'ı ile çakışmayı önle.
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'app_colors.dart';
 // DÜZELTME: Tekrar eden tanımlamalar kaldırıldı, merkezi model dosyası import edildi.
 import 'package:kampus_yardim_app/widgets/badge_widget.dart';
-import 'badge_model.dart';
+import '../../models/badge_model.dart';
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
+
 
 class RozetlerSayfasi extends StatelessWidget {
   final Set<String> earnedBadgeIds;

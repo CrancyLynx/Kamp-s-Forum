@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:kampus_yardim_app/badge_model.dart' as app;
+import '../models/badge_model.dart' as app;
+// Düzeltilmiş Importlar
 
 /// Bir rozeti, ikonu ve ismiyle birlikte şık bir kutu içinde gösteren widget.
 class BadgeWidget extends StatelessWidget {

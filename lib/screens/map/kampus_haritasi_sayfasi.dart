@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
-import 'app_colors.dart';
+
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
+
 
 class KampusHaritasiSayfasi extends StatefulWidget {
   final String initialFilter;

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'kullanici_profil_detay_ekrani.dart';
-import 'app_colors.dart';
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
+import '../profile/kullanici_profil_detay_ekrani.dart';
+
 
 class KullaniciListesiEkrani extends StatelessWidget {
   final String title;

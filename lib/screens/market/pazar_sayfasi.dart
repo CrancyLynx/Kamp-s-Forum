@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'app_colors.dart';
 import 'urun_ekleme_ekrani.dart';
 import 'urun_detay_ekrani.dart';
-import 'widgets/animated_list_item.dart';
+import '../../widgets/animated_list_item.dart';
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
+ 
 
 class PazarSayfasi extends StatefulWidget {
   const PazarSayfasi({super.key});

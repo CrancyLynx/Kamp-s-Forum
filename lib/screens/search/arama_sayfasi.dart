@@ -1,15 +1,15 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
+import '../profile/kullanici_profil_detay_ekrani.dart';
 
-import 'app_colors.dart';
-import 'kullanici_profil_detay_ekrani.dart';
-import 'gonderi_detay_ekrani.dart';
-import 'kampus_haritasi_sayfasi.dart';
-import 'widgets/animated_list_item.dart';
+
+import '../forum/gonderi_detay_ekrani.dart';
+import '../map/kampus_haritasi_sayfasi.dart';
+import '../../widgets/animated_list_item.dart';
 
 class AramaSayfasi extends StatefulWidget {
   const AramaSayfasi({super.key});

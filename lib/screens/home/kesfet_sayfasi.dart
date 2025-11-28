@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'arama_sayfasi.dart';
-import 'app_colors.dart';
-import 'gonderi_detay_ekrani.dart';
-import 'news_service.dart';
-import 'kampus_haritasi_sayfasi.dart';
+import '../search/arama_sayfasi.dart';
+import '../forum/gonderi_detay_ekrani.dart';
+import '../../services/news_service.dart';
+import '../map/kampus_haritasi_sayfasi.dart';
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
 
 class KesfetSayfasi extends StatefulWidget {
   const KesfetSayfasi({super.key});

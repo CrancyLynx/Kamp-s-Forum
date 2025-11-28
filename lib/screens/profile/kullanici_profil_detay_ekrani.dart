@@ -6,15 +6,18 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 
-import 'app_colors.dart';
-import 'sohbet_detay_ekrani.dart';
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
+
+
+import '../chat/sohbet_detay_ekrani.dart';
 import 'profil_duzenleme_ekrani.dart'; 
 import 'rozetler_sayfasi.dart';
-import 'gonderi_detay_ekrani.dart';
-import 'giris_ekrani.dart';
-import 'main.dart';
-import 'kullanici_listesi_ekrani.dart'; 
-import 'widgets/animated_list_item.dart'; 
+import '../forum/gonderi_detay_ekrani.dart';
+import '../auth/giris_ekrani.dart';
+import '../../main.dart';
+import '../admin/kullanici_listesi_ekrani.dart'; 
+import '../../widgets/animated_list_item.dart'; 
 
 class KullaniciProfilDetayEkrani extends StatefulWidget {
   final String? userId; 

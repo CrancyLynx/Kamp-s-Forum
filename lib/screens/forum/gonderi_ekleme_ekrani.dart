@@ -2,10 +2,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart'; // Storage
-import 'package:image_picker/image_picker.dart'; // Resim seçici
-import 'forum_sayfasi.dart'; // kCategories için
-import 'app_colors.dart';
+import 'package:firebase_storage/firebase_storage.dart'; 
+import 'package:image_picker/image_picker.dart'; 
+// Aynı klasörde olduğu için doğrudan erişim
+import 'forum_sayfasi.dart'; 
+// Üst klasör utils
+import '../../utils/app_colors.dart';
 
 class GonderiEklemeEkrani extends StatefulWidget {
   final String userName;
@@ -21,22 +23,24 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
   final _mesajController = TextEditingController();
   String _selectedCategory = kCategories.first;
   bool _isLoading = false;
+  
+  bool _isPickingImage = false; 
 
-  // RESİM İŞLEMLERİ İÇİN DEĞİŞKENLER
   final ImagePicker _picker = ImagePicker();
   final List<File> _selectedImages = [];
 
-  // Resim Seçme Fonksiyonu
   Future<void> _pickImages() async {
-    // Halihazırda 2 resim varsa izin verme
+    if (_isPickingImage) return;
+    
     if (_selectedImages.length >= 2) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("En fazla 2 resim ekleyebilirsiniz.")));
       return;
     }
 
+    setState(() => _isPickingImage = true);
+
     try {
-      // Çoklu seçim (Maksimum limit kontrolü aşağıda)
-      final List<XFile> pickedFiles = await _picker.pickMultiImage(imageQuality: 70); // Kalite %70 (Boyut tasarrufu)
+      final List<XFile> pickedFiles = await _picker.pickMultiImage(imageQuality: 70);
 
       if (pickedFiles.isNotEmpty) {
         setState(() {
@@ -53,17 +57,17 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
       }
     } catch (e) {
       debugPrint("Resim seçme hatası: $e");
+    } finally {
+      if (mounted) setState(() => _isPickingImage = false);
     }
   }
 
-  // Resmi Listeden Kaldırma
   void _removeImage(int index) {
     setState(() {
       _selectedImages.removeAt(index);
     });
   }
 
-  // Resimleri Storage'a Yükleme ve URL Alma
   Future<List<String>> _uploadImages(String userId) async {
     List<String> downloadUrls = [];
     
@@ -73,7 +77,6 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
         final fileName = "$userId-$timestamp-${downloadUrls.length}.jpg";
         final ref = FirebaseStorage.instance.ref().child('gonderi_resimleri/$fileName');
         
-        // Yükleme işlemi
         final uploadTask = ref.putFile(imageFile, SettableMetadata(contentType: 'image/jpeg'));
         final snapshot = await uploadTask;
         final url = await snapshot.ref.getDownloadURL();
@@ -92,17 +95,18 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
 
     try {
       final userId = FirebaseAuth.instance.currentUser!.uid;
+      
       final userDoc = await FirebaseFirestore.instance.collection('kullanicilar').doc(userId).get();
-      final String? currentAvatarUrl = userDoc.data()?['avatarUrl'];
-      final List<dynamic> authorBadges = userDoc.data()?['earnedBadges'] ?? [];
+      final userData = userDoc.data() ?? {};
+      
+      final String? currentAvatarUrl = userData['avatarUrl'];
+      final List<dynamic> authorBadges = userData['earnedBadges'] ?? [];
 
-      // 1. Önce Resimleri Yükle
       List<String> imageUrls = [];
       if (_selectedImages.isNotEmpty) {
         imageUrls = await _uploadImages(userId);
       }
 
-      // 2. Firestore'a Kaydet
       await FirebaseFirestore.instance.collection('gonderiler').add({
         'baslik': _baslikController.text.trim(),
         'mesaj': _mesajController.text.trim(),
@@ -115,7 +119,7 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
         'avatarUrl': currentAvatarUrl,
         'authorBadges': authorBadges,
         'likes': [],
-        'imageUrls': imageUrls, // Yeni Alan: Resim URL'leri
+        'imageUrls': imageUrls,
       });
 
       final userRef = FirebaseFirestore.instance.collection('kullanicilar').doc(userId);
@@ -160,7 +164,6 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // KATEGORİ SEÇİMİ
               const Text("Kategori Seç", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 10),
               SingleChildScrollView(
@@ -184,14 +187,12 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
               ),
               const SizedBox(height: 24),
               
-              // BAŞLIK & İÇERİK
               _buildModernInput(controller: _baslikController, label: "Başlık", hint: "Konu ne hakkında?", icon: Icons.title),
               const SizedBox(height: 16),
               _buildModernInput(controller: _mesajController, label: "İçerik", hint: "Detayları buraya yaz...", icon: Icons.article_outlined, maxLines: 8),
               
               const SizedBox(height: 20),
 
-              // RESİM SEÇME ALANI
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -207,7 +208,6 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
               
               const SizedBox(height: 10),
 
-              // SEÇİLEN RESİMLERİN ÖNİZLEMESİ
               if (_selectedImages.isNotEmpty)
                 SizedBox(
                   height: 120,

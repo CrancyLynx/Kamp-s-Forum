@@ -7,10 +7,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart'; 
 import 'package:image_picker/image_picker.dart'; 
 import 'package:firebase_storage/firebase_storage.dart'; 
-
-import 'app_colors.dart';
-import 'kullanici_profil_detay_ekrani.dart';
-import 'widgets/typing_indicator.dart'; 
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
+import '../profile/kullanici_profil_detay_ekrani.dart';
+import '../../widgets/typing_indicator.dart'; 
 
 class SohbetDetayEkrani extends StatefulWidget {
   final String chatId;
@@ -38,6 +38,7 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
   String? _myAvatarUrl;
   
   bool _isUploading = false;
+  bool _isPickingImage = false;
   final ImagePicker _picker = ImagePicker();
 
   late Stream<DocumentSnapshot> _chatStream;
@@ -149,23 +150,36 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
   }
 
   Future<void> _pickAndUploadImage() async {
-    final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
-    if (pickedFile == null) return;
+    if (_isPickingImage) return;
     
-    setState(() => _isUploading = true);
+    setState(() => _isPickingImage = true);
 
     try {
+      final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+      
+      if (pickedFile == null) return;
+
+      setState(() => _isUploading = true);
+
       final File imageFile = File(pickedFile.path);
       final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
       final storageRef = FirebaseStorage.instance.ref().child('chat_images/${widget.chatId}/$_currentUserId-$timestamp.jpg');
+      
       final uploadTask = storageRef.putFile(imageFile, SettableMetadata(contentType: 'image/jpeg'));
       final snapshot = await uploadTask;
       final downloadUrl = await snapshot.ref.getDownloadURL();
+      
       _sendMessage(imageUrl: downloadUrl, messageType: 'image');
+
     } catch (e) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Resim gönderilemedi.")));
+       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Resim seçilemedi veya yüklenemedi.")));
     } finally {
-      if (mounted) setState(() => _isUploading = false);
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+          _isPickingImage = false;
+        });
+      }
     }
   }
 
@@ -305,7 +319,7 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
                           return Align(
                             alignment: Alignment.centerLeft,
                             child: Padding(
-                              padding: const EdgeInsets.only(left: 38.0), // Profil fotosu kadar boşluk
+                              padding: const EdgeInsets.only(left: 38.0), 
                               child: TypingIndicator(isDark: isDark),
                             ),
                           );
@@ -374,7 +388,6 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
     return d1.year == d2.year && d1.month == d2.month && d1.day == d2.day;
   }
 
-  // --- MESAJ BALONCUĞU YAPISI (GÜNCELLENDİ) ---
   Widget _buildMessageBubble(Map<String, dynamic> message, bool isDark, bool isPending) {
     final bool isMe = message['senderId'] == _currentUserId;
     final String content = message['content'] ?? '';
@@ -386,7 +399,6 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
         ? DateFormat('HH:mm').format(timestamp.toDate()) 
         : '...';
 
-    // Mesaj İçeriği
     Widget messageContent;
     if (messageType == 'image') {
       messageContent = Container(
@@ -411,10 +423,9 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
       );
     }
 
-    // Baloncuk Tasarımı
     final bubble = Container(
       constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.70),
-      margin: const EdgeInsets.symmetric(vertical: 2), // Baloncuklar arası boşluk azaldı
+      margin: const EdgeInsets.symmetric(vertical: 2),
       padding: messageType == 'image' ? const EdgeInsets.all(4) : const EdgeInsets.fromLTRB(12, 8, 12, 6),
       decoration: BoxDecoration(
         color: isMe 
@@ -423,8 +434,8 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(16),
           topRight: const Radius.circular(16),
-          bottomLeft: isMe ? const Radius.circular(16) : const Radius.circular(2), // Sol alt köşe sivri (karşı tarafsa)
-          bottomRight: isMe ? const Radius.circular(2) : const Radius.circular(16), // Sağ alt köşe sivri (bensem)
+          bottomLeft: isMe ? const Radius.circular(16) : const Radius.circular(2),
+          bottomRight: isMe ? const Radius.circular(2) : const Radius.circular(16),
         ),
         boxShadow: [
           BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))
@@ -462,24 +473,21 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
       ),
     );
 
-    // Eğer mesaj bana aitse (Sağa yasla)
     if (isMe) {
       return Align(
         alignment: Alignment.centerRight,
         child: bubble,
       );
     } 
-    
-    // Eğer mesaj karşı tarafa aitse (Sola yasla + Profil Fotoğrafı)
     else {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4.0),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end, // Avatarı baloncuğun en altına hizala
+          crossAxisAlignment: CrossAxisAlignment.end,
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
             CircleAvatar(
-              radius: 14, // Küçük avatar
+              radius: 14,
               backgroundImage: (widget.receiverAvatarUrl != null && widget.receiverAvatarUrl!.isNotEmpty)
                   ? CachedNetworkImageProvider(widget.receiverAvatarUrl!)
                   : null,
@@ -509,11 +517,11 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
         child: Row(
           children: [
             GestureDetector(
-              onTap: _isUploading ? null : _pickAndUploadImage,
+              onTap: (_isUploading || _isPickingImage) ? null : _pickAndUploadImage,
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: _isUploading ? Colors.grey : AppColors.primary.withOpacity(0.1),
+                  color: (_isUploading || _isPickingImage) ? Colors.grey : AppColors.primary.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
                 child: _isUploading 
@@ -547,7 +555,7 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
             ),
             const SizedBox(width: 8),
             GestureDetector(
-              onTap: _isUploading ? null : () => _sendMessage(messageType: 'text'),
+              onTap: (_isUploading || _isPickingImage) ? null : () => _sendMessage(messageType: 'text'),
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(

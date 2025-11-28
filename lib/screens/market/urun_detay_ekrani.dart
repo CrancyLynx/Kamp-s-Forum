@@ -3,9 +3,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
-import 'app_colors.dart';
-import 'sohbet_detay_ekrani.dart';
-import 'kullanici_profil_detay_ekrani.dart';
+import '../chat/sohbet_detay_ekrani.dart';
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
+import '../profile/kullanici_profil_detay_ekrani.dart';
 
 class UrunDetayEkrani extends StatelessWidget {
   final String productId;

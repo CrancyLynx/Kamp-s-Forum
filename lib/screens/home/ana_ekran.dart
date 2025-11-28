@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'forum_sayfasi.dart';
+import '../forum/forum_sayfasi.dart';
 import 'kesfet_sayfasi.dart';
-import 'pazar_sayfasi.dart'; // YENİ: Pazar sayfası import edildi
-import 'sohbet_listesi_ekrani.dart'; // Mesajlara gitmek için
-import 'bildirim_ekrani.dart'; // Bildirimlere gitmek için
-import 'app_colors.dart';
+import '../market/pazar_sayfasi.dart'; // YENİ: Pazar sayfası import edildi
+import '../chat/sohbet_listesi_ekrani.dart'; // Mesajlara gitmek için
+import '../notification/bildirim_ekrani.dart'; // Bildirimlere gitmek için
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
 
 class AnaEkran extends StatefulWidget {
   final bool isGuest;

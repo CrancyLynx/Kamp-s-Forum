@@ -1,13 +1,15 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:cached_network_image/cached_network_image.dart';
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
+import '../profile/kullanici_profil_detay_ekrani.dart';
 
-import 'app_colors.dart';
-import 'kullanici_profil_detay_ekrani.dart';
-import 'gonderi_detay_ekrani.dart';
+import '../forum/gonderi_detay_ekrani.dart';
+// Düzeltilmiş Importlar
 
 class AdminPanelEkrani extends StatefulWidget {
   const AdminPanelEkrani({super.key});

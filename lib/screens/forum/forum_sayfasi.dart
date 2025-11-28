@@ -3,19 +3,19 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:kampus_yardim_app/widgets/badge_widget.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'main.dart';
-import 'widgets/animated_list_item.dart';
+import '../../widgets/animated_list_item.dart';
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
+import '../profile/kullanici_profil_detay_ekrani.dart';
 
-import 'admin_panel_ekrani.dart';
+import '../admin/admin_panel_ekrani.dart';
 import 'gonderi_detay_ekrani.dart';
-import 'profil_ekrani.dart';
-import 'kullanici_profil_detay_ekrani.dart';
-import 'package:kampus_yardim_app/badge_model.dart';
-import 'app_colors.dart';
+import '../profile/profil_ekrani.dart';
+import '../../models/badge_model.dart';
 
-import 'bildirim_ekrani.dart';
+import '../notification/bildirim_ekrani.dart';
 import 'gonderi_ekleme_ekrani.dart';
-import 'sohbet_listesi_ekrani.dart';
+import '../chat/sohbet_listesi_ekrani.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 

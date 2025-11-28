@@ -5,8 +5,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
 import 'sohbet_detay_ekrani.dart';
-import 'app_colors.dart';
-import 'widgets/animated_list_item.dart';
+import '../../widgets/animated_list_item.dart';
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
+
 
 class SohbetListesiEkrani extends StatefulWidget {
   const SohbetListesiEkrani({super.key});

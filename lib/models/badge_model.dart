@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'app_colors.dart';
+// Düzeltilmiş Importlar
+import '../../utils/app_colors.dart';
 
 /// Bir rozeti temsil eden model sınıfı.
 class Badge {
