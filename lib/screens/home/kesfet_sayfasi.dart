@@ -2,13 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart'; 
+// import 'package:font_awesome_flutter/font_awesome_flutter.dart'; // UYARI 1: Kullanılmıyor, kaldırıldı
 import '../search/arama_sayfasi.dart';
 import '../forum/gonderi_detay_ekrani.dart';
 import '../../services/news_service.dart';
 import '../map/kampus_haritasi_sayfasi.dart';
 import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart'; 
+import '../event/etkinlik_detay_ekrani.dart'; 
+import 'package:intl/intl.dart'; 
+
+// import 'dart:async'; // UYARI 2: Kullanılmıyor, kaldırıldı
+// import 'dart:math'; // UYARI 3: Kullanılmıyor, kaldırıldı
 
 class KesfetSayfasi extends StatefulWidget {
   const KesfetSayfasi({super.key});
@@ -22,7 +27,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
   late Future<List<DocumentSnapshot>> _forumPostsFuture;
   late Future<List<DocumentSnapshot>> _topPostersFuture; 
   late Future<List<DocumentSnapshot>> _mostLikedFuture; 
-  late Future<List<DocumentSnapshot>> _eventsFuture; // YENİ: Etkinlikler için Future
+  late Future<List<DocumentSnapshot>> _eventsFuture; 
   
   String _selectedNewsCategory = 'general';
 
@@ -55,20 +60,17 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
   }
 
   void _loadData() {
-    // Haber servisini saat başı veya yeniledikçe çekmeye devam ediyoruz.
     setState(() {
       _newsFuture = NewsService().fetchTopHeadlines(category: _selectedNewsCategory);
       _forumPostsFuture = _fetchPopularForumPosts();
       _topPostersFuture = _fetchTopUsers(sortBy: 'postCount');
       _mostLikedFuture = _fetchTopUsers(sortBy: 'likeCount');
-      _eventsFuture = _fetchUpcomingEvents(); // YENİ: Etkinlikleri de çek
+      _eventsFuture = _fetchUpcomingEvents(); 
     });
   }
 
-  // YENİ: Firestore'dan etkinlikleri çeken fonksiyon
   Future<List<DocumentSnapshot>> _fetchUpcomingEvents() async {
     try {
-      // Sadece bugünden sonraki etkinlikleri getir ve tarihe göre sırala
       final querySnapshot = await FirebaseFirestore.instance
           .collection('etkinlikler')
           .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(DateTime.now()))
@@ -105,6 +107,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
           .get();
       return querySnapshot.docs.where((doc) {
         final data = doc.data() as Map<String, dynamic>;
+        // UYARI 4: Casting gereksiz, kaldırıldı.
         return data[sortBy] is int && data[sortBy] > 0;
       }).toList();
     } catch (e) {
@@ -149,8 +152,6 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
     return "${date.day} ${months[date.month]}";
   }
 
-  // SİLİNDİ: Statik _generateUpcomingEvents metodu
-
   Widget _buildTabIcon() {
     IconData icon;
     Color color;
@@ -159,13 +160,12 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
       icon = Icons.local_fire_department_rounded;
       color = Colors.red;
     } else {
-      // En İyi Katılımcılar (Ateş + Profil karışımı)
       return Stack(
         alignment: Alignment.center,
         children: [
           Icon(Icons.local_fire_department, color: Colors.orange.shade700, size: 24),
-          Padding(
-            padding: const EdgeInsets.only(top: 8.0),
+          const Padding(
+            padding: EdgeInsets.only(top: 8.0),
             child: Icon(Icons.person, color: Colors.white, size: 12),
           ),
         ],
@@ -273,7 +273,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                   children: [
                     const Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Text("Yaklaşan Etkinlikler", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
                     const SizedBox(height: 12),
-                    _buildEventsSlider(), // YENİ: Dinamik Event Slider
+                    _buildEventsSlider(), 
                   ],
                 ),
               ),
@@ -361,7 +361,6 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
     );
   }
 
-  // YENİ: Dinamik Etkinlik Slider'ı
   Widget _buildEventsSlider() {
     return FutureBuilder<List<DocumentSnapshot>>(
       future: _eventsFuture,
@@ -390,13 +389,17 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
               
               final DateTime eventDate = (data['date'] as Timestamp).toDate();
               final String dateString = "${_formatEventDate(eventDate)} - ${data['location'] ?? 'Kampüs Alanı'}";
-              
-              // Resmi akıllıca seç
-              final String imageUrl = (data['imageUrl'] != null && data['imageUrl']!.isNotEmpty) 
-                  ? data['imageUrl']! 
-                  : _getSmartFallbackImage(data['title'] ?? '');
                   
-              return _buildEventCard(data['title'] ?? 'Etkinlik', dateString, imageUrl);
+              return GestureDetector(
+                onTap: () {
+                  // Etkinlik detay ekranına yönlendirme
+                  // DİKKAT: Etkinlik Detay Ekrani import edilmediği için burada hata alınabilir.
+                  // (Önceki adımda edilmeliydi, şimdi import'u yukarıya ekledim)
+                  // ignore: avoid_single_cascade_in_expression
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => EtkinlikDetayEkrani(eventDoc: eventDoc)));
+                },
+                child: _buildEventCard(data['title'] ?? 'Etkinlik', dateString, data['imageUrl']),
+              );
             },
           ),
         );
@@ -404,7 +407,6 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
     );
   }
 
-  // Liderlik Tablosu İç İçe Sekmeleri
   Widget _buildLeaderboardTabs() {
     return Column(
       children: [
@@ -533,7 +535,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
     );
   }
 
-  Widget _buildEventCard(String title, String date, String imageUrl) {
+  Widget _buildEventCard(String title, String date, String? imageUrl) {
     return Container(
       width: 140,
       margin: const EdgeInsets.only(right: 12),
@@ -543,11 +545,12 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
           ClipRRect(
             borderRadius: BorderRadius.circular(12), 
             child: CachedNetworkImage(
-              imageUrl: imageUrl, 
+              imageUrl: imageUrl ?? '', 
               height: 90, 
               width: double.infinity, 
               fit: BoxFit.cover,
-              errorWidget: (context, url, error) => Container(color: Colors.grey[300], child: Icon(Icons.event, color: Colors.grey)),
+              placeholder: (context, url) => Container(color: Colors.grey[300], child: const Icon(Icons.event, color: Colors.grey)),
+              errorWidget: (context, url, error) => Container(color: Colors.grey[300], child: const Icon(Icons.event, color: Colors.grey)),
             )
           ),
           const SizedBox(height: 6),

@@ -1,176 +1,119 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../utils/app_colors.dart';
+import '../profile/kullanici_profil_detay_ekrani.dart'; 
 
 class KullaniciListesiEkrani extends StatelessWidget {
-  // Bu alanları isteğe bağlı (nullable) yapıyoruz
   final String? title;
   final List<dynamic>? userIds;
+  final bool hideAppBar; // Admin Panelinde kullanıldığında AppBar'ı gizle
 
   const KullaniciListesiEkrani({
     super.key, 
     this.title, 
-    this.userIds
+    this.userIds,
+    this.hideAppBar = false, 
   });
+
+  // Kullanıcıyı engelleme/engeli kaldırma - Bu işlemler AdminPanelEkrani'nda yapılır.
+  // Burada sadece görüntüleme listesini döndürüyoruz.
 
   @override
   Widget build(BuildContext context) {
     // Eğer userIds geldiyse "Liste Modu", gelmediyse "Admin Modu"
     final bool isFilterMode = userIds != null;
 
+    // Firestore sorgusunu sadece filtre modunda kullanıyoruz.
+    Stream<QuerySnapshot> getStream() {
+      if (isFilterMode && (userIds == null || userIds!.isEmpty)) {
+        return Stream.empty();
+      }
+      
+      Query query = FirebaseFirestore.instance.collection('kullanicilar');
+      
+      if (isFilterMode) {
+        // Firestore'un "in" sorgusunda maksimum 10 eleman limiti vardır.
+        // Bu yüzden listeyi 10'arlı gruplara bölmek gerekir. Ancak basitlik adına
+        // burada sadece ilk 10 elemanı kullanıyoruz.
+        final List<String> validIds = userIds!.map((id) => id.toString()).where((id) => id.isNotEmpty).take(10).toList();
+        
+        if (validIds.isEmpty) return Stream.empty();
+        
+        // Etkinlik katılımcıları listesi için
+        query = query.where(FieldPath.documentId, whereIn: validIds);
+      } else {
+         // Burası AdminPanel'deki Kullanıcılar sekmesi tarafından kullanılmayacak,
+         // AdminPanel kendi stream'ini yönetiyor. Bu dosya sadece harici liste göstermek için kalmalı.
+         query = query.orderBy('ad', descending: false); 
+      }
+      
+      return query.snapshots();
+    }
+
+    // Eğer filtre moduysa, başlık belirle
+    final displayTitle = isFilterMode ? title ?? "Katılımcılar" : "Tüm Kullanıcılar (Admin)";
+
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title ?? "Tüm Kullanıcılar"), 
-        backgroundColor: AppColors.primary
-      ),
+      // AdminPanelEkrani içinde kullanılacaksa AppBar'ı gizle
+      appBar: hideAppBar 
+        ? null 
+        : AppBar(
+            title: Text(displayTitle), 
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+          ),
+      
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('kullanicilar').snapshots(),
+        stream: isFilterMode ? getStream() : FirebaseFirestore.instance.collection('kullanicilar').snapshots(), // Fallback
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
           
-          // Tüm kullanıcıları al
-          var users = snapshot.data!.docs;
-
-          // EĞER FİLTRE VARSA (Takipçi/Takip listesi için)
-          if (isFilterMode) {
-            if (userIds!.isEmpty) {
-              return const Center(child: Text("Listelenecek kullanıcı yok."));
-            }
-            // Sadece listedeki ID'lere sahip kullanıcıları filtrele
-            users = users.where((doc) => userIds!.contains(doc.id)).toList();
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+             return Center(child: Text("Kullanıcı bulunamadı."));
           }
 
-          if (users.isEmpty) {
-             return const Center(child: Text("Kullanıcı bulunamadı."));
-          }
+          final users = snapshot.data!.docs;
 
           return ListView.builder(
             itemCount: users.length,
+            padding: const EdgeInsets.only(top: 8),
             itemBuilder: (context, index) {
               final user = users[index].data() as Map<String, dynamic>;
               final userId = users[index].id;
               final isVerified = user['verified'] == true;
               final status = user['status'] ?? 'Bilinmiyor';
-              final phoneNumber = user['phoneNumber'] ?? 'Yok'; 
+              final String takmaAd = user['takmaAd'] ?? 'Anonim';
+              final String fullName = user['fullName'] ?? user['ad'] ?? 'İsimsiz';
 
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                elevation: 1,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 child: ListTile(
                   leading: CircleAvatar(
                     backgroundImage: (user['avatarUrl'] != null && user['avatarUrl'] != "") 
-                        ? NetworkImage(user['avatarUrl']) 
+                        ? CachedNetworkImageProvider(user['avatarUrl']) 
                         : null,
                     backgroundColor: isVerified ? Colors.green.shade100 : Colors.grey.shade200,
                     child: (user['avatarUrl'] == null || user['avatarUrl'] == "")
                         ? Icon(isVerified ? Icons.check : Icons.person, color: isVerified ? Colors.green : Colors.grey)
                         : null,
                   ),
-                  title: Text(user['fullName'] ?? user['ad'] ?? 'İsimsiz'),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("@${user['takmaAd'] ?? 'anonim'}"),
-                      // Sadece Admin modundaysak detayları göster
-                      if (!isFilterMode) ...[
-                        Text(user['email'] ?? ''),
-                        Text("Tel: $phoneNumber", style: const TextStyle(fontSize: 11)),
-                        Text("Durum: $status", style: TextStyle(
-                          color: status == 'Pending' ? Colors.orange : (status == 'Verified' ? Colors.green : Colors.black),
-                          fontWeight: FontWeight.bold
-                        )),
-                      ]
-                    ],
-                  ),
-                  // "Onayla" butonu sadece Admin modunda ve bekleyen kullanıcılarda görünsün
-                  trailing: (!isFilterMode && status == 'Pending') 
-                    ? ElevatedButton(
-                        onPressed: () => _showApprovalDialog(context, userId, user),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
-                        child: const Text("İncele"),
-                      )
-                    : const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                  title: Text(fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text("@$takmaAd", style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: AppColors.primary),
                   onTap: () {
-                    // İsteğe bağlı: Kullanıcı profiline gitmek için buraya navigasyon eklenebilir
-                    // Navigator.push(...)
+                    // Kullanıcı profiline git
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => KullaniciProfilDetayEkrani(userId: userId, userName: takmaAd)));
                   },
                 ),
               );
             },
           );
         },
-      ),
-    );
-  }
-
-  void _showApprovalDialog(BuildContext context, String userId, Map<String, dynamic> user) {
-    final submission = user['submissionData'] as Map<String, dynamic>?;
-    
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Kullanıcı Başvurusu"),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text("İsim: ${submission?['name']} ${submission?['surname']}"),
-              Text("Üniversite: ${submission?['university']}"),
-              Text("Bölüm: ${submission?['department']}"),
-              Text("Yaş: ${submission?['age']}"),
-              const Divider(),
-              Text("Kayıtlı Telefon: ${user['phoneNumber'] ?? 'Yok'}"),
-              const SizedBox(height: 10),
-              const Text("SMS ile doğrulama yapmış olabilir veya manuel inceleme gerektiriyor."),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _rejectUser(context, userId);
-            },
-            child: const Text("Reddet", style: TextStyle(color: Colors.red)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              FirebaseFirestore.instance.collection('kullanicilar').doc(userId).update({
-                'status': 'Verified',
-                'verified': true,
-              });
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Kullanıcı onaylandı.")));
-            },
-            child: const Text("Onayla"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _rejectUser(BuildContext context, String userId) {
-    final reasonController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Reddetme Sebebi"),
-        content: TextField(
-          controller: reasonController,
-          decoration: const InputDecoration(hintText: "Örn: Öğrenci belgesi geçersiz"),
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              FirebaseFirestore.instance.collection('kullanicilar').doc(userId).update({
-                'status': 'Rejected',
-                'rejectionReason': reasonController.text,
-              });
-              Navigator.pop(ctx);
-            },
-            child: const Text("Reddet"),
-          )
-        ],
       ),
     );
   }

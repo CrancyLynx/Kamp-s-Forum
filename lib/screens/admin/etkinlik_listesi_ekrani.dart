@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
-import 'package:kampus_yardim_app/screens/admin/etkinlik_ekleme_ekrani.dart';
-import 'package:kampus_yardim_app/utils/app_colors.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:intl/intl.dart'; 
+import '../../utils/app_colors.dart';
+import 'etkinlik_ekleme_ekrani.dart'; 
+import '../event/etkinlik_detay_ekrani.dart';
+import 'kullanici_listesi_ekrani.dart'; 
 
 class EtkinlikListesiEkrani extends StatefulWidget {
   const EtkinlikListesiEkrani({super.key});
@@ -12,6 +15,7 @@ class EtkinlikListesiEkrani extends StatefulWidget {
 }
 
 class _EtkinlikListesiEkraniState extends State<EtkinlikListesiEkrani> {
+  // En yeni etkinlikleri en üstte göster
   final Stream<QuerySnapshot> _eventsStream = FirebaseFirestore.instance
       .collection('etkinlikler')
       .orderBy('date', descending: true)
@@ -53,15 +57,30 @@ class _EtkinlikListesiEkraniState extends State<EtkinlikListesiEkrani> {
       }
     }
   }
+  
+  // Katılımcı Listesini Gösteren Fonksiyon
+  void _showAttendees(String title, List<dynamic> attendees) {
+    if (attendees.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bu etkinlikte henüz katılımcı yok."), backgroundColor: AppColors.info));
+      return;
+    }
+    
+    Navigator.push(
+      context, 
+      MaterialPageRoute(
+        builder: (context) => KullaniciListesiEkrani(
+          title: "$title Katılımcıları (${attendees.length})", 
+          userIds: attendees.cast<String>(), // Katılımcı ID'leri string olmalı
+          hideAppBar: false, // Yeni sayfada AppBar göster
+        )
+      )
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    // Scaffold, AdminPanelEkrani'nda sekme içinde kullanılmak üzere ayarlandı.
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Etkinlikleri Yönet"),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-      ),
       body: StreamBuilder<QuerySnapshot>(
         stream: _eventsStream,
         builder: (BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
@@ -84,41 +103,126 @@ class _EtkinlikListesiEkraniState extends State<EtkinlikListesiEkrani> {
             children: snapshot.data!.docs.map((DocumentSnapshot document) {
               Map<String, dynamic> data = document.data()! as Map<String, dynamic>;
               final DateTime eventDate = (data['date'] as Timestamp).toDate();
+              final List<dynamic> attendees = data['attendees'] ?? []; 
 
-              return Card(
-                margin: const EdgeInsets.symmetric(vertical: 8),
-                elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 15),
-                  title: Text(data['title'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text(
-                    "${DateFormat('dd MMMM yyyy, EEEE', 'tr_TR').format(eventDate)}\n${data['location']}",
-                  ),
-                  isThreeLine: true,
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit, color: AppColors.primary),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => EtkinlikEklemeEkrani(event: document)),
-                          );
-                        },
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, color: AppColors.error),
-                        onPressed: () => _deleteEvent(document.id),
-                      ),
-                    ],
-                  ),
-                ),
-              );
+              return _buildEventCard(document, eventDate, attendees);
             }).toList(),
           );
         },
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'addEventFAB',
+        onPressed: () {
+          Navigator.push(context, MaterialPageRoute(builder: (context) => const EtkinlikEklemeEkrani()));
+        },
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text("Yeni Etkinlik", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: AppColors.primary,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+        elevation: 4,
+      ),
+    );
+  }
+
+  Widget _buildEventCard(DocumentSnapshot eventDoc, DateTime eventDate, List<dynamic> attendees) {
+    final data = eventDoc.data() as Map<String, dynamic>;
+    final String title = data['title'] ?? 'Başlıksız Etkinlik';
+    final String location = data['location'] ?? 'Konum Belirtilmemiş';
+    final String? imageUrl = data['imageUrl'];
+    final bool isPast = eventDate.isBefore(DateTime.now());
+
+    return Card(
+      elevation: 3,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: isPast ? Colors.grey[100] : Theme.of(context).cardColor,
+      child: InkWell(
+        onTap: () {
+          // Etkinlik Detay Ekranına Yönlendirme
+          Navigator.push(context, MaterialPageRoute(builder: (_) => EtkinlikDetayEkrani(eventDoc: eventDoc)));
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Column(
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: (imageUrl != null && imageUrl.isNotEmpty)
+                      ? CachedNetworkImage(
+                          imageUrl: imageUrl,
+                          width: 60,
+                          height: 60,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Container(width: 60, height: 60, color: Colors.grey[300], child: const Icon(Icons.event, color: Colors.grey)),
+                          errorWidget: (context, url, error) => Container(width: 60, height: 60, color: AppColors.primaryLight, child: const Icon(Icons.event_note, color: AppColors.primary)),
+                        )
+                      : Container(width: 60, height: 60, color: AppColors.primaryLight, child: const Icon(Icons.event_note, color: AppColors.primary)),
+                ),
+                title: Text(
+                  title, 
+                  style: TextStyle(fontWeight: FontWeight.bold, color: isPast ? Colors.grey[600] : AppColors.black87)
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      DateFormat('dd MMMM yyyy - HH:mm', 'tr_TR').format(eventDate),
+                      style: TextStyle(color: isPast ? Colors.grey : AppColors.primary, fontSize: 13, fontWeight: isPast ? FontWeight.normal : FontWeight.w600),
+                    ),
+                    Text(
+                      location,
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                    if (isPast) 
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4.0),
+                        child: Text("Sona Erdi", style: TextStyle(color: AppColors.error, fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+                  ],
+                ),
+              ),
+              
+              // YENİ: Katılımcı Bilgileri ve Aksiyonlar
+              Padding(
+                padding: const EdgeInsets.only(left: 10, right: 10, bottom: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Katılımcı Sayısı Butonu
+                    TextButton.icon(
+                      onPressed: () => _showAttendees(title, attendees),
+                      icon: const Icon(Icons.people_alt, color: AppColors.success),
+                      label: Text(
+                        "${attendees.length} Katılımcı", 
+                        style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.bold)
+                      ),
+                    ),
+                    // Düzenle/Sil Butonları
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit, color: AppColors.info),
+                          onPressed: () {
+                            Navigator.push(context, MaterialPageRoute(builder: (context) => EtkinlikEklemeEkrani(event: eventDoc)));
+                          },
+                          tooltip: 'Düzenle',
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_forever, color: AppColors.error),
+                          onPressed: () => _deleteEvent(eventDoc.id),
+                          tooltip: 'Sil',
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

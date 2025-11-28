@@ -10,7 +10,7 @@ import '../../utils/app_colors.dart';
 class RozetlerSayfasi extends StatelessWidget {
   final Set<String> earnedBadgeIds;
   final bool isAdmin;
-  final Map<String, dynamic> userData; // YENİ: Kullanıcı istatistiklerini almak için
+  final Map<String, dynamic> userData; 
 
   const RozetlerSayfasi({
     super.key,
@@ -82,8 +82,16 @@ class RozetlerSayfasi extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [ 
-                        BadgeWidget(badge: badge, fontSize: 14, iconSize: 14), // DÜZELTME: Rozet adı yerine yeni widget kullanılıyor.
-                        const SizedBox(height: 4), // DÜZELTME: Rozet ile açıklama arasına boşluk eklendi.
+                        // DÜZELTME: Rozet adını göstermek için basit bir Text kullanıldı
+                        Text(
+                          badge.name,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: isEarned ? badge.color : Colors.grey[700],
+                          ),
+                        ),
+                        const SizedBox(height: 4), 
                         Text(
                           badge.description,
                           style: TextStyle(color: isEarned ? Colors.grey[600] : Colors.grey[500], fontSize: 13),
@@ -108,7 +116,7 @@ class RozetlerSayfasi extends StatelessWidget {
                         child: LinearProgressIndicator(
                           value: progress,
                           backgroundColor: Colors.grey.shade300,
-                          color: badge.color,
+                          color: badge.color.withOpacity(0.8), // Renk opaklığı azaltıldı
                           minHeight: 6,
                         ),
                       ),
@@ -133,35 +141,41 @@ class RozetlerSayfasi extends StatelessWidget {
     final int commentCount = userData['commentCount'] ?? 0;
     final int likeCount = userData['likeCount'] ?? 0;
 
-    // DÜZELTME: Kalan miktarı hesaplarken negatif sayıları önlemek ve
-    // ilerleme çubuğunun değerini 0.0 ile 1.0 arasında tutmak için mantığı güncelliyoruz.
     switch (badgeId) {
       case 'pioneer':
         final int target = 1;
-        final int remaining = target - postCount;
-        return {'progress': (postCount / target).clamp(0.0, 1.0), 'text': remaining > 0 ? 'Hedef: 1 gönderi' : 'Hedef tamamlandı!'};
+        final int current = postCount.clamp(0, target);
+        final int remaining = target - current;
+        return {'progress': current / target, 'text': remaining > 0 ? 'Kalan 1 gönderi' : 'Hedef tamamlandı!'};
       case 'commentator_rookie':
         final int target = 10;
-        final int remaining = target - commentCount;
-        return {'progress': (commentCount / target).clamp(0.0, 1.0), 'text': remaining > 0 ? 'Kalan $remaining yorum' : 'Hedef tamamlandı!'};
+        final int current = commentCount.clamp(0, target);
+        final int remaining = target - current;
+        return {'progress': current / target, 'text': remaining > 0 ? 'Kalan $remaining yorum' : 'Hedef tamamlandı!'};
       case 'commentator_pro':
         final int target = 50;
-        final int remaining = target - commentCount;
-        return {'progress': (commentCount / target).clamp(0.0, 1.0), 'text': remaining > 0 ? 'Kalan $remaining yorum' : 'Hedef tamamlandı!'};
+        final int current = commentCount.clamp(0, target);
+        final int remaining = target - current;
+        return {'progress': current / target, 'text': remaining > 0 ? 'Kalan $remaining yorum' : 'Hedef tamamlandı!'};
       case 'popular_author':
         final int target = 50;
-        final int remaining = target - likeCount;
-        return {'progress': (likeCount / target).clamp(0.0, 1.0), 'text': remaining > 0 ? 'Kalan $remaining beğeni' : 'Hedef tamamlandı!'};
+        final int current = likeCount.clamp(0, target);
+        final int remaining = target - current;
+        return {'progress': current / target, 'text': remaining > 0 ? 'Kalan $remaining beğeni' : 'Hedef tamamlandı!'};
       case 'campus_phenomenon':
         final int target = 250;
-        final int remaining = target - likeCount;
-        return {'progress': (likeCount / target).clamp(0.0, 1.0), 'text': remaining > 0 ? 'Kalan $remaining beğeni' : 'Hedef tamamlandı!'};
+        final int current = likeCount.clamp(0, target);
+        final int remaining = target - current;
+        return {'progress': current / target, 'text': remaining > 0 ? 'Kalan $remaining beğeni' : 'Hedef tamamlandı!'};
       case 'veteran':
         final int target = 50;
-        final int remaining = target - postCount;
-        return {'progress': (postCount / target).clamp(0.0, 1.0), 'text': remaining > 0 ? 'Kalan $remaining gönderi' : 'Hedef tamamlandı!'};
+        final int current = postCount.clamp(0, target);
+        final int remaining = target - current;
+        return {'progress': current / target, 'text': remaining > 0 ? 'Kalan $remaining gönderi' : 'Hedef tamamlandı!'};
+      case 'admin':
+        return {'progress': isAdmin ? 1.0 : 0.0, 'text': isAdmin ? 'Yetkili kullanıcı.' : 'Yönetici yetkisi gerekli.'};
       default:
-        return {'progress': 0.0, 'text': ''};
+        return {'progress': 0.0, 'text': 'İlerleme hesaplanamadı'};
     }
   }
 }

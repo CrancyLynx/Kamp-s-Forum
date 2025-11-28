@@ -6,6 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart'; 
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:intl/intl.dart'; // YENİ EKLENDİ
+import 'package:intl/date_symbol_data_local.dart'; // HATA ÇÖZÜMÜ İÇİN EKLENDİ
 
 // Servisler
 import 'services/push_notification_service.dart'; 
@@ -50,8 +52,12 @@ Future<void> _bgHandler(RemoteMessage message) => firebaseMessagingBackgroundHan
 // --- MAIN FONKSİYONU ---
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // HATA ÇÖZÜMÜ: Tarih formatlaması için Türkçe yerelleştirme verilerini yükle
+  await initializeDateFormatting('tr_TR', null);
   await Firebase.initializeApp();
   FirebaseMessaging.onBackgroundMessage(_bgHandler);
+  
+  Intl.defaultLocale = 'tr_TR'; 
   
   final prefs = await SharedPreferences.getInstance();
   ThemeMode initialThemeMode = ThemeMode.system; 

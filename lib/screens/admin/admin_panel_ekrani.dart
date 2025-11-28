@@ -1,15 +1,22 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
+import 'package:firebase_auth/firebase_auth.dart'; // YENİ EKLENDİ (Güvenlik Kontrolü İçin)
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:cached_network_image/cached_network_image.dart';
+
 // Düzeltilmiş Importlar
 import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart';
-
 import '../forum/gonderi_detay_ekrani.dart';
 import '../market/urun_detay_ekrani.dart';
+import 'etkinlik_listesi_ekrani.dart'; 
+// Kullanıcı listesi burada dahil edilmiyor, _buildUsersTab() içinde mantığı kullanılıyor.
+
+
+// Admin UID'leri (main.dart'tan veya merkezi bir yerden alınmalı)
+const List<String> kAdminUids = ["oZ2RIhV1JdYVIr0xyqCwhX9fJYq1", "VD8MeJIhhRVtbT9iiUdMEaCe3MO2"];
+
 
 class AdminPanelEkrani extends StatefulWidget {
   const AdminPanelEkrani({super.key});
@@ -33,26 +40,33 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
   late Stream<QuerySnapshot> _usersStream;
   late Stream<QuerySnapshot> _reportsStream;
 
+  final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+  bool get _isAdmin => kAdminUids.contains(_currentUserId);
+
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    // HATA ÇÖZÜMÜ: Sekme sayısı 5 olarak ayarlandı.
+    _tabController = TabController(length: 5, vsync: this); 
     
+    // Dinleyiciler: query değişkenlerinin güncellenmesi
     _pendingSearchController.addListener(() {
-      setState(() => _pendingSearchQuery = _pendingSearchController.text.toLowerCase());
+      if(mounted) setState(() => _pendingSearchQuery = _pendingSearchController.text.toLowerCase());
     });
     
     _allUsersSearchController.addListener(() {
-      setState(() => _allUsersSearchQuery = _allUsersSearchController.text.toLowerCase());
+      if(mounted) setState(() => _allUsersSearchQuery = _allUsersSearchController.text.toLowerCase());
     });
 
     _reportsSearchController.addListener(() {
-      setState(() => _reportsSearchQuery = _reportsSearchController.text.toLowerCase());
+      if(mounted) setState(() => _reportsSearchQuery = _reportsSearchController.text.toLowerCase());
     });
 
+    // Stream tanımlamaları
     _pendingStream = FirebaseFirestore.instance.collection('kullanicilar').where('status', isEqualTo: 'Pending').snapshots();
     _requestsStream = FirebaseFirestore.instance.collection('degisiklik_istekleri').orderBy('timestamp', descending: true).snapshots();
-    _usersStream = FirebaseFirestore.instance.collection('kullanicilar').orderBy('kayit_tarihi', descending: true).limit(50).snapshots();
+    _usersStream = FirebaseFirestore.instance.collection('kullanicilar').orderBy('kayit_tarihi', descending: true).limit(50).snapshots(); 
     _reportsStream = FirebaseFirestore.instance.collection('sikayetler').orderBy('timestamp', descending: true).snapshots();
   }
 
@@ -78,7 +92,6 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     }
   }
 
-  // DÜZELTME: Reddetme sebebi zorunlu kılındı.
   void _reddet(String userId) {
     final reasonController = TextEditingController();
     showDialog(
@@ -103,6 +116,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
               _sendSystemNotification(userId, 'verification_rejected', 'Başvurunuz reddedildi: $finalReason');
               if (mounted) _showSnack("Başvuru reddedildi.", AppColors.error);
             },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white),
             child: const Text("Reddet"),
           )
         ],
@@ -210,12 +224,40 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
 
   @override
   Widget build(BuildContext context) {
+    // GÜVENLİK KONTROLÜ
+    if (!_isAdmin) {
+      return const Scaffold(
+        body: Center(
+          child: Padding(
+            padding: EdgeInsets.all(30.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.security_update_warning, size: 60, color: AppColors.error),
+                SizedBox(height: 20),
+                Text(
+                  "Erişim Reddedildi",
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  "Bu sayfayı görüntülemek için yönetici yetkisine sahip olmalısınız.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, color: AppColors.greyText),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) => [
           SliverAppBar(
-            title: const Text("Yönetim Merkezi", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+            title: const Text("Yönetim Merkezi", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.white)),
             backgroundColor: AppColors.primary,
             centerTitle: true,
             pinned: true,
@@ -226,22 +268,26 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
               labelColor: Colors.white,
               unselectedLabelColor: Colors.white60,
               isScrollable: true,
+              // HATA ÇÖZÜMÜ: 5 Sekme
               tabs: const [
                 Tab(icon: Icon(Icons.person_add), text: "Onay"),
                 Tab(icon: Icon(Icons.change_circle), text: "Talepler"),
                 Tab(icon: Icon(Icons.people), text: "Kullanıcılar"),
                 Tab(icon: Icon(Icons.report_problem), text: "Şikayetler"),
+                Tab(icon: Icon(Icons.event_note), text: "Etkinlikler"), 
               ],
             ),
           ),
         ],
         body: TabBarView(
           controller: _tabController,
+          // HATA ÇÖZÜMÜ: 5 Sekme içeriği
           children: [
             _buildPendingTab(),
             _buildRequestsTab(),
             _buildUsersTab(),
             _buildReportsTab(),
+            const EtkinlikListesiEkrani(), // Etkinlikler Listesi
           ],
         ),
       ),
@@ -297,8 +343,8 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          IconButton(icon: const Icon(Icons.check, color: AppColors.success), onPressed: () => _onayla(docs[index].id)),
-                          IconButton(icon: const Icon(Icons.close, color: AppColors.error), onPressed: () => _reddet(docs[index].id)),
+                          IconButton(icon: const Icon(Icons.check, color: AppColors.success), onPressed: () => _onayla(docs[index].id), tooltip: 'Onayla'),
+                          IconButton(icon: const Icon(Icons.close, color: AppColors.error), onPressed: () => _reddet(docs[index].id), tooltip: 'Reddet'),
                         ],
                       ),
                       onTap: () => _showDetailAndRejectDialog(data, docs[index].id),
@@ -409,9 +455,10 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
           padding: const EdgeInsets.all(8.0),
           child: TextField(
             controller: _allUsersSearchController,
+            onChanged: (val) => setState(() => _allUsersSearchQuery = val.toLowerCase()),
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.search),
-              hintText: "Kullanıcı Ara...",
+              hintText: "Kullanıcı Ara (Ad/Takma Ad)...",
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               suffixIcon: _allUsersSearchQuery.isNotEmpty ? IconButton(icon: const Icon(Icons.clear), onPressed: () => _allUsersSearchController.clear()) : null,
             ),
@@ -427,7 +474,8 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
               final filteredDocs = allDocs.where((d) {
                 final data = d.data() as Map<String, dynamic>;
                 final name = (data['ad'] ?? '').toString().toLowerCase();
-                return name.contains(_allUsersSearchQuery);
+                final takmaAd = (data['takmaAd'] ?? '').toString().toLowerCase();
+                return name.contains(_allUsersSearchQuery) || takmaAd.contains(_allUsersSearchQuery);
               }).toList();
 
               if (filteredDocs.isEmpty) return _buildEmptyState("Kullanıcı bulunamadı", Icons.person_off);
@@ -442,21 +490,32 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     child: ListTile(
                       leading: CircleAvatar(
                         backgroundImage: data['avatarUrl'] != null ? CachedNetworkImageProvider(data['avatarUrl']) : null,
                         child: data['avatarUrl'] == null ? const Icon(Icons.person) : null,
+                        backgroundColor: AppColors.primaryLight,
                       ),
-                      title: Text(data['takmaAd'] ?? 'İsimsiz'),
+                      title: Text(data['takmaAd'] ?? 'İsimsiz', style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text(data['email'] ?? ''),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(status, style: TextStyle(color: _getStatusColor(status), fontSize: 12)),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _getStatusColor(status).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(status, style: TextStyle(color: _getStatusColor(status), fontSize: 12, fontWeight: FontWeight.bold)),
+                          ),
                           const SizedBox(width: 8),
                           IconButton(
                             icon: const Icon(Icons.delete_forever, color: Colors.red),
                             onPressed: () => _confirmDeleteUser(uid),
+                            tooltip: 'Kullanıcıyı Sil',
                           ),
                         ],
                       ),
@@ -479,8 +538,9 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
           padding: const EdgeInsets.all(8.0),
           child: TextField(
             controller: _reportsSearchController,
+            onChanged: (val) => setState(() => _reportsSearchQuery = val.toLowerCase()),
             decoration: InputDecoration(
-              labelText: 'Şikayet Ara',
+              labelText: 'Şikayet İçeriği Ara (Başlık/Sebep)',
               prefixIcon: const Icon(Icons.search),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               suffixIcon: _reportsSearchQuery.isNotEmpty ? IconButton(icon: const Icon(Icons.clear), onPressed: () => _reportsSearchController.clear()) : null,
@@ -491,12 +551,18 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
           child: StreamBuilder<QuerySnapshot>(
             stream: _reportsStream,
             builder: (context, snapshot) {
-              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-              final docs = snapshot.data!.docs.where((doc) {
+              if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+              if (snapshot.hasError) return Center(child: Text("Hata oluştu: ${snapshot.error}", style: const TextStyle(color: AppColors.error)));
+              
+              final allDocs = snapshot.data!.docs;
+              // Filtreleme yapılıyor
+              final docs = allDocs.where((doc) {
                  final data = doc.data() as Map<String, dynamic>;
                  final title = (data['targetTitle'] ?? data['postTitle'] ?? '').toString().toLowerCase();
-                 return title.contains(_reportsSearchQuery);
+                 final reason = (data['reason'] ?? '').toString().toLowerCase();
+                 return title.contains(_reportsSearchQuery) || reason.contains(_reportsSearchQuery);
               }).toList();
+
 
               if (docs.isEmpty) return _buildEmptyState("Şikayet yok", Icons.verified_user);
 
@@ -511,6 +577,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                   final String targetTitle = data['targetTitle'] ?? data['postTitle'] ?? 'Başlık Yok';
                   final String reporter = data['reporterName'] ?? 'Bilinmiyor';
                   final String reason = data['reason'] ?? 'Sebep belirtilmedi';
+                  final Timestamp? timestamp = data['timestamp'];
                   
                   String typeLabel = 'Gönderi';
                   IconData typeIcon = Icons.article;
@@ -520,16 +587,20 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
 
                   return Card(
                     color: Colors.red.withOpacity(0.05),
+                    elevation: 2,
                     margin: const EdgeInsets.only(bottom: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     child: ListTile(
                       leading: CircleAvatar(backgroundColor: Colors.white, child: Icon(typeIcon, color: AppColors.error)),
-                      title: Text(reason, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.error)),
+                      title: Text(reason, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.error, fontSize: 14)),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text("Türü: $typeLabel"),
-                          Text("Şikayet Eden: $reporter"),
-                          Text("İçerik: $targetTitle", maxLines: 1, overflow: TextOverflow.ellipsis),
+                          const SizedBox(height: 4),
+                          Text("Türü: $typeLabel | Şikayet Eden: $reporter"),
+                          Text("İçerik: $targetTitle", maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          if(timestamp != null)
+                             Text(timeago.format((timestamp as Timestamp).toDate(), locale: 'tr'), style: TextStyle(fontSize: 11, color: Colors.grey[500])),
                         ],
                       ),
                       trailing: Row(
@@ -541,20 +612,13 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                             onPressed: () async {
                               final targetId = data['targetId'] ?? data['postId'];
                               
-                              if (type == 'post') {
-                                  final postDoc = await FirebaseFirestore.instance.collection('gonderiler').doc(targetId).get();
+                              if (type == 'post' || type == 'comment') {
+                                  final postId = data['postId'] ?? targetId;
+                                  final postDoc = await FirebaseFirestore.instance.collection('gonderiler').doc(postId).get();
                                   if (postDoc.exists && mounted) {
                                       Navigator.push(context, MaterialPageRoute(builder: (_) => GonderiDetayEkrani.fromDoc(postDoc)));
                                   } else {
-                                      _showSnack("İçerik bulunamadı.", Colors.grey);
-                                  }
-                              } else if (type == 'comment') {
-                                  final postId = data['postId'];
-                                  final postDoc = await FirebaseFirestore.instance.collection('gonderiler').doc(postId).get();
-                                  if (postDoc.exists && mounted) {
-                                       Navigator.push(context, MaterialPageRoute(builder: (_) => GonderiDetayEkrani.fromDoc(postDoc)));
-                                  } else {
-                                      _showSnack("İçerik bulunamadı.", Colors.grey);
+                                      _showSnack("Gönderi silinmiş.", Colors.grey);
                                   }
                               } else if (type == 'product') {
                                   final prodDoc = await FirebaseFirestore.instance.collection('urunler').doc(targetId).get();
@@ -565,17 +629,18 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                                   }
                               }
                             },
+                            tooltip: 'Görüntüle',
                           ),
-                          // SİL BUTONU
+                          // SİL/ÇÖZÜLDÜ BUTONU
                           IconButton(
                             icon: const Icon(Icons.delete, color: AppColors.error),
                             onPressed: () {
                               final targetId = data['targetId'] ?? data['postId'];
-                              
+                              final postId = data['postId'];
+
                               if (type == 'post') {
                                   _deletePost(targetId);
                               } else if (type == 'comment') {
-                                  final postId = data['postId'];
                                   _deleteComment(postId, targetId);
                               } else if (type == 'product') {
                                   _deleteProduct(targetId);
@@ -583,6 +648,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                               // Şikayet kaydını da sil
                               doc.reference.delete();
                             },
+                            tooltip: 'Şikayeti Sil (Çözüldü)',
                           ),
                         ],
                       ),
@@ -597,12 +663,13 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     );
   }
 
-  // --- YARDIMCI WIDGET'LAR VE FONKSİYONLAR (Aynı) ---
+  // --- YARDIMCI WIDGET'LAR VE FONKSİYONLAR ---
 
   Widget _buildStatsDashboard() {
     return Card(
       margin: const EdgeInsets.all(8.0),
       elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Row(
@@ -621,6 +688,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     return Card(
       margin: const EdgeInsets.all(8.0), 
       elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Row(
@@ -716,7 +784,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
-              _reddet(userId); // Yeni reddetme dialogu tetiklenir
+              _reddet(userId);
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             child: const Text("Reddet"),
