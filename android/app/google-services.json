@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "27683299328",
+    "project_id": "kampusforum-e8b38",
+    "storage_bucket": "kampusforum-e8b38.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:27683299328:android:2fcefcc1277226027338e5",
+        "android_client_info": {
+          "package_name": "com.example.kampus_yardim"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA-vf0PjFszkHk02EqVh2RqkT1poh-F-50"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
