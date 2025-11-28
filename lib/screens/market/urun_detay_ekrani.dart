@@ -27,7 +27,6 @@ class UrunDetayEkrani extends StatelessWidget {
       return;
     }
 
-    // Chat ID oluştur (Alfabetik sıraya göre)
     List<String> ids = [currentUserId, sellerId];
     ids.sort();
     String chatId = ids.join('_');
@@ -51,16 +50,76 @@ class UrunDetayEkrani extends StatelessWidget {
 
     bool newStatus = !(productData['isSold'] ?? false);
     await FirebaseFirestore.instance.collection('urunler').doc(productId).update({'isSold': newStatus});
-    Navigator.pop(context); // Geri dön
+    Navigator.pop(context);
   }
 
   void _deleteProduct(BuildContext context) async {
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-    // Admin listesini buraya ekleyebilirsin
     if (currentUserId != productData['sellerId']) return;
 
     await FirebaseFirestore.instance.collection('urunler').doc(productId).delete();
     Navigator.pop(context);
+  }
+
+  // YENİ: Ürün Şikayet Fonksiyonu
+  void _reportProduct(BuildContext context) {
+    final reasonController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Ürünü Şikayet Et"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Lütfen şikayet sebebinizi belirtin:"),
+            const SizedBox(height: 10),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                hintText: "Örn: Sahte ürün, yanlış kategori, dolandırıcılık...",
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("İptal")),
+          ElevatedButton(
+            onPressed: () async {
+              final reason = reasonController.text.trim();
+              if (reason.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Lütfen bir sebep belirtin.")));
+                return;
+              }
+
+              Navigator.pop(ctx);
+              final currentUser = FirebaseAuth.instance.currentUser;
+
+              try {
+                await FirebaseFirestore.instance.collection('sikayetler').add({
+                  'reporterId': currentUser?.uid,
+                  'reporterName': currentUser?.displayName ?? 'Kullanıcı',
+                  'targetId': productId,
+                  'targetType': 'product',
+                  'targetTitle': productData['title'], // Ürün başlığı
+                  'targetOwnerId': productData['sellerId'],
+                  'reason': reason,
+                  'timestamp': FieldValue.serverTimestamp(),
+                  'status': 'pending',
+                });
+
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Şikayetiniz alındı."), backgroundColor: AppColors.success));
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Bir hata oluştu: $e"), backgroundColor: AppColors.error));
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white),
+            child: const Text("Şikayet Et"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -119,6 +178,13 @@ class UrunDetayEkrani extends StatelessWidget {
                     PopupMenuItem(value: 'sold', child: Text(isSold ? "Satışa Geri Al" : "Satıldı Olarak İşaretle")),
                     const PopupMenuItem(value: 'delete', child: Text("İlanı Sil", style: TextStyle(color: Colors.red))),
                   ],
+                )
+              else
+                // YENİ: Başkası için Şikayet Et butonu
+                IconButton(
+                  onPressed: () => _reportProduct(context),
+                  icon: Container(padding: const EdgeInsets.all(8), decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle), child: const Icon(Icons.flag, color: Colors.white)),
+                  tooltip: "Şikayet Et",
                 ),
             ],
           ),

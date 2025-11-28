@@ -87,7 +87,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
   File? _commentImage;
   final ImagePicker _picker = ImagePicker();
 
-  // --- PERFORMANS DÜZELTMESİ: STREAM'LERİ HAFIZAYA AL ---
   late Stream<DocumentSnapshot> _postStream;
   late Stream<QuerySnapshot> _commentsStream;
 
@@ -95,8 +94,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
   void initState() {
     super.initState();
     
-    // 1. Stream'leri burada bir kez başlatıyoruz. 
-    // Böylece klavye açılınca veya scroll yapınca yeniden yüklenmiyor.
     _postStream = FirebaseFirestore.instance.collection('gonderiler').doc(widget.postId).snapshots();
     
     _commentsStream = FirebaseFirestore.instance
@@ -120,10 +117,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
     _likeAnimController.dispose();
     super.dispose();
   }
-
-  // ... (Geri kalan fonksiyonlar aynı: _handleLike, _postComment, _deletePost vb.) ...
-  // Kodun geri kalan mantığı değişmediği için sadece değiştirilmesi gereken widget yapısını veriyorum.
-  // Bu dosyanın tamamını kopyalayıp yapıştırabilirsin, fonksiyonları aşağıya ekledim.
 
   void _handleLike(List<dynamic> currentLikes) {
     if (_currentUserId.isEmpty) return;
@@ -274,6 +267,75 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
     }
   }
 
+  // --- YENİ EKLENEN: ŞİKAYET FONKSİYONU ---
+  void _showReportDialog({String? commentId, String? commentContent, String? commentOwnerId}) {
+    final reasonController = TextEditingController();
+    final isComment = commentId != null;
+    final title = isComment ? "Yorumu Şikayet Et" : "Gönderiyi Şikayet Et";
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Lütfen şikayet sebebinizi belirtin:"),
+            const SizedBox(height: 10),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                hintText: "Örn: Hakaret, spam, uygunsuz içerik...",
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("İptal")),
+          ElevatedButton(
+            onPressed: () async {
+              final reason = reasonController.text.trim();
+              if (reason.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Lütfen bir sebep belirtin.")));
+                return;
+              }
+
+              Navigator.pop(ctx);
+
+              try {
+                await FirebaseFirestore.instance.collection('sikayetler').add({
+                  'reporterId': _currentUserId,
+                  'reporterName': widget.userName, // Şikayet edenin adı
+                  'targetId': isComment ? commentId : widget.postId,
+                  'targetType': isComment ? 'comment' : 'post',
+                  'postId': widget.postId, // Her zaman hangi postun altında olduğunu bilelim
+                  'postTitle': widget.baslik, // Admin panelinde görünmesi için
+                  'targetTitle': isComment ? commentContent : widget.baslik, // Şikayet edilen içerik özeti
+                  'targetOwnerId': isComment ? commentOwnerId : widget.authorUserId,
+                  'reason': reason,
+                  'timestamp': FieldValue.serverTimestamp(),
+                  'status': 'pending',
+                });
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Şikayetiniz alındı. Teşekkürler."), backgroundColor: AppColors.success));
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Bir hata oluştu: $e"), backgroundColor: AppColors.error));
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white),
+            child: const Text("Şikayet Et"),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     String timeStr = '';
@@ -284,12 +346,9 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: StreamBuilder<DocumentSnapshot>(
-        // DÜZELTME: Artık initState'de oluşturduğumuz _postStream'i kullanıyoruz.
         stream: _postStream, 
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-             // Eğer ilk kez açılıyorsa (veri yoksa) yükleniyor göster
-             // Ancak veri varsa (klavye açılıp kapanınca), eski veriyi göstermeye devam et
              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           }
           
@@ -375,7 +434,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
                           const SizedBox(height: 12),
                           Text(widget.mesaj, style: TextStyle(fontSize: 16, height: 1.6, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.9))),
                           
-                          // GÖNDERİ RESİMLERİ (Varsa Göster)
                           if (postImages.isNotEmpty) ...[
                             const SizedBox(height: 16),
                             SizedBox(
@@ -467,7 +525,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
 
   Widget _buildCommentsList() {
     return StreamBuilder<QuerySnapshot>(
-      // DÜZELTME: Artık initState'de oluşturduğumuz _commentsStream'i kullanıyoruz.
       stream: _commentsStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -559,7 +616,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
                 if (data['content'] != null && data['content'].isNotEmpty)
                   Text(data['content'], style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.8), fontSize: 14, height: 1.3)),
                 
-                // YORUM RESMİ (Varsa)
                 if (data['imageUrl'] != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 8.0),
@@ -588,6 +644,18 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
                         },
                         child: Text("Yanıtla", style: TextStyle(color: Colors.grey[600], fontSize: 11, fontWeight: FontWeight.w600)),
                       ),
+                      const SizedBox(width: 12),
+                      // YENİ: Yorum Şikayet Butonu
+                      if (!isMyComment)
+                         GestureDetector(
+                          onTap: () => _showReportDialog(
+                            commentId: commentId,
+                            commentContent: data['content'] ?? 'Resim',
+                            commentOwnerId: data['userId']
+                          ),
+                          child: Text("Şikayet Et", style: TextStyle(color: Colors.grey[500], fontSize: 11, fontWeight: FontWeight.w500)),
+                        ),
+
                       if (widget.isAdmin || isMyComment) ...[
                         const SizedBox(width: 16),
                         GestureDetector(
@@ -627,7 +695,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Yanıtlanıyor Barı
             AnimatedSize(
               duration: const Duration(milliseconds: 200),
               child: _replyingToUserName != null
@@ -649,7 +716,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
                   : const SizedBox.shrink(),
             ),
 
-            // Seçilen Resim Önizlemesi
             if (_commentImage != null)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -675,13 +741,11 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
                 ),
               ),
             
-            // Input Alanı
             Padding(
               padding: const EdgeInsets.all(12.0),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  // Resim Seçme Butonu
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8.0, right: 8.0),
                     child: GestureDetector(
@@ -735,12 +799,14 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
     );
   }
 
+  // GÜNCELLENEN: Menü Butonu
   Widget _buildMoreButton(bool isAuthor) {
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_horiz_rounded),
       onSelected: (val) {
         if (val == 'delete') _deletePost();
         if (val == 'edit') Navigator.push(context, MaterialPageRoute(builder: (_) => GonderiDuzenlemeEkrani(postId: widget.postId, initialTitle: widget.baslik, initialMessage: widget.mesaj)));
+        if (val == 'report') _showReportDialog(); // Şikayet dialogunu aç
       },
       itemBuilder: (ctx) => [
         if (isAuthor || widget.isAdmin) ...[

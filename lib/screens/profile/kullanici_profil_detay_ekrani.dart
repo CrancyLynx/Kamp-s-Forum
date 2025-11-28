@@ -6,10 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 
-// Düzeltilmiş Importlar
 import '../../utils/app_colors.dart';
-
-
 import '../chat/sohbet_detay_ekrani.dart';
 import 'profil_duzenleme_ekrani.dart'; 
 import 'rozetler_sayfasi.dart';
@@ -51,24 +48,16 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
   }
 
   Future<void> _signOut() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      if (user.isAnonymous) {
-        try {
-          await FirebaseFirestore.instance.collection('kullanicilar').doc(user.uid).delete();
-          await user.delete();
-        } catch (e) {
-          await FirebaseAuth.instance.signOut();
-        }
-      } else {
-        await FirebaseAuth.instance.signOut();
+    try {
+      await FirebaseAuth.instance.signOut();
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const GirisEkrani()),
+          (Route<dynamic> route) => false,
+        );
       }
-    }
-    if (mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const GirisEkrani()),
-        (Route<dynamic> route) => false,
-      );
+    } catch (e) {
+      debugPrint("Çıkış hatası: $e");
     }
   }
 
@@ -133,8 +122,8 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     context.watch<ThemeProvider>(); 
 
     return Scaffold(
-      body: FutureBuilder<DocumentSnapshot>(
-        future: FirebaseFirestore.instance.collection('kullanicilar').doc(_targetUserId).get(),
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance.collection('kullanicilar').doc(_targetUserId).snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
           if (!snapshot.hasData || !snapshot.data!.exists) return const Center(child: Text("Kullanıcı bulunamadı."));
@@ -149,7 +138,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
             headerSliverBuilder: (context, innerBoxIsScrolled) {
               return [
                 SliverAppBar(
-                  expandedHeight: 420, 
+                  expandedHeight: 460, // Yükseklik artırıldı (taşmayı önlemek için)
                   floating: false,
                   pinned: true,
                   backgroundColor: AppColors.primary,
@@ -203,11 +192,19 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     final String displayAd = userData['ad'] ?? '';
     final String takmaAd = userData['takmaAd'] ?? '';
     final String? avatarUrl = userData['avatarUrl'];
-    final String biyografi = userData['biyografi'] ?? 'Henüz biyografi eklenmedi.';
+    // final String biyografi = userData['biyografi'] ?? 'Henüz biyografi eklenmedi.';
     final int postCount = userData['postCount'] ?? 0;
     final List<dynamic> followers = userData['followers'] ?? [];
     final List<dynamic> following = userData['following'] ?? [];
-    final Map<String, dynamic> submissionData = userData['submissionData'] as Map<String, dynamic>? ?? {};
+    
+    // GÜVENLİ VERİ ÇEKME (Cast Hatasını Önler)
+    final Map<String, dynamic> submissionData;
+    if (userData['submissionData'] is Map) {
+      submissionData = userData['submissionData'] as Map<String, dynamic>;
+    } else {
+      submissionData = {};
+    }
+    
     final String university = submissionData['university'] ?? 'Üniversite Bilgisi Yok';
     final String department = submissionData['department'] ?? '';
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -223,121 +220,130 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
           ]
         ),
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(height: 60),
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-            child: CircleAvatar(
-              radius: 50,
-              backgroundColor: AppColors.primaryLighter,
-              backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty) ? CachedNetworkImageProvider(avatarUrl) : null,
-              child: (avatarUrl == null || avatarUrl.isEmpty) 
-                  ? Text(displayAd.isNotEmpty ? displayAd[0].toUpperCase() : '?', style: const TextStyle(fontSize: 40, color: AppColors.primary))
-                  : null,
+      child: SafeArea(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+              child: CircleAvatar(
+                radius: 50,
+                backgroundColor: AppColors.primaryLighter,
+                backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty) ? CachedNetworkImageProvider(avatarUrl) : null,
+                child: (avatarUrl == null || avatarUrl.isEmpty) 
+                    ? Text(displayAd.isNotEmpty ? displayAd[0].toUpperCase() : '?', style: const TextStyle(fontSize: 40, color: AppColors.primary))
+                    : null,
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(takmaAd, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.white)),
-              if (isAdmin) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.verified, color: Colors.white, size: 20)),
-            ],
-          ),
-          Text(university + (department.isNotEmpty ? ' - $department' : ''), style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 13)),
-          
-          const SizedBox(height: 16),
-          
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 20),
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withOpacity(0.2)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildStatItem("Gönderi", postCount.toString(), () {}),
-                _buildVerticalDivider(),
-                _buildStatItem("Takipçi", followers.length.toString(), () => _showUserList("Takipçiler", followers)),
-                _buildVerticalDivider(),
-                _buildStatItem("Takip", following.length.toString(), () => _showUserList("Takip Edilenler", following)),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 16),
-          
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if ((userData['github'] ?? '').isNotEmpty) _buildSocialIcon(context, FontAwesomeIcons.github, () => _launchSocialURL('github', userData['github'])),
-              if ((userData['linkedin'] ?? '').isNotEmpty) _buildSocialIcon(context, FontAwesomeIcons.linkedin, () => _launchSocialURL('linkedin', userData['linkedin'])),
-              if ((userData['instagram'] ?? '').isNotEmpty) _buildSocialIcon(context, FontAwesomeIcons.instagram, () => _launchSocialURL('instagram', userData['instagram'])),
-              if ((userData['x_platform'] ?? '').isNotEmpty) _buildSocialIcon(context, FontAwesomeIcons.xTwitter, () => _launchSocialURL('x_platform', userData['x_platform'])),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          // AKSİYON BUTONLARI (HATA DÜZELTİLDİ)
-          if (_isCurrentUser)
+            const SizedBox(height: 10),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfilDuzenlemeEkrani()));
-                    if (mounted) WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {})); 
-                  },
-                  icon: const Icon(Icons.edit, size: 16), 
-                  label: const Text("Düzenle"),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: AppColors.primary, shape: const StadiumBorder()),
-                ),
-                const SizedBox(width: 10),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    await Navigator.push(context, MaterialPageRoute(builder: (context) => RozetlerSayfasi(earnedBadgeIds: earnedBadgeIds, userData: userData, isAdmin: isAdmin)));
-                    if (mounted) WidgetsBinding.instance.addPostFrameCallback((_) => setState(() {})); 
-                  },
-                  icon: const Icon(Icons.emoji_events, size: 16), 
-                  label: const Text("Rozetler"),
-                  style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white), shape: const StadiumBorder()),
-                ),
+                Text(takmaAd, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.white)),
+                if (isAdmin) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.verified, color: Colors.white, size: 20)),
               ],
-            )
-          else
-            StreamBuilder<DocumentSnapshot>(
-              stream: FirebaseFirestore.instance.collection('kullanicilar').doc(_currentAuthId).snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const SizedBox.shrink();
-                final myData = snapshot.data!.data() as Map<String, dynamic>;
-                final following = List<dynamic>.from(myData['following'] ?? []);
-                final isFollowing = following.contains(_targetUserId);
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton(
-                      onPressed: () => _toggleFollow(isFollowing),
-                      style: ElevatedButton.styleFrom(backgroundColor: isFollowing ? Colors.grey[300] : Colors.white, foregroundColor: isFollowing ? Colors.black : AppColors.primary, shape: const StadiumBorder()),
-                      child: Text(isFollowing ? "Takip Ediliyor" : "Takip Et"),
-                    ),
-                    const SizedBox(width: 10),
-                    OutlinedButton(
-                      onPressed: () => _navigateToChat(userData['takmaAd'] ?? 'Kullanıcı', avatarUrl),
-                      style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white), shape: const StadiumBorder()),
-                      child: const Text("Mesaj"),
-                    ),
-                  ],
-                );
-              },
             ),
-        ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Text(
+                university + (department.isNotEmpty ? ' - $department' : ''), 
+                style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withOpacity(0.2)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildStatItem("Gönderi", postCount.toString(), () {}),
+                  _buildVerticalDivider(),
+                  _buildStatItem("Takipçi", followers.length.toString(), () => _showUserList("Takipçiler", followers)),
+                  _buildVerticalDivider(),
+                  _buildStatItem("Takip", following.length.toString(), () => _showUserList("Takip Edilenler", following)),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+            
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if ((userData['github'] ?? '').isNotEmpty) _buildSocialIcon(context, FontAwesomeIcons.github, () => _launchSocialURL('github', userData['github'])),
+                if ((userData['linkedin'] ?? '').isNotEmpty) _buildSocialIcon(context, FontAwesomeIcons.linkedin, () => _launchSocialURL('linkedin', userData['linkedin'])),
+                if ((userData['instagram'] ?? '').isNotEmpty) _buildSocialIcon(context, FontAwesomeIcons.instagram, () => _launchSocialURL('instagram', userData['instagram'])),
+                if ((userData['x_platform'] ?? '').isNotEmpty) _buildSocialIcon(context, FontAwesomeIcons.xTwitter, () => _launchSocialURL('x_platform', userData['x_platform'])),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // AKSİYON BUTONLARI
+            if (_isCurrentUser)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfilDuzenlemeEkrani()));
+                    },
+                    icon: const Icon(Icons.edit, size: 16), 
+                    label: const Text("Düzenle"),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: AppColors.primary, shape: const StadiumBorder()),
+                  ),
+                  const SizedBox(width: 10),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      await Navigator.push(context, MaterialPageRoute(builder: (context) => RozetlerSayfasi(earnedBadgeIds: earnedBadgeIds, userData: userData, isAdmin: isAdmin)));
+                    },
+                    icon: const Icon(Icons.emoji_events, size: 16), 
+                    label: const Text("Rozetler"),
+                    style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white), shape: const StadiumBorder()),
+                  ),
+                ],
+              )
+            else
+              StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance.collection('kullanicilar').doc(_currentAuthId).snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return const SizedBox.shrink();
+                  final myData = snapshot.data!.data() as Map<String, dynamic>;
+                  final following = List<dynamic>.from(myData['following'] ?? []);
+                  final isFollowing = following.contains(_targetUserId);
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ElevatedButton(
+                        onPressed: () => _toggleFollow(isFollowing),
+                        style: ElevatedButton.styleFrom(backgroundColor: isFollowing ? Colors.grey[300] : Colors.white, foregroundColor: isFollowing ? Colors.black : AppColors.primary, shape: const StadiumBorder()),
+                        child: Text(isFollowing ? "Takip Ediliyor" : "Takip Et"),
+                      ),
+                      const SizedBox(width: 10),
+                      OutlinedButton(
+                        onPressed: () => _navigateToChat(userData['takmaAd'] ?? 'Kullanıcı', avatarUrl),
+                        style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white), shape: const StadiumBorder()),
+                        child: const Text("Mesaj"),
+                      ),
+                    ],
+                  );
+                },
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -368,10 +374,16 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
 
   Widget _buildPostList({String? userId, List<String>? savedPostIds}) {
     Query query = FirebaseFirestore.instance.collection('gonderiler');
+    
     if (userId != null) {
       query = query.where('userId', isEqualTo: userId).orderBy('zaman', descending: true);
     } else if (savedPostIds != null && savedPostIds.isNotEmpty) {
-      if (savedPostIds.length > 10) { query = query.where(FieldPath.documentId, whereIn: savedPostIds.sublist(0, 10)); } else { query = query.where(FieldPath.documentId, whereIn: savedPostIds); }
+      // Firestore 'whereIn' en fazla 10 eleman destekler.
+      if (savedPostIds.length > 10) { 
+        query = query.where(FieldPath.documentId, whereIn: savedPostIds.sublist(0, 10)); 
+      } else { 
+        query = query.where(FieldPath.documentId, whereIn: savedPostIds); 
+      }
     } else {
       return const Center(child: Text("Henüz bir gönderi yok."));
     }

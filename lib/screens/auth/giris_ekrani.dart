@@ -1,16 +1,14 @@
-import 'dart:ui'; // Blur efekti için gerekli
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:provider/provider.dart';
-import 'dart:math' as math; // Arka plan animasyonu için
-// Düzeltilmiş Importlar
+import 'dart:math' as math;
 import '../../utils/app_colors.dart';
-
-
 import '../../main.dart';
-import '../../widgets/app_logo.dart'; // ÖZEL LOGO WIDGET'I
+import '../../widgets/app_logo.dart';
+import 'verification_wrapper.dart'; // YENİ: Yönlendirme için
 
 class GirisEkrani extends StatefulWidget {
   const GirisEkrani({super.key});
@@ -20,7 +18,6 @@ class GirisEkrani extends StatefulWidget {
 }
 
 class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStateMixin {
-  // Animasyon Kontrolcüsü (Arka plan şekilleri için)
   late AnimationController _animationController;
 
   final TextEditingController emailController = TextEditingController();
@@ -28,11 +25,13 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
   final TextEditingController _confirmPasswordController = TextEditingController();
   final TextEditingController _takmaAdController = TextEditingController();
   final TextEditingController _adSoyadController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController(); // YENİ: Telefon
 
   bool isLogin = true;
   bool _rememberMe = false;
   bool _isEduEmail = false;
-  bool _isLoading = false; // Yükleniyor durumu
+  bool _isLoading = false;
+  
   final _storage = const FlutterSecureStorage();
 
   @override
@@ -40,15 +39,13 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     super.initState();
     _loadCredentials();
 
-    // Arka plan animasyonunu başlat
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 10),
     )..repeat(reverse: true);
 
-    // E-posta alanını dinle (.edu kontrolü için)
     emailController.addListener(() {
-      final email = emailController.text;
+      final email = emailController.text.trim().toLowerCase();
       final isEdu = email.endsWith('.edu.tr') || email.endsWith('.edu');
       if (isEdu != _isEduEmail) setState(() => _isEduEmail = isEdu);
     });
@@ -62,6 +59,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     _confirmPasswordController.dispose();
     _takmaAdController.dispose();
     _adSoyadController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -98,22 +96,8 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 6,
       ),
     );
-  }
-
-  String _translateFirebaseAuthException(String code) {
-    switch (code) {
-      case 'invalid-email': return 'Geçersiz e-posta formatı.';
-      case 'user-not-found': return 'Bu e-posta ile kayıtlı kullanıcı bulunamadı.';
-      case 'wrong-password': return 'Hatalı şifre.';
-      case 'invalid-credential': return 'E-posta veya şifre hatalı.';
-      case 'email-already-in-use': return 'Bu e-posta adresi zaten kullanılıyor.';
-      case 'weak-password': return 'Şifre çok zayıf (en az 6 karakter olmalı).';
-      case 'network-request-failed': return 'İnternet bağlantısı yok.';
-      default: return 'Giriş hatası: $code';
-    }
   }
 
   void _showPasswordResetDialog() {
@@ -121,19 +105,18 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text("Şifre Sıfırlama"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text("Kayıtlı e-posta adresinizi girin. Size bir şifre sıfırlama bağlantısı göndereceğiz."),
+            const Text("Kayıtlı e-posta adresinizi girin."),
             const SizedBox(height: 15),
             TextField(
               controller: resetEmailController,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: "E-posta Adresi",
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                prefixIcon: const Icon(Icons.email),
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.email),
               ),
               keyboardType: TextInputType.emailAddress,
             ),
@@ -147,7 +130,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
               if (email.isNotEmpty) {
                 try {
                   await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-                  showSnackBar("Şifre sıfırlama e-postası gönderildi.");
+                  showSnackBar("Şifre sıfırlama linki mailinize gönderildi.");
                 } catch (e) {
                   showSnackBar("Hata: $e", isError: true);
                 }
@@ -164,77 +147,102 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
   void handleAuth() async {
     FocusScope.of(context).unfocus();
     setState(() => _isLoading = true);
-    try {
-      if (!isLogin && passwordController.text != _confirmPasswordController.text) {
-        showSnackBar("Şifreler eşleşmiyor.", isError: true);
-        return;
-      }
 
+    try {
       if (!isLogin) {
-        String email = emailController.text.trim();
-        if (email.isEmpty) {
-          showSnackBar("Lütfen bir e-posta adresi girin.", isError: true);
+        // --- KAYIT OLMA ---
+        if (passwordController.text != _confirmPasswordController.text) {
+          showSnackBar("Şifreler eşleşmiyor.", isError: true);
           return;
         }
-        if (!email.endsWith('.edu.tr') && !email.endsWith('.edu')) {
+
+        String email = emailController.text.trim();
+        String phone = _phoneController.text.trim(); // Telefonu al
+
+        if (email.isEmpty) {
+          showSnackBar("Lütfen e-posta adresinizi girin.", isError: true);
+          return;
+        }
+        
+        // Telefon kontrolü
+        if (phone.isEmpty || phone.length < 10) {
+           showSnackBar("Lütfen geçerli bir telefon numarası girin.", isError: true);
+           return;
+        }
+
+        final lowerEmail = email.toLowerCase();
+        if (!(lowerEmail.endsWith('.edu.tr') || lowerEmail.endsWith('.edu'))) {
           showSnackBar("Sadece üniversite e-postası (.edu veya .edu.tr) ile kayıt olabilirsiniz.", isError: true);
+          return;
+        }
+
+        final takmaAd = _takmaAdController.text.trim();
+        final adSoyad = _adSoyadController.text.trim();
+        
+        if (adSoyad.isEmpty || takmaAd.isEmpty) {
+          showSnackBar("Lütfen tüm alanları doldurun.", isError: true);
           return;
         }
 
         final querySnapshot = await FirebaseFirestore.instance
             .collection('kullanicilar')
-            .where('takmaAd', isEqualTo: _takmaAdController.text.trim())
+            .where('takmaAd', isEqualTo: takmaAd)
             .limit(1).get();
 
         if (querySnapshot.docs.isNotEmpty) {
           showSnackBar("Bu takma ad zaten alınmış.", isError: true);
           return;
         }
-      }
 
-      if (isLogin) {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(email: emailController.text.trim(), password: passwordController.text);
-      } else {
-        final adSoyad = _adSoyadController.text.trim();
-        final takmaAd = _takmaAdController.text.trim();
+        UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: email, 
+          password: passwordController.text
+        );
 
-        if (adSoyad.isEmpty || takmaAd.isEmpty) {
-          showSnackBar("Lütfen tüm alanları doldurun.", isError: true);
-          return;
+        final user = userCredential.user;
+        if (user != null) {
+          final adSoyadParts = adSoyad.split(' ');
+          final sadeceAd = adSoyadParts.isNotEmpty ? adSoyadParts.first : '';
+
+          await FirebaseFirestore.instance.collection('kullanicilar').doc(user.uid).set({
+            'email': email,
+            'phoneNumber': phone, // Telefonu kaydet
+            'takmaAd': takmaAd,
+            'ad': sadeceAd,
+            'fullName': adSoyad,
+            'kayit_tarihi': FieldValue.serverTimestamp(),
+            'verified': false,
+            'status': 'Unverified',
+            'followerCount': 0,
+            'followingCount': 0,
+            'postCount': 0,
+            'earnedBadges': [],
+            'followers': [],
+            'following': [],
+            'savedPosts': []
+          });
+          
+          showSnackBar("Kayıt başarılı! Doğrulama adımına yönlendiriliyorsunuz...");
         }
-
-        UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(email: emailController.text.trim(), password: passwordController.text);
-        
-        final adSoyadParts = adSoyad.split(' ');
-        final sadeceAd = adSoyadParts.isNotEmpty ? adSoyadParts.first : '';
-
-        await FirebaseFirestore.instance.collection('kullanicilar').doc(userCredential.user!.uid).set({
-          'email': emailController.text.trim(),
-          'takmaAd': takmaAd,
-          'ad': sadeceAd,
-          'kayit_tarihi': FieldValue.serverTimestamp(),
-          'verified': false,
-          'status': 'Unverified',
-          'followerCount': 0,
-          'followingCount': 0,
-          'postCount': 0,
-          'earnedBadges': [],
-          'followers': [],
-          'following': [],
-          'savedPosts': []
-        });
-      }
-      _saveOrClearCredentials(_rememberMe);
-    } on FirebaseAuthException catch (e) {
-      showSnackBar(_translateFirebaseAuthException(e.code), isError: true);
-    } on FirebaseException catch (e) {
-      if (e.code == 'permission-denied') {
-        showSnackBar("Erişim reddedildi. Kuralları kontrol edin.", isError: true);
       } else {
-        showSnackBar("Firebase Hatası: ${e.message}", isError: true);
+        // --- GİRİŞ YAPMA ---
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: emailController.text.trim(), 
+          password: passwordController.text
+        );
       }
+      
+      _saveOrClearCredentials(_rememberMe);
+
+    } on FirebaseAuthException catch (e) {
+      String message = "Bir hata oluştu.";
+      if (e.code == 'user-not-found') message = "Kullanıcı bulunamadı.";
+      else if (e.code == 'wrong-password') message = "Hatalı şifre.";
+      else if (e.code == 'email-already-in-use') message = "Bu e-posta zaten kullanımda.";
+      else if (e.code == 'invalid-email') message = "Geçersiz e-posta formatı.";
+      showSnackBar(message, isError: true);
     } catch (e) {
-      showSnackBar("Beklenmedik Hata: $e", isError: true);
+      showSnackBar("Beklenmedik hata: $e", isError: true);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -261,7 +269,6 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       resizeToAvoidBottomInset: false, 
       body: Stack(
         children: [
-          // 1. ARKA PLAN ANİMASYONU
           Positioned.fill(
             child: Container(
               color: isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F5),
@@ -282,28 +289,18 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                         right: -20 + 20 * math.sin(_animationController.value * 2 * math.pi),
                         size: 250,
                       ),
-                      _buildAnimatedBlob(
-                        color: Colors.purpleAccent.withOpacity(0.3),
-                        top: MediaQuery.of(context).size.height / 2,
-                        left: -50 + 50 * math.sin(_animationController.value * 2 * math.pi),
-                        size: 150,
-                      ),
                     ],
                   );
                 },
               ),
             ),
           ),
-
-          // 2. BLUR EFEKTİ
           Positioned.fill(
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
               child: Container(color: Colors.transparent),
             ),
           ),
-
-          // 3. İÇERİK
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -312,21 +309,15 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // --- GÜNCELLENEN KISIM: LOGO AYARLARI ---
-                    const SizedBox(height: 60), // Yukarıdan boşluk (kamera şeklinden kaçmak için)
+                    const SizedBox(height: 60),
                     Hero(
                       tag: 'app_logo',
-                      child: AppLogo(
-                        size: 120, // Boyut küçültüldü (daha zarif)
-                        isLightMode: !isDark, 
-                      ),
+                      child: AppLogo(size: 120, isLightMode: !isDark),
                     ),
-                    const SizedBox(height: 30), // Logo ile form arası boşluk
-
-                    // CAM KART (Giriş Formu)
+                    const SizedBox(height: 30), 
+                    
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 500),
-                      curve: Curves.easeInOutBack,
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
                         color: cardColor,
@@ -339,68 +330,56 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 300),
-                            child: Text(
-                              isLogin ? "Hoş Geldiniz" : "Aramıza Katılın",
-                              key: ValueKey<bool>(isLogin),
-                              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textColor),
-                            ),
+                          Text(
+                            isLogin ? "Giriş Yap" : "Öğrenci Kaydı",
+                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textColor),
                           ),
                           const SizedBox(height: 20),
 
-                          AnimatedSize(
-                            duration: const Duration(milliseconds: 400),
-                            curve: Curves.easeInOut,
-                            child: Column(
-                              children: [
-                                if (!isLogin) ...[
-                                  _buildModernTextField(
-                                    controller: _adSoyadController,
-                                    label: "Ad Soyad",
-                                    icon: Icons.person_outline,
-                                    isDark: isDark,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  _buildModernTextField(
-                                    controller: _takmaAdController,
-                                    label: "Takma Ad",
-                                    icon: Icons.alternate_email,
-                                    isDark: isDark,
-                                  ),
-                                  const SizedBox(height: 16),
-                                ],
-                                _buildModernTextField(
-                                  controller: emailController,
-                                  label: "Öğrenci Maili",
-                                  icon: Icons.email_outlined,
-                                  isDark: isDark,
-                                  suffixIcon: !isLogin && _isEduEmail ? const Icon(Icons.check_circle, color: AppColors.success) : null,
-                                ),
-                                const SizedBox(height: 16),
-                                _buildModernTextField(
-                                  controller: passwordController,
-                                  label: "Şifre",
-                                  icon: Icons.lock_outline,
-                                  isDark: isDark,
-                                  isPassword: true,
-                                ),
-                                if (!isLogin) ...[
-                                  const SizedBox(height: 16),
-                                  _buildModernTextField(
-                                    controller: _confirmPasswordController,
-                                    label: "Şifre Tekrar",
-                                    icon: Icons.lock_outline,
-                                    isDark: isDark,
-                                    isPassword: true,
-                                  ),
-                                ],
-                              ],
+                          if (!isLogin) ...[
+                            _buildModernTextField(controller: _adSoyadController, label: "Ad Soyad", icon: Icons.person_outline, isDark: isDark),
+                            const SizedBox(height: 16),
+                            _buildModernTextField(controller: _takmaAdController, label: "Takma Ad", icon: Icons.alternate_email, isDark: isDark),
+                            const SizedBox(height: 16),
+                            // YENİ TELEFON ALANI
+                            _buildModernTextField(
+                                controller: _phoneController, 
+                                label: "Telefon Numarası", 
+                                icon: Icons.phone_android, 
+                                isDark: isDark, 
+                                inputType: TextInputType.phone
                             ),
+                            const SizedBox(height: 16),
+                          ],
+
+                          _buildModernTextField(
+                            controller: emailController,
+                            label: isLogin ? "E-posta" : "Üniversite E-postası (.edu.tr)",
+                            icon: Icons.email_outlined,
+                            isDark: isDark,
+                            suffixIcon: !isLogin && _isEduEmail ? const Icon(Icons.check_circle, color: AppColors.success) : null,
                           ),
-
+                          const SizedBox(height: 16),
+                          _buildModernTextField(
+                            controller: passwordController,
+                            label: "Şifre",
+                            icon: Icons.lock_outline,
+                            isDark: isDark,
+                            isPassword: true,
+                          ),
+                          if (!isLogin) ...[
+                            const SizedBox(height: 16),
+                            _buildModernTextField(
+                              controller: _confirmPasswordController,
+                              label: "Şifre Tekrar",
+                              icon: Icons.lock_outline,
+                              isDark: isDark,
+                              isPassword: true,
+                            ),
+                          ],
+                          
                           const SizedBox(height: 10),
-
+                          
                           if (isLogin)
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -409,15 +388,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                                   onTap: () => setState(() => _rememberMe = !_rememberMe),
                                   child: Row(
                                     children: [
-                                      SizedBox(
-                                        height: 24, width: 24,
-                                        child: Checkbox(
-                                          value: _rememberMe,
-                                          onChanged: (v) => setState(() => _rememberMe = v!),
-                                          activeColor: AppColors.primary,
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                        ),
-                                      ),
+                                      SizedBox(height: 24, width: 24, child: Checkbox(value: _rememberMe, onChanged: (v) => setState(() => _rememberMe = v!), activeColor: AppColors.primary)),
                                       const SizedBox(width: 8),
                                       Text("Beni Hatırla", style: TextStyle(color: textColor.withOpacity(0.7), fontSize: 13)),
                                     ],
@@ -429,9 +400,9 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                                 ),
                               ],
                             ),
-
+                          
                           const SizedBox(height: 20),
-
+                          
                           SizedBox(
                             width: double.infinity,
                             height: 50,
@@ -440,63 +411,41 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
                                 foregroundColor: Colors.white,
-                                elevation: 8,
-                                shadowColor: AppColors.primary.withOpacity(0.5),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                               ),
-                              child: _isLoading
+                              child: _isLoading 
                                   ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                                  : Text(
-                                      isLogin ? "Giriş Yap" : "Kayıt Ol",
-                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                    ),
+                                  : Text(isLogin ? "Giriş Yap" : "Kayıt Ol", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                             ),
                           ),
                         ],
                       ),
                     ),
-
+                    
                     const SizedBox(height: 24),
-
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          isLogin ? "Hesabın yok mu?" : "Zaten hesabın var mı?",
-                          style: TextStyle(color: textColor.withOpacity(0.7)),
-                        ),
+                        Text(isLogin ? "Hesabın yok mu?" : "Zaten hesabın var mı?", style: TextStyle(color: textColor.withOpacity(0.7))),
                         TextButton(
-                          onPressed: () {
-                            setState(() {
-                              isLogin = !isLogin;
-                            });
-                          },
-                          child: Text(
-                            isLogin ? "Hemen Kayıt Ol" : "Giriş Yap",
-                            style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
-                          ),
+                          onPressed: () => setState(() => isLogin = !isLogin),
+                          child: Text(isLogin ? "Kayıt Ol" : "Giriş Yap", style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),
-
                     if (isLogin)
                       TextButton.icon(
                         onPressed: _signInAsGuest,
                         icon: Icon(Icons.person_outline, size: 18, color: textColor.withOpacity(0.6)),
                         label: Text("Misafir Olarak Göz At", style: TextStyle(color: textColor.withOpacity(0.6))),
                       ),
-                    
                     const SizedBox(height: 20),
-                    
                     Consumer<ThemeProvider>(
                       builder: (context, themeProvider, child) {
-                        final isDarkTheme = themeProvider.themeMode == ThemeMode.dark ||
-                            (themeProvider.themeMode == ThemeMode.system && MediaQuery.of(context).platformBrightness == Brightness.dark);
+                        final isDarkTheme = themeProvider.themeMode == ThemeMode.dark || (themeProvider.themeMode == ThemeMode.system && MediaQuery.of(context).platformBrightness == Brightness.dark);
                         return IconButton(
-                          icon: Icon(isDarkTheme ? Icons.light_mode : Icons.dark_mode, color: textColor.withOpacity(0.5)),
-                          onPressed: () {
-                            themeProvider.setThemeMode(isDarkTheme ? ThemeMode.light : ThemeMode.dark);
-                          },
+                          icon: Icon(isDarkTheme ? Icons.light_mode : Icons.dark_mode, color: textColor.withOpacity(0.5)), 
+                          onPressed: () => themeProvider.setThemeMode(isDarkTheme ? ThemeMode.light : ThemeMode.dark),
                         );
                       },
                     ),
@@ -516,19 +465,18 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     required IconData icon,
     required bool isDark,
     bool isPassword = false,
+    TextInputType inputType = TextInputType.text,
     Widget? suffixIcon,
   }) {
     return Container(
       decoration: BoxDecoration(
         color: isDark ? Colors.grey[850] : Colors.grey[100],
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          if (!isDark) BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2)),
-        ],
       ),
       child: TextField(
         controller: controller,
         obscureText: isPassword,
+        keyboardType: inputType,
         style: TextStyle(color: isDark ? Colors.white : Colors.black87),
         decoration: InputDecoration(
           labelText: label,
@@ -546,12 +494,8 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     return Positioned(
       top: top, left: left, right: right, bottom: bottom,
       child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-        ),
+        width: size, height: size,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       ),
     );
   }

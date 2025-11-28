@@ -9,7 +9,7 @@ import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart';
 
 import '../forum/gonderi_detay_ekrani.dart';
-// Düzeltilmiş Importlar
+import '../market/urun_detay_ekrani.dart';
 
 class AdminPanelEkrani extends StatefulWidget {
   const AdminPanelEkrani({super.key});
@@ -28,7 +28,6 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
   String _allUsersSearchQuery = "";
   String _reportsSearchQuery = "";
 
-  // PERFORMANS: Sabit streamler için
   late Stream<QuerySnapshot> _pendingStream;
   late Stream<QuerySnapshot> _requestsStream;
   late Stream<QuerySnapshot> _usersStream;
@@ -51,7 +50,6 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
       setState(() => _reportsSearchQuery = _reportsSearchController.text.toLowerCase());
     });
 
-    // 1. Stream'leri burada tanımla
     _pendingStream = FirebaseFirestore.instance.collection('kullanicilar').where('status', isEqualTo: 'Pending').snapshots();
     _requestsStream = FirebaseFirestore.instance.collection('degisiklik_istekleri').orderBy('timestamp', descending: true).snapshots();
     _usersStream = FirebaseFirestore.instance.collection('kullanicilar').orderBy('kayit_tarihi', descending: true).limit(50).snapshots();
@@ -66,10 +64,6 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     _reportsSearchController.dispose();
     super.dispose();
   }
-
-  // --- Yardımcı Fonksiyonlar (Aynen Korundu) ---
-  // ... (Kod kalabalığı olmaması için önceki fonksiyonlar buraya eklenebilir, 
-  // aşağıda tam dosya yapısında fonksiyonları tutacağım)
 
   void _onayla(String userId) async {
     try {
@@ -153,12 +147,35 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
 
   void _deletePost(String postId) async {
     try {
+      // Cloud Function yerine direkt Firestore'dan silmeyi deneyelim (Admin yetkisi varsa)
+      // Veya mevcut cloud function'ı kullanmaya devam edelim.
       final callable = FirebaseFunctions.instanceFor(region: 'europe-west1').httpsCallable('deletePost');
       await callable.call({'postId': postId});
       if (mounted) _showSnack("Gönderi silindi.", AppColors.success);
     } catch (e) {
       if (mounted) _showSnack("Hata: $e", AppColors.error);
     }
+  }
+  
+  void _deleteComment(String postId, String commentId) async {
+    try {
+        await FirebaseFirestore.instance.collection('gonderiler').doc(postId).collection('yorumlar').doc(commentId).delete();
+        await FirebaseFirestore.instance.collection('gonderiler').doc(postId).update({
+            'commentCount': FieldValue.increment(-1)
+        });
+        if (mounted) _showSnack("Yorum silindi.", AppColors.success);
+    } catch (e) {
+        if (mounted) _showSnack("Hata: $e", AppColors.error);
+    }
+  }
+
+  void _deleteProduct(String productId) async {
+      try {
+          await FirebaseFirestore.instance.collection('urunler').doc(productId).delete();
+          if (mounted) _showSnack("Ürün silindi.", AppColors.success);
+      } catch (e) {
+          if (mounted) _showSnack("Hata: $e", AppColors.error);
+      }
   }
 
   void _deleteUser(String userId) async {
@@ -229,6 +246,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     );
   }
 
+  // _buildPendingTab, _buildRequestsTab, _buildUsersTab aynen kalacak...
   Widget _buildPendingTab() {
     return Column(
       children: [
@@ -247,7 +265,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: _pendingStream, // OPTIMIZE EDİLDİ
+            stream: _pendingStream,
             builder: (context, snapshot) {
               if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
               final docs = snapshot.data!.docs.where((doc) {
@@ -294,7 +312,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
 
   Widget _buildRequestsTab() {
     return StreamBuilder<QuerySnapshot>(
-      stream: _requestsStream, // OPTIMIZE EDİLDİ
+      stream: _requestsStream,
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final docs = snapshot.data!.docs;
@@ -398,7 +416,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: _usersStream, // OPTIMIZE EDİLDİ
+            stream: _usersStream,
             builder: (context, snapshot) {
               if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
               
@@ -451,6 +469,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     );
   }
 
+  // --- GÜNCELLENEN ŞİKAYETLER SEKMESİ ---
   Widget _buildReportsTab() {
     return Column(
       children: [
@@ -468,12 +487,12 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: _reportsStream, // OPTIMIZE EDİLDİ
+            stream: _reportsStream,
             builder: (context, snapshot) {
               if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
               final docs = snapshot.data!.docs.where((doc) {
                  final data = doc.data() as Map<String, dynamic>;
-                 final title = (data['postTitle'] ?? '').toString().toLowerCase();
+                 final title = (data['targetTitle'] ?? data['postTitle'] ?? '').toString().toLowerCase();
                  return title.contains(_reportsSearchQuery);
               }).toList();
 
@@ -486,38 +505,82 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                   final doc = docs[index];
                   final data = doc.data() as Map<String, dynamic>;
                   
+                  final String type = data['targetType'] ?? 'post';
+                  final String targetTitle = data['targetTitle'] ?? data['postTitle'] ?? 'Başlık Yok';
+                  final String reporter = data['reporterName'] ?? 'Bilinmiyor';
+                  final String reason = data['reason'] ?? 'Sebep belirtilmedi';
+                  
+                  String typeLabel = 'Gönderi';
+                  IconData typeIcon = Icons.article;
+                  
+                  if(type == 'comment') { typeLabel = 'Yorum'; typeIcon = Icons.comment; }
+                  if(type == 'product') { typeLabel = 'Ürün'; typeIcon = Icons.shopping_bag; }
+
                   return Card(
                     color: Colors.red.withOpacity(0.05),
                     margin: const EdgeInsets.only(bottom: 12),
                     child: ListTile(
-                      onTap: () => _showReportManagementDialog(data, doc.id),
-                      title: Text(data['reason'] ?? 'Sebep Yok', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.error)),
+                      leading: CircleAvatar(backgroundColor: Colors.white, child: Icon(typeIcon, color: AppColors.error)),
+                      title: Text(reason, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.error)),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text("Şikayet Eden: ${data['reporterName']}"),
-                          Text("Gönderi Başlığı: ${data['postTitle']}"),
+                          Text("Türü: $typeLabel"),
+                          Text("Şikayet Eden: $reporter"),
+                          Text("İçerik: $targetTitle", maxLines: 1, overflow: TextOverflow.ellipsis),
                         ],
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          // GÖRÜNTÜLE BUTONU
                           IconButton(
                             icon: const Icon(Icons.visibility, color: AppColors.primary),
-                            onPressed: () {
-                              FirebaseFirestore.instance.collection('gonderiler').doc(data['postId']).get().then((postDoc) {
-                                if (postDoc.exists) {
-                                  Navigator.push(context, MaterialPageRoute(builder: (_) => GonderiDetayEkrani.fromDoc(postDoc)));
-                                } else {
-                                  _showSnack("Gönderi zaten silinmiş.", Colors.grey);
-                                }
-                              });
+                            onPressed: () async {
+                              final targetId = data['targetId'] ?? data['postId'];
+                              
+                              if (type == 'post') {
+                                  final postDoc = await FirebaseFirestore.instance.collection('gonderiler').doc(targetId).get();
+                                  if (postDoc.exists && mounted) {
+                                      Navigator.push(context, MaterialPageRoute(builder: (_) => GonderiDetayEkrani.fromDoc(postDoc)));
+                                  } else {
+                                      _showSnack("İçerik bulunamadı.", Colors.grey);
+                                  }
+                              } else if (type == 'comment') {
+                                  final postId = data['postId'];
+                                  final postDoc = await FirebaseFirestore.instance.collection('gonderiler').doc(postId).get();
+                                  if (postDoc.exists && mounted) {
+                                       Navigator.push(context, MaterialPageRoute(builder: (_) => GonderiDetayEkrani.fromDoc(postDoc)));
+                                       // Yorumları post içinde aramak gerekir, direkt gitmek zor ama postu açmak yeterli.
+                                  } else {
+                                      _showSnack("İçerik bulunamadı.", Colors.grey);
+                                  }
+                              } else if (type == 'product') {
+                                  final prodDoc = await FirebaseFirestore.instance.collection('urunler').doc(targetId).get();
+                                  if (prodDoc.exists && mounted) {
+                                      Navigator.push(context, MaterialPageRoute(builder: (_) => UrunDetayEkrani(productId: targetId, productData: prodDoc.data()!)));
+                                  } else {
+                                      _showSnack("Ürün bulunamadı.", Colors.grey);
+                                  }
+                              }
                             },
                           ),
+                          // SİL BUTONU
                           IconButton(
                             icon: const Icon(Icons.delete, color: AppColors.error),
                             onPressed: () {
-                              _deletePost(data['postId']);
+                              // İçeriği sil
+                              final targetId = data['targetId'] ?? data['postId'];
+                              
+                              if (type == 'post') {
+                                  _deletePost(targetId);
+                              } else if (type == 'comment') {
+                                  final postId = data['postId'];
+                                  _deleteComment(postId, targetId);
+                              } else if (type == 'product') {
+                                  _deleteProduct(targetId);
+                              }
+                              // Şikayet kaydını da sil
                               doc.reference.delete();
                             },
                           ),
@@ -684,10 +747,6 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
         ],
       ),
     );
-  }
-
-  void _showReportManagementDialog(Map<String, dynamic> data, String reportId) {
-    // Şikayet Detay Mantığı (Opsiyonel genişletilebilir)
   }
 
   Color _getStatusColor(String status) {

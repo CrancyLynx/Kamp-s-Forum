@@ -13,14 +13,15 @@ import 'services/presence_service.dart';
 
 // Widgetlar
 import 'widgets/in_app_notification.dart'; 
+import 'widgets/app_logo.dart';
 
 // Sayfalar
 import '../screens/auth/dogrulama_ekrani.dart';
 import '../screens/home/ana_ekran.dart'; 
 import '../screens/auth/giris_ekrani.dart'; 
 import '../screens/auth/splash_screen.dart';
-// Düzeltilmiş Importlar
-
+import '../screens/auth/verification_wrapper.dart'; // GÜNCELLENDİ (Artık bu kullanılıyor)
+import 'utils/app_colors.dart';
 
 // --- TEMA YÖNETİCİSİ ---
 class ThemeProvider extends ChangeNotifier {
@@ -37,30 +38,23 @@ class ThemeProvider extends ChangeNotifier {
 }
 
 // --- GLOBAL DEĞİŞKENLER ---
-// Bildirimleri her yerden gösterebilmek için anahtar (CRITICAL)
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-// Admin UID Listesi
 const List<String> kAdminUids = [
   "oZ2RIhV1JdYVIr0xyqCwhX9fJYq1", 
   "VD8MeJIhhRVtbT9iiUdMEaCe3MO2"
 ];
 
-// Arka Plan Bildirim İşleyicisi
 Future<void> _bgHandler(RemoteMessage message) => firebaseMessagingBackgroundHandler(message);
 
 // --- MAIN FONKSİYONU ---
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  
-  // Arka plan mesajlarını dinle
   FirebaseMessaging.onBackgroundMessage(_bgHandler);
   
-  // Kaydedilmiş temayı yükle
   final prefs = await SharedPreferences.getInstance();
   ThemeMode initialThemeMode = ThemeMode.system; 
-  
   try {
     final themeValue = prefs.get('themeMode');
     if (themeValue is int) {
@@ -76,10 +70,8 @@ Future<void> main() async {
   );
 }
 
-// --- ANA UYGULAMA WIDGET'I ---
 class BizimUygulama extends StatefulWidget {
   const BizimUygulama({super.key});
-
   @override
   State<BizimUygulama> createState() => _BizimUygulamaState();
 }
@@ -91,10 +83,7 @@ class _BizimUygulamaState extends State<BizimUygulama> {
   @override
   void initState() {
     super.initState();
-    // 1. Bildirim Servisini Başlat
     _notificationService.initialize();
-    
-    // 2. Uygulama Açıkken Gelen Bildirimleri Dinle ve Göster
     _notificationService.onMessage.listen((message) {
       if (message.notification != null) {
         _showInAppNotification(
@@ -105,26 +94,20 @@ class _BizimUygulamaState extends State<BizimUygulama> {
     });
   }
 
-  // Uygulama İçi (In-App) Bildirim Gösterme Mantığı
   void _showInAppNotification(String title, String body) {
     _overlayEntry?.remove();
     _overlayEntry = null;
-
-    // navigatorKey üzerinden güvenli context al
     final context = navigatorKey.currentContext;
     if (context == null) return;
 
     final overlayState = Overlay.of(context);
-    
     _overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
-        top: 0,
-        left: 0,
-        right: 0,
+        top: 0, left: 0, right: 0,
         child: Material(
           color: Colors.transparent,
           child: TweenAnimationBuilder<double>(
-            tween: Tween(begin: -100, end: 0), // Yukarıdan aşağı kayma efekti
+            tween: Tween(begin: -100, end: 0),
             duration: const Duration(milliseconds: 500),
             curve: Curves.easeOutBack,
             builder: (context, value, child) {
@@ -133,13 +116,8 @@ class _BizimUygulamaState extends State<BizimUygulama> {
                 child: InAppNotification(
                   title: title,
                   body: body,
-                  onTap: () {
-                    _overlayEntry?.remove();
-                    // İleride buraya bildirim tıklama navigasyonu eklenebilir
-                  },
-                  onDismiss: () {
-                    _overlayEntry?.remove();
-                  },
+                  onTap: () => _overlayEntry?.remove(),
+                  onDismiss: () => _overlayEntry?.remove(),
                 ),
               );
             },
@@ -149,8 +127,6 @@ class _BizimUygulamaState extends State<BizimUygulama> {
     );
 
     overlayState.insert(_overlayEntry!);
-
-    // 4 saniye sonra otomatik kapat
     Future.delayed(const Duration(seconds: 4), () {
       _overlayEntry?.remove();
       _overlayEntry = null;
@@ -162,7 +138,7 @@ class _BizimUygulamaState extends State<BizimUygulama> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Kampüs Forum',
-      navigatorKey: navigatorKey, // CRITICAL: Bildirimler için şart
+      navigatorKey: navigatorKey, 
       themeMode: context.watch<ThemeProvider>().themeMode,
       theme: ThemeData(
         primarySwatch: Colors.deepPurple, 
@@ -176,17 +152,14 @@ class _BizimUygulamaState extends State<BizimUygulama> {
         scaffoldBackgroundColor: const Color(0xFF121212),
         useMaterial3: true,
       ),
-      // Uygulama Splash Screen ile başlar
       home: const SplashScreen(),
     );
   }
 }
 
-// --- ANA KONTROLCÜ (YÖNLENDİRME MERKEZİ) ---
-// Splash Screen bittiğinde burası açılır ve kullanıcıyı nereye göndereceğine karar verir.
+// --- ANA KONTROLCÜ ---
 class AnaKontrolcu extends StatefulWidget {
   const AnaKontrolcu({super.key});
-
   @override
   State<AnaKontrolcu> createState() => _AnaKontrolcuState();
 }
@@ -195,20 +168,17 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
   @override
   void initState() {
     super.initState();
-    // Kullanıcı online durumunu takip etmeye başla
     PresenceService().configure();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Status Bar ayarları
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: isDarkMode ? Brightness.light : Brightness.dark,
     ));
 
-    // 1. Kullanıcı Giriş Yapmış mı?
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, authSnapshot) { 
@@ -218,30 +188,27 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
         
         if (authSnapshot.hasData) {
           final user = authSnapshot.data!;
-          final userId = user.uid;
-
-          // Misafir Kullanıcı -> Direkt Ana Ekrana
+          
+          // 1. Misafir Kontrolü
           if (user.isAnonymous) {
-             return const AnaEkran(
-              isGuest: true,
-              isAdmin: false,
-              userName: 'Misafir',
-              realName: 'Misafir',
-            );
+             return const AnaEkran(isGuest: true, isAdmin: false, userName: 'Misafir', realName: 'Misafir');
           }
 
+          // 2. DOĞRULAMA KONTROLÜ (Hibrit Sistem)
+          // Eğer e-posta doğrulanmamışsa VE telefon numarası eklenmemişse seçim ekranına at.
+          if (!user.emailVerified && (user.phoneNumber == null || user.phoneNumber!.isEmpty)) {
+            return const VerificationWrapper();
+          }
+
+          final userId = user.uid;
           final isAdministrator = kAdminUids.contains(userId);
 
-          // 2. Kullanıcı Onaylı mı? (Firestore Kontrolü)
+          // 3. Firestore Durum Kontrolü
           return StreamBuilder<DocumentSnapshot>(
             stream: FirebaseFirestore.instance.collection('kullanicilar').doc(userId).snapshots(),
             builder: (context, userSnapshot) { 
-              // Veri yüklenirken bekleme ekranı
-              if (userSnapshot.connectionState == ConnectionState.waiting) {
-                return const LoadingScreen();
-              }
+              if (userSnapshot.connectionState == ConnectionState.waiting) return const LoadingScreen();
               
-              // Kullanıcı verisi yoksa (Hata durumu) -> Doğrulamaya at
               if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
                  return const DogrulamaEkrani();
               }
@@ -251,7 +218,6 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
               final String userName = userData?['takmaAd'] ?? userData?['ad'] ?? 'Anonim'; 
               final String realName = userData?['ad'] ?? 'Anonim'; 
 
-              // Admin ise veya Durumu 'Verified' ise -> Ana Ekran
               if (isAdministrator || status == 'Verified') {
                 return AnaEkran(
                   isGuest: false,
@@ -260,21 +226,18 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
                   realName: realName, 
                 ); 
               } else {
-                // Değilse -> Doğrulama Ekranı (Bekleme Odası)
                 return const DogrulamaEkrani(); 
               }
             }, 
           ); 
         } 
 
-        // Giriş yapmamışsa -> Giriş Ekranı
         return const GirisEkrani(); 
       }, 
     );
   }
 }
 
-// Basit Yükleme Ekranı
 class LoadingScreen extends StatelessWidget {
   const LoadingScreen({super.key});
   @override
