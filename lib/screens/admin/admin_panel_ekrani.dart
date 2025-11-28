@@ -78,6 +78,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     }
   }
 
+  // DÜZELTME: Reddetme sebebi zorunlu kılındı.
   void _reddet(String userId) {
     final reasonController = TextEditingController();
     showDialog(
@@ -90,13 +91,16 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              if (reasonController.text.isEmpty) return _showSnack("Sebep girmelisiniz.", AppColors.warning);
+              final finalReason = reasonController.text.trim();
+              if (finalReason.isEmpty) {
+                 return _showSnack("Sebep girmelisiniz.", AppColors.warning);
+              }
               
               await FirebaseFirestore.instance.collection('kullanicilar').doc(userId).update({
                 'status': 'Rejected',
-                'rejectionReason': reasonController.text,
+                'rejectionReason': finalReason,
               });
-              _sendSystemNotification(userId, 'verification_rejected', 'Başvurunuz reddedildi: ${reasonController.text}');
+              _sendSystemNotification(userId, 'verification_rejected', 'Başvurunuz reddedildi: $finalReason');
               if (mounted) _showSnack("Başvuru reddedildi.", AppColors.error);
             },
             child: const Text("Reddet"),
@@ -147,8 +151,6 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
 
   void _deletePost(String postId) async {
     try {
-      // Cloud Function yerine direkt Firestore'dan silmeyi deneyelim (Admin yetkisi varsa)
-      // Veya mevcut cloud function'ı kullanmaya devam edelim.
       final callable = FirebaseFunctions.instanceFor(region: 'europe-west1').httpsCallable('deletePost');
       await callable.call({'postId': postId});
       if (mounted) _showSnack("Gönderi silindi.", AppColors.success);
@@ -246,7 +248,8 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     );
   }
 
-  // _buildPendingTab, _buildRequestsTab, _buildUsersTab aynen kalacak...
+  // --- SEKMELERİN İÇERİKLERİ ---
+  
   Widget _buildPendingTab() {
     return Column(
       children: [
@@ -469,7 +472,6 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     );
   }
 
-  // --- GÜNCELLENEN ŞİKAYETLER SEKMESİ ---
   Widget _buildReportsTab() {
     return Column(
       children: [
@@ -551,7 +553,6 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                                   final postDoc = await FirebaseFirestore.instance.collection('gonderiler').doc(postId).get();
                                   if (postDoc.exists && mounted) {
                                        Navigator.push(context, MaterialPageRoute(builder: (_) => GonderiDetayEkrani.fromDoc(postDoc)));
-                                       // Yorumları post içinde aramak gerekir, direkt gitmek zor ama postu açmak yeterli.
                                   } else {
                                       _showSnack("İçerik bulunamadı.", Colors.grey);
                                   }
@@ -569,7 +570,6 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                           IconButton(
                             icon: const Icon(Icons.delete, color: AppColors.error),
                             onPressed: () {
-                              // İçeriği sil
                               final targetId = data['targetId'] ?? data['postId'];
                               
                               if (type == 'post') {
@@ -596,6 +596,8 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
       ],
     );
   }
+
+  // --- YARDIMCI WIDGET'LAR VE FONKSİYONLAR (Aynı) ---
 
   Widget _buildStatsDashboard() {
     return Card(
@@ -697,7 +699,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
               const Divider(),
               TextField(
                 controller: reasonController,
-                decoration: const InputDecoration(hintText: "Reddetme Sebebi"),
+                decoration: const InputDecoration(hintText: "Reddetme Sebebi (Zorunlu)"), // Düzeltme sebebi zorunluluğu
               ),
             ],
           ),
@@ -714,7 +716,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
-              _reddet(userId);
+              _reddet(userId); // Yeni reddetme dialogu tetiklenir
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             child: const Text("Reddet"),

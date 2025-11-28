@@ -15,6 +15,8 @@ import '../../models/badge_model.dart';
 
 import '../notification/bildirim_ekrani.dart';
 import 'gonderi_ekleme_ekrani.dart';
+import 'anket_ekleme_ekrani.dart';
+import '../../widgets/anket_karti.dart';
 import '../chat/sohbet_listesi_ekrani.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -73,6 +75,59 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
           ),
         ],
       ),
+    );
+  }
+
+  // YENİ: Konu veya Anket Seçim Menüsü
+  void _showCreateOptions(BuildContext context) {
+    if (widget.isGuest) {
+      _showLoginRequiredDialog();
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: Wrap(
+              children: [
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.edit_note, color: AppColors.primary, size: 28),
+                  ),
+                  title: const Text("Forum Konusu / İtiraf", style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text("Bir tartışma başlat veya anonim içini dök."),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => GonderiEklemeEkrani(userName: widget.userName)))
+                        .then((_) => _resetAndFetch());
+                  },
+                ),
+                const Divider(indent: 20, endIndent: 20),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: Colors.purple.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.poll, color: Colors.purple, size: 28),
+                  ),
+                  title: const Text("Anket Oluştur", style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text("Topluluğun fikrini al."),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => AnketEklemeEkrani(userName: widget.userName)))
+                        .then((_) => _resetAndFetch());
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -428,6 +483,23 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
                       DocumentSnapshot document = _posts[index];
                       Map<String, dynamic> data = document.data()! as Map<String, dynamic>;
 
+                      String type = data['type'] ?? 'gonderi';
+                      String realUsername = data['realUsername'] ?? data['takmaAd'] ?? '';
+
+                      if (type == 'anket') {
+                        return AnimatedListItem(
+                          index: index,
+                          child: AnketKarti(
+                            docId: document.id,
+                            data: data,
+                            isGuest: widget.isGuest,
+                            onShowLoginRequired: _showLoginRequiredDialog,
+                            isAdmin: widget.isAdmin,
+                            realUsername: realUsername,
+                          ),
+                        );
+                      }
+
                       String formattedTime = '...';
                       if (data['zaman'] is Timestamp) {
                         Timestamp t = data['zaman'] as Timestamp;
@@ -454,6 +526,7 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
                           key: ValueKey(document.id),
                           postId: document.id,
                           adSoyad: data['ad'] ?? 'Anonim',
+                          realUsername: realUsername, // Admin için gerçek isim
                           baslik: data['baslik'] ?? 'Başlıksız',
                           mesaj: data['mesaj'] ?? 'Boş mesaj',
                           zaman: formattedTime,
@@ -462,6 +535,7 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
                           authorUserId: authorUserId,
                           avatarUrl: data['avatarUrl'],
                           isGuest: widget.isGuest,
+                          isAdmin: widget.isAdmin, // Admin durumu
                           onShowLoginRequired: _showLoginRequiredDialog,
                           currentUserTakmaAd: widget.isGuest ? 'Misafir' : widget.userName,
                           currentUserRealName: widget.isGuest ? 'Misafir' : widget.realName,
@@ -481,16 +555,10 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
       ),
 
       floatingActionButton: widget.isGuest ? null : FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => GonderiEklemeEkrani(
-            userName: widget.userName,
-          ))).then((_) {
-            if (mounted) _resetAndFetch(); 
-          });
-        },
+        onPressed: () => _showCreateOptions(context),
         backgroundColor: AppColors.primary,
-        icon: const Icon(Icons.edit_outlined, color: Colors.white),
-        label: const Text("Konu Aç", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text("Oluştur", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         elevation: 4,
       ),
     );
@@ -632,6 +700,7 @@ class GonderiKartiSkeleton extends StatelessWidget {
 class GonderiKarti extends StatefulWidget {
   final String postId;
   final String adSoyad;
+  final String? realUsername; // YENİ: Gerçek isim
   final String baslik;
   final String mesaj;
   final String zaman;
@@ -640,6 +709,7 @@ class GonderiKarti extends StatefulWidget {
   final String authorUserId;
   final String? avatarUrl;
   final bool isGuest;
+  final bool isAdmin; // YENİ: Admin durumu
   final VoidCallback onShowLoginRequired;
   final String currentUserTakmaAd;
   final String currentUserRealName;
@@ -652,6 +722,7 @@ class GonderiKarti extends StatefulWidget {
     super.key,
     required this.postId,
     required this.adSoyad,
+    this.realUsername,
     required this.baslik,
     required this.mesaj,
     required this.zaman,
@@ -660,6 +731,7 @@ class GonderiKarti extends StatefulWidget {
     this.isAuthorAdmin = false,
     this.avatarUrl,
     required this.isGuest,
+    this.isAdmin = false,
     required this.onShowLoginRequired,
     required this.currentUserTakmaAd,
     required this.currentUserRealName,
@@ -800,12 +872,9 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
-      // YENİLİK BURADA: Kendi gönderisini anlık dinleyen bir StreamBuilder ekledik.
-      // Böylece detay sayfasında yorum atıldığında, bu liste sayfası anında güncellenir.
       stream: FirebaseFirestore.instance.collection('gonderiler').doc(widget.postId).snapshots(),
       builder: (context, snapshot) {
         
-        // Eğer canlı veri geldiyse, sayaçları güncellemek için verileri alalım
         int liveCommentCount = widget.commentCount;
         List<dynamic> liveLikes = widget.likes;
 
@@ -813,11 +882,6 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
           final data = snapshot.data!.data() as Map<String, dynamic>;
           liveCommentCount = data['commentCount'] ?? 0;
           liveLikes = data['likes'] as List<dynamic>? ?? [];
-          
-          // Beğeni durumunu güncellememiz gerekebilir (Opsiyonel, state tutarlılığı için)
-          // _currentLikes = List.from(liveLikes);
-          // final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-          // _isLikedByCurrentUser = currentUserId != null && _currentLikes.contains(currentUserId);
         }
 
         return Container(
@@ -838,10 +902,6 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
               if (widget.isGuest) {
                 widget.onShowLoginRequired();
               } else {
-                // Detay sayfasına gidiyoruz. Geri döndüğünde aslında Stream sayesinde otomatik güncellenecek.
-                Navigator.push(context, MaterialPageRoute(builder: (context) => GonderiDetayEkrani.fromDoc(snapshot.hasData ? snapshot.data! : widget.postId as DocumentSnapshot))); 
-                // Not: Yukarıdaki cast işlemi hatalı olabilir, mantığı düzeltelim:
-                // En temizi, zaten elimizde `postId` var, veritabanından taze çekip gitmektir.
                 FirebaseFirestore.instance.collection('gonderiler').doc(widget.postId).get().then((doc) {
                     if (doc.exists && mounted) {
                         Navigator.push(context, MaterialPageRoute(builder: (context) => GonderiDetayEkrani.fromDoc(doc)));
@@ -855,7 +915,6 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ÜST KISIM: AVATAR VE İSİM
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
@@ -889,9 +948,21 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                             Row(
                               children: [
                                 Flexible(
-                                  child: Text(
-                                    widget.adSoyad,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                  child: RichText(
+                                    text: TextSpan(
+                                      style: DefaultTextStyle.of(context).style,
+                                      children: [
+                                        TextSpan(
+                                          text: widget.adSoyad,
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                        ),
+                                        if (widget.isAdmin && widget.realUsername != null && widget.adSoyad == 'Anonim')
+                                          TextSpan(
+                                            text: ' (${widget.realUsername})',
+                                            style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13),
+                                          ),
+                                      ],
+                                    ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
@@ -911,7 +982,6 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                           ],
                         ),
                       ),
-                      // Rozetler (Sadece ilk 1 tane)
                       if (widget.authorBadges.isNotEmpty)
                         _buildAuthorBadges(widget.authorBadges),
                     ],
@@ -919,7 +989,6 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
 
                   const SizedBox(height: 12),
 
-                  // ORTA KISIM: İÇERİK
                   Text(
                     widget.baslik,
                     style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18, height: 1.2),
@@ -936,13 +1005,11 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                   const Divider(height: 1),
                   const SizedBox(height: 8),
 
-                  // ALT KISIM: ETKİLEŞİM BUTONLARI
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
                         children: [
-                          // Beğeni Butonu
                           InkWell(
                             onTap: _toggleLike,
                             borderRadius: BorderRadius.circular(20),
@@ -960,7 +1027,7 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                                   ),
                                   const SizedBox(width: 6),
                                   Text(
-                                    liveLikes.length.toString(), // CANLI VERİ
+                                    liveLikes.length.toString(),
                                     style: TextStyle(
                                       color: _isLikedByCurrentUser ? AppColors.like : Colors.grey[700],
                                       fontWeight: FontWeight.bold,
@@ -971,10 +1038,8 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                             ),
                           ),
                           const SizedBox(width: 16),
-                          // Yorum Butonu
                           InkWell(
                             onTap: () {
-                              // Yorum butonuna tıklanınca detay sayfasına git
                               if (widget.isGuest) {
                                 widget.onShowLoginRequired();
                               } else {
@@ -993,7 +1058,7 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                                   const Icon(Icons.mode_comment_outlined, color: Colors.grey, size: 22),
                                   const SizedBox(width: 6),
                                   Text(
-                                    liveCommentCount.toString(), // CANLI VERİ
+                                    liveCommentCount.toString(),
                                     style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.bold),
                                   ),
                                 ],
@@ -1002,7 +1067,6 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                           ),
                         ],
                       ),
-                      // Kaydet Butonu
                       IconButton(
                         onPressed: () => _toggleSave(FirebaseAuth.instance.currentUser?.uid, widget.isSaved),
                         icon: Icon(
@@ -1023,7 +1087,6 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
   }
 
   Widget _buildAuthorBadges(List<String> badgeIds) {
-    // Sadece en önemli 1 rozeti göster
     final badgesToShow = allBadges.where((b) => badgeIds.contains(b.id)).take(1).toList();
     if (badgesToShow.isEmpty) return const SizedBox.shrink();
 

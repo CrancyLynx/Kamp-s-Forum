@@ -32,6 +32,7 @@ dependencies:
   geolocator: ^10.1.0
   timeago: ^3.6.1
 
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

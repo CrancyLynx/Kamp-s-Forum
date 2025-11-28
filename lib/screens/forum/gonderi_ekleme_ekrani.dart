@@ -4,9 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart'; 
 import 'package:image_picker/image_picker.dart'; 
-// Aynı klasörde olduğu için doğrudan erişim
 import 'forum_sayfasi.dart'; 
-// Üst klasör utils
 import '../../utils/app_colors.dart';
 
 class GonderiEklemeEkrani extends StatefulWidget {
@@ -25,6 +23,7 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
   bool _isLoading = false;
   
   bool _isPickingImage = false; 
+  bool _isAnonymous = false;
 
   final ImagePicker _picker = ImagePicker();
   final List<File> _selectedImages = [];
@@ -99,8 +98,9 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
       final userDoc = await FirebaseFirestore.instance.collection('kullanicilar').doc(userId).get();
       final userData = userDoc.data() ?? {};
       
-      final String? currentAvatarUrl = userData['avatarUrl'];
-      final List<dynamic> authorBadges = userData['earnedBadges'] ?? [];
+      final String displayName = _isAnonymous ? 'Anonim' : widget.userName;
+      final String? currentAvatarUrl = _isAnonymous ? null : userData['avatarUrl'];
+      final List<dynamic> authorBadges = _isAnonymous ? [] : (userData['earnedBadges'] ?? []);
 
       List<String> imageUrls = [];
       if (_selectedImages.isNotEmpty) {
@@ -108,9 +108,11 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
       }
 
       await FirebaseFirestore.instance.collection('gonderiler').add({
+        'type': 'gonderi',
         'baslik': _baslikController.text.trim(),
         'mesaj': _mesajController.text.trim(),
-        'ad': widget.userName,
+        'ad': displayName,
+        'realUsername': widget.userName, // YENİ: Admin için gerçek isim
         'userId': userId,
         'zaman': FieldValue.serverTimestamp(),
         'lastCommentTimestamp': FieldValue.serverTimestamp(),
@@ -120,6 +122,7 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
         'authorBadges': authorBadges,
         'likes': [],
         'imageUrls': imageUrls,
+        'isAnonymous': _isAnonymous,
       });
 
       final userRef = FirebaseFirestore.instance.collection('kullanicilar').doc(userId);
@@ -246,6 +249,29 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
                     },
                   ),
                 ),
+
+              const SizedBox(height: 20),
+              Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+                ),
+                child: SwitchListTile(
+                  title: const Text("Anonim Olarak Paylaş (İtiraf)", style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text("Adın ve profil resmin gizlenecek."),
+                  value: _isAnonymous,
+                  activeColor: AppColors.primary,
+                  secondary: const Icon(Icons.visibility_off, color: Colors.grey),
+                  onChanged: (val) {
+                    setState(() {
+                      _isAnonymous = val;
+                      if(val) _selectedCategory = 'Diğer'; 
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(height: 30),
             ],
           ),
         ),
