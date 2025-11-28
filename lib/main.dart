@@ -15,15 +15,12 @@ import 'services/presence_service.dart';
 import 'widgets/in_app_notification.dart'; 
 
 // Sayfalar
-import  '../screens/forum/forum_sayfasi.dart.';
 import '../screens/auth/dogrulama_ekrani.dart';
 import '../screens/home/ana_ekran.dart'; 
 import '../screens/auth/giris_ekrani.dart'; 
 import '../screens/auth/splash_screen.dart';
 // Düzeltilmiş Importlar
-import '../../utils/app_colors.dart';
-import '../screens/profile/kullanici_profil_detay_ekrani.dart';
-import '../../widgets/typing_indicator.dart'; 
+
 
 // --- TEMA YÖNETİCİSİ ---
 class ThemeProvider extends ChangeNotifier {
