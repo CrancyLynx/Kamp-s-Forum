@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
-// import 'package:font_awesome_flutter/font_awesome_flutter.dart'; // UYARI 1: Kullanılmıyor, kaldırıldı
 import '../search/arama_sayfasi.dart';
 import '../forum/gonderi_detay_ekrani.dart';
 import '../../services/news_service.dart';
@@ -11,9 +10,7 @@ import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart'; 
 import '../event/etkinlik_detay_ekrani.dart'; 
 import 'package:intl/intl.dart'; 
-
-// import 'dart:async'; // UYARI 2: Kullanılmıyor, kaldırıldı
-// import 'dart:math'; // UYARI 3: Kullanılmıyor, kaldırıldı
+import 'dart:math'; 
 
 class KesfetSayfasi extends StatefulWidget {
   const KesfetSayfasi({super.key});
@@ -107,7 +104,6 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
           .get();
       return querySnapshot.docs.where((doc) {
         final data = doc.data() as Map<String, dynamic>;
-        // UYARI 4: Casting gereksiz, kaldırıldı.
         return data[sortBy] is int && data[sortBy] > 0;
       }).toList();
     } catch (e) {
@@ -193,7 +189,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
           color: AppColors.primary,
           child: CustomScrollView(
             slivers: [
-              // ARAMA BARI
+              // ARAMA BARI (PIXEL HATASI DÜZELTİLDİ)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -211,7 +207,14 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                         children: [
                           Icon(Icons.search, color: Colors.grey[600]),
                           const SizedBox(width: 10),
-                          Text("Kampüste ara...", style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                          // Expanded kullanarak metnin sıkışmasını önlüyoruz (Pixel Hatası çözümü)
+                          Expanded(
+                            child: Text(
+                              "Tüm uygulamada ara (Kullanıcı, Konu, Mekan)...", 
+                              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -227,6 +230,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     children: [
+                      // Map sayfasına initialFilter ile yönlendirir.
                       _buildQuickAction(Icons.restaurant, "Yemek", Colors.orange),
                       _buildQuickAction(Icons.directions_bus, "Durak", Colors.blue),
                       _buildQuickAction(Icons.local_library, "Kütüphane", Colors.brown),
@@ -393,9 +397,6 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
               return GestureDetector(
                 onTap: () {
                   // Etkinlik detay ekranına yönlendirme
-                  // DİKKAT: Etkinlik Detay Ekrani import edilmediği için burada hata alınabilir.
-                  // (Önceki adımda edilmeliydi, şimdi import'u yukarıya ekledim)
-                  // ignore: avoid_single_cascade_in_expression
                   Navigator.push(context, MaterialPageRoute(builder: (context) => EtkinlikDetayEkrani(eventDoc: eventDoc)));
                 },
                 child: _buildEventCard(data['title'] ?? 'Etkinlik', dateString, data['imageUrl']),
@@ -453,6 +454,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
         if (label == 'Yemek') filter = 'yemek';
         if (label == 'Durak') filter = 'durak';
         if (label == 'Kütüphane') filter = 'kutuphane';
+        // Map sayfası çağrılırken sadece filtre gönderilir, konum bulma işi Map sayfasına bırakılır.
         Navigator.push(context, MaterialPageRoute(builder: (context) => KampusHaritasiSayfasi(initialFilter: filter)));
       },
       child: Padding(

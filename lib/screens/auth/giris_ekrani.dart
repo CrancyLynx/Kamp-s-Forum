@@ -157,7 +157,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     );
   }
 
-  // --- YENİ: ŞİFRE KONTROLLÜ TELEFON GİRİŞİ ---
+  // --- ŞİFRE KONTROLLÜ TELEFON GİRİŞİ: SMS Gönderme ---
   Future<void> _validatePasswordAndSendSMS() async {
     final phone = _phoneController.text.trim();
     final password = passwordController.text;
@@ -174,7 +174,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     setState(() => _isLoading = true);
 
     try {
-      // 1. Adım: Telefondan E-postayı bul
+      // 1. Adım: Telefondan E-postayı bul (Gerekli Email/Password Girişi için)
       final query = await FirebaseFirestore.instance
           .collection('kullanicilar')
           .where('phoneNumber', isEqualTo: phone)
@@ -188,15 +188,14 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       final email = query.docs.first['email'];
 
       // 2. Adım: E-posta ve Şifre ile Geçici Giriş Yap (Şifre Doğrulama)
+      // Bu adım, kullanıcının kimliğini doğrulayıp Auth state'i aktive eder.
       await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
       
-      // Şifre doğruysa buraya geliriz. Şimdi SMS gönderelim.
-      // NOT: Kullanıcı şu an oturum açmış durumda ama biz SMS onayı da istiyoruz.
-      
+      // 3. Adım: SMS gönder
       await FirebaseAuth.instance.verifyPhoneNumber(
         phoneNumber: phone,
         verificationCompleted: (PhoneAuthCredential credential) async {
-          // Otomatik doğrulama (bazı Android cihazlarda)
+          // Otomatik doğrulama
           await _finalizePhoneLogin(credential);
         },
         verificationFailed: (FirebaseAuthException e) {
@@ -231,6 +230,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     }
   }
 
+  // --- ŞİFRE KONTROLLÜ TELEFON GİRİŞİ: Kod Doğrulama ---
   Future<void> _verifySmsCode() async {
     final smsCode = _smsCodeController.text.trim();
     if (smsCode.length < 6 || _verificationId == null) {
@@ -257,23 +257,45 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     }
   }
 
+  // --- KRİTİK DÜZELTME: Girişin Tamamlanması ve Yetkilendirme Sağlamlaştırma ---
   Future<void> _finalizePhoneLogin(PhoneAuthCredential credential) async {
-    // Zaten şifre ile giriş yapmıştık (auth state aktif).
-    // SMS kodunu da doğruladık (credential geçerli).
-    // Sadece telefonun o hesaba bağlı olduğunu teyit ediyoruz.
+    setState(() => _isLoading = true);
+    
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        // İsteğe bağlı: Telefon numarasını tekrar bağla (güncelle)
-        // await user.updatePhoneNumber(credential); 
-        // Not: Zaten bağlıysa hata verebilir, yutabiliriz.
+        // Telefon numarasını mevcut e-posta hesabına bağlamayı dener.
+        // Eğer numara zaten bağlıysa, bir hata fırlatabilir, bu hatayı yakalamalıyız.
+        if (user.phoneNumber == null || user.phoneNumber != _phoneController.text.trim()) {
+           try {
+              await user.linkWithCredential(credential);
+           } on FirebaseAuthException catch(e) {
+              // Hata kodu 'credential-already-in-use' veya 'provider-already-linked' olabilir.
+              // Bunlar girişin başarılı olduğu anlamına gelir.
+              if (e.code != 'provider-already-linked' && e.code != 'credential-already-in-use') {
+                 rethrow; // Başka bir hata varsa tekrar fırlat
+              }
+           }
+        }
+        
+        // Final sign-in step: Mevcut kullanıcıyı yenile, böylece Auth state'i en güncel halini alır.
+        await user.reload(); 
+        
+        // Başarılı, Main.dart yönlendirecek
+        showSnackBar("Giriş Başarılı!");
+        
+      } else {
+         // Bu senaryo olmamalı, çünkü _validatePasswordAndSendSMS'te zaten giriş yaptık.
+         // Yine de oluşursa, kimlik bilgilerini kullanarak oturum açmayı deneriz.
+         await FirebaseAuth.instance.signInWithCredential(credential);
       }
       
-      // Başarılı, Main.dart yönlendirecek
-      showSnackBar("Giriş Başarılı!");
-      
+    } on FirebaseAuthException catch (e) {
+       showSnackBar("Giriş tamamlama hatası: ${e.message}", isError: true);
     } catch (e) {
       debugPrint("Phone link error: $e");
+    } finally {
+       if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -403,7 +425,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     }
   }
 
-  // --- FORM WIDGETLARI ---
+  // --- FORM WIDGETLARI (Değişmedi) ---
   Widget _buildRegisterForm(bool isDark) {
     return Column(
       key: const ValueKey('register'), 
@@ -492,6 +514,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     );
   }
 
+  // --- BUILD METODU (Değişmedi) ---
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;

@@ -12,7 +12,7 @@ import 'profil_duzenleme_ekrani.dart';
 import 'rozetler_sayfasi.dart';
 import '../forum/gonderi_detay_ekrani.dart';
 import '../auth/giris_ekrani.dart';
-import '../../main.dart';
+import '../../main.dart'; // kAdminUids için
 import '../admin/kullanici_listesi_ekrani.dart'; 
 import '../../widgets/animated_list_item.dart'; 
 
@@ -84,26 +84,46 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     final currentUserRef = FirebaseFirestore.instance.collection('kullanicilar').doc(_currentAuthId);
     final batch = FirebaseFirestore.instance.batch();
 
+    // 1. Kendi Following Listemizi Güncelle
     if (isFollowing) {
       batch.update(currentUserRef, {'following': FieldValue.arrayRemove([_targetUserId]), 'followingCount': FieldValue.increment(-1)});
-      batch.update(userToFollowRef, {'followers': FieldValue.arrayRemove([_currentAuthId]), 'followerCount': FieldValue.increment(-1)});
     } else {
       batch.update(currentUserRef, {'following': FieldValue.arrayUnion([_targetUserId]), 'followingCount': FieldValue.increment(1)});
-      batch.update(userToFollowRef, {'followers': FieldValue.arrayUnion([_currentAuthId]), 'followerCount': FieldValue.increment(1)});
-      
-       final senderDoc = await currentUserRef.get();
-       final senderName = senderDoc.data()?['takmaAd'] ?? 'Bir kullanıcı';
-       FirebaseFirestore.instance.collection('bildirimler').add({
-        'userId': _targetUserId,
-        'senderId': _currentAuthId,
-        'senderName': senderName,
-        'type': 'new_follower',
-        'message': '$senderName seni takip etmeye başladı.',
-        'isRead': false,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
     }
-    await batch.commit();
+    
+    // 2. Hedef Kullanıcının Followers Listesini Güncelle
+    // Bu işlem, Admin'in dokümanına yazma iznini test eder. Firestore kuralı izin verirse çalışır.
+    if (isFollowing) {
+      batch.update(userToFollowRef, {'followers': FieldValue.arrayRemove([_currentAuthId]), 'followerCount': FieldValue.increment(-1)});
+    } else {
+      batch.update(userToFollowRef, {'followers': FieldValue.arrayUnion([_currentAuthId]), 'followerCount': FieldValue.increment(1)});
+    }
+
+    try {
+      await batch.commit();
+      
+      // Bildirim Sadece Takip Edildiğinde Oluşturulur
+      if (!isFollowing) {
+        final senderDoc = await currentUserRef.get();
+        final senderName = senderDoc.data()?['takmaAd'] ?? 'Bir kullanıcı';
+        FirebaseFirestore.instance.collection('bildirimler').add({
+          'userId': _targetUserId,
+          'senderId': _currentAuthId,
+          'senderName': senderName,
+          'type': 'new_follower',
+          'message': '$senderName seni takip etmeye başladı.',
+          'isRead': false,
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+      }
+    } on FirebaseException catch (e) {
+      // Eğer Admin takibi başarısız olursa kullanıcıya hata göster
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("İşlem başarısız: Yetki sorunu (Admin takibi için Firestore kurallarını kontrol edin). Code: ${e.code}"), backgroundColor: AppColors.error)
+        );
+      }
+    }
   }
 
   void _navigateToChat(String receiverName, String? receiverAvatar) async {
@@ -138,7 +158,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
             headerSliverBuilder: (context, innerBoxIsScrolled) {
               return [
                 SliverAppBar(
-                  expandedHeight: 460, // Yükseklik artırıldı (taşmayı önlemek için)
+                  expandedHeight: 500, // Yükseklik artırıldı
                   floating: false,
                   pinned: true,
                   backgroundColor: AppColors.primary,
@@ -192,12 +212,12 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     final String displayAd = userData['ad'] ?? '';
     final String takmaAd = userData['takmaAd'] ?? '';
     final String? avatarUrl = userData['avatarUrl'];
-    // final String biyografi = userData['biyografi'] ?? 'Henüz biyografi eklenmedi.';
+    final String biyografi = userData['biyografi'] ?? 'Henüz biyografi eklenmedi.'; // Biyografi tekrar etkinleştirildi
     final int postCount = userData['postCount'] ?? 0;
     final List<dynamic> followers = userData['followers'] ?? [];
     final List<dynamic> following = userData['following'] ?? [];
     
-    // GÜVENLİ VERİ ÇEKME (Cast Hatasını Önler)
+    // GÜVENLİ VERİ ÇEKME
     final Map<String, dynamic> submissionData;
     if (userData['submissionData'] is Map) {
       submissionData = userData['submissionData'] as Map<String, dynamic>;
@@ -245,6 +265,8 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                 if (isAdmin) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.verified, color: Colors.white, size: 20)),
               ],
             ),
+            
+            // Okul/Bölüm Bilgisi
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Text(
@@ -255,6 +277,19 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+
+            // YENİ: Biyografi (Hakkımda) Kısmı
+            if (biyografi.isNotEmpty && biyografi != 'Henüz biyografi eklenmedi.')
+              Padding(
+                padding: const EdgeInsets.only(top: 10, left: 24, right: 24),
+                child: Text(
+                  biyografi,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white.withOpacity(0.8), fontStyle: FontStyle.italic, fontSize: 13),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             
             const SizedBox(height: 16),
             
@@ -378,7 +413,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     if (userId != null) {
       query = query.where('userId', isEqualTo: userId).orderBy('zaman', descending: true);
     } else if (savedPostIds != null && savedPostIds.isNotEmpty) {
-      // Firestore 'whereIn' en fazla 10 eleman destekler.
       if (savedPostIds.length > 10) { 
         query = query.where(FieldPath.documentId, whereIn: savedPostIds.sublist(0, 10)); 
       } else { 

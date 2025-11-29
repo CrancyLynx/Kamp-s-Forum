@@ -2,11 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-// Düzeltilmiş Importlar
 import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart';
-
-
 import '../forum/gonderi_detay_ekrani.dart';
 import '../map/kampus_haritasi_sayfasi.dart';
 import '../../widgets/animated_list_item.dart';
@@ -18,11 +15,11 @@ class AramaSayfasi extends StatefulWidget {
   State<AramaSayfasi> createState() => _AramaSayfasiState();
 }
 
-class _AramaSayfasiState extends State<AramaSayfasi> with SingleTickerProviderStateMixin {
+class _AramaSayfasiState extends State<AramaSayfasi> {
   final TextEditingController _searchController = TextEditingController();
-  late TabController _tabController;
   String _query = "";
   Timer? _debounce;
+  Future<List<Map<String, dynamic>>>? _searchResultsFuture;
 
   // HARİTA VERİLERİNİN AYNISI (Arama için yerel liste)
   final List<Map<String, dynamic>> _allLocations = [
@@ -39,7 +36,6 @@ class _AramaSayfasiState extends State<AramaSayfasi> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
     _searchController.addListener(_onSearchChanged);
   }
 
@@ -47,7 +43,6 @@ class _AramaSayfasiState extends State<AramaSayfasi> with SingleTickerProviderSt
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
-    _tabController.dispose();
     _debounce?.cancel();
     super.dispose();
   }
@@ -56,11 +51,97 @@ class _AramaSayfasiState extends State<AramaSayfasi> with SingleTickerProviderSt
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
       if (mounted) {
-        setState(() {
-          _query = _searchController.text.trim();
-        });
+        final newQuery = _searchController.text.trim();
+        if (_query != newQuery) {
+          setState(() {
+            _query = newQuery;
+            _searchResultsFuture = _fetchSearchResults(newQuery);
+          });
+        }
       }
     });
+  }
+
+  // --- EVRENSEL ARAMA MANTIĞI ---
+  Future<List<Map<String, dynamic>>> _fetchSearchResults(String query) async {
+    if (query.isEmpty) return [];
+
+    final queryLower = query.toLowerCase();
+    
+    // Firestore'da arama yapmak için toUpperCase'in bir sonrası
+    final String queryEnd = '${query}z'; 
+    
+    // 1. Kullanıcı Arama (takmaAd üzerinden)
+    final usersFuture = FirebaseFirestore.instance
+        .collection('kullanicilar')
+        .where('takmaAd', isGreaterThanOrEqualTo: query)
+        .where('takmaAd', isLessThan: queryEnd)
+        .limit(5)
+        .get();
+
+    // 2. Konu (Forum) Arama (baslik üzerinden)
+    final postsFuture = FirebaseFirestore.instance
+        .collection('gonderiler')
+        .where('baslik', isGreaterThanOrEqualTo: query)
+        .where('baslik', isLessThan: queryEnd)
+        .limit(5)
+        .get();
+        
+    // 3. Mekan Arama (Yerel liste filtresi)
+    final locations = _allLocations
+        .where((loc) => loc['title'].toString().toLowerCase().contains(queryLower))
+        .take(5)
+        .map((loc) => {
+          'type': 'mekan',
+          'title': loc['title'],
+          'subtitle': loc['subtitle'],
+          'loc_type': loc['type'] 
+        })
+        .toList();
+
+    // Tüm Firestore sorgularının bitmesini bekle
+    final results = await Future.wait([usersFuture, postsFuture]);
+    final usersSnapshot = results[0];
+    final postsSnapshot = results[1];
+    
+    List<Map<String, dynamic>> mergedList = [];
+
+    // Kullanıcıları Ekle
+    for (var doc in usersSnapshot.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      // Sadece prefix eşleşenleri veya tam eşleşenleri al
+      if ((data['takmaAd'] ?? '').toLowerCase().startsWith(queryLower)) { 
+        mergedList.add({
+          'type': 'kullanici',
+          'id': doc.id,
+          'title': data['takmaAd'],
+          'subtitle': data['ad'],
+          'avatarUrl': data['avatarUrl'],
+        });
+      }
+    }
+
+    // Konuları Ekle
+    for (var doc in postsSnapshot.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      // Sadece prefix eşleşenleri veya tam eşleşenleri al
+      if ((data['baslik'] ?? '').toLowerCase().startsWith(queryLower)) {
+        mergedList.add({
+          'type': 'konu',
+          'doc': doc, // Detay ekranı için DocumentSnapshot
+          'title': data['baslik'],
+          'subtitle': data['mesaj'],
+        });
+      }
+    }
+
+    // Mekanları Ekle
+    mergedList.addAll(locations);
+    
+    // Sonuçları başlığa göre alfabetik sıralayarak daha tutarlı bir görünüm elde edebiliriz.
+    mergedList.sort((a, b) => (a['title'] ?? '').toString().toLowerCase().compareTo((b['title'] ?? '').toString().toLowerCase()));
+    
+    return mergedList;
   }
 
   @override
@@ -82,7 +163,7 @@ class _AramaSayfasiState extends State<AramaSayfasi> with SingleTickerProviderSt
             autofocus: true,
             style: const TextStyle(color: Colors.white),
             decoration: const InputDecoration(
-              hintText: "Ara (Kullanıcı, Konu, Mekan)...",
+              hintText: "Tüm uygulamada ara...",
               hintStyle: TextStyle(color: Colors.white70),
               border: InputBorder.none,
               prefixIcon: Icon(Icons.search, color: Colors.white70),
@@ -91,162 +172,119 @@ class _AramaSayfasiState extends State<AramaSayfasi> with SingleTickerProviderSt
             cursorColor: Colors.white,
           ),
         ),
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
-          tabs: const [
-            Tab(text: "Kullanıcılar"),
-            Tab(text: "Konular"),
-            Tab(text: "Mekanlar"),
-          ],
-        ),
+        // TabBar kaldırıldı
       ),
       body: _query.isEmpty
           ? _buildEmptyState(isDark)
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildUsersTab(),
-                _buildPostsTab(),
-                _buildLocationsTab(),
-              ],
-            ),
+          : _buildUnifiedResults(), // Tekil sonuç listesi gösterilir
     );
   }
 
-  // --- 1. KULLANICI ARAMA ---
-  Widget _buildUsersTab() {
-    return StreamBuilder<QuerySnapshot>(
-      // Firestore'da "like" sorgusu olmadığı için basit bir aralık sorgusu kullanıyoruz
-      stream: FirebaseFirestore.instance
-          .collection('kullanicilar')
-          .where('takmaAd', isGreaterThanOrEqualTo: _query)
-          .where('takmaAd', isLessThan: '${_query}z')
-          .limit(20)
-          .snapshots(),
+  // --- TEKİL SONUÇ LİSTESİ WIDGET'I ---
+  Widget _buildUnifiedResults() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _searchResultsFuture,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
         
-        // Eğer takma ad ile bulunamazsa, 'ad' alanı ile de filtrelemeyi deneyebiliriz (client-side)
-        // Ancak şimdilik basit tutuyoruz.
-        
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return _buildNotFound("Kullanıcı bulunamadı.");
+        final results = snapshot.data ?? [];
+
+        if (results.isEmpty) {
+          return _buildNotFound("Aramanızla eşleşen sonuç bulunamadı.");
         }
 
         return ListView.builder(
           padding: const EdgeInsets.all(10),
-          itemCount: snapshot.data!.docs.length,
+          itemCount: results.length,
           itemBuilder: (context, index) {
-            final doc = snapshot.data!.docs[index];
-            final data = doc.data() as Map<String, dynamic>;
-            return AnimatedListItem(
-              index: index,
-              child: Card(
-                margin: const EdgeInsets.symmetric(vertical: 5),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundImage: (data['avatarUrl'] != null) ? CachedNetworkImageProvider(data['avatarUrl']) : null,
-                    child: (data['avatarUrl'] == null) ? Text(data['takmaAd'][0].toUpperCase()) : null,
-                  ),
-                  title: Text(data['takmaAd'] ?? 'Bilinmeyen', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text(data['ad'] ?? ''),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => KullaniciProfilDetayEkrani(userId: doc.id, userName: data['takmaAd'])));
-                  },
-                ),
-              ),
-            );
+            final item = results[index];
+            return _buildResultTile(context, item, index);
           },
         );
       },
     );
   }
 
-  // --- 2. KONU (FORUM) ARAMA ---
-  Widget _buildPostsTab() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('gonderiler')
-          .where('baslik', isGreaterThanOrEqualTo: _query)
-          .where('baslik', isLessThan: '${_query}z')
-          .limit(20)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return _buildNotFound("İlgili konu bulunamadı.");
-        }
+  Widget _buildResultTile(BuildContext context, Map<String, dynamic> item, int index) {
+    final String type = item['type'];
+    Widget leading;
+    String subtitle;
+    VoidCallback onTap;
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(10),
-          itemCount: snapshot.data!.docs.length,
-          itemBuilder: (context, index) {
-            final doc = snapshot.data!.docs[index];
-            final data = doc.data() as Map<String, dynamic>;
-            return AnimatedListItem(
-              index: index,
-              child: Card(
-                margin: const EdgeInsets.symmetric(vertical: 5),
-                child: ListTile(
-                  leading: const Icon(Icons.article, color: AppColors.primary),
-                  title: Text(data['baslik'] ?? 'Başlıksız', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text(data['mesaj'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
-                  onTap: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => GonderiDetayEkrani.fromDoc(doc)));
-                  },
-                ),
-              ),
-            );
-          },
+    // Sonuç tipini sağ üstte gösteren küçük bir etiket
+    String typeLabel = type == 'kullanici' ? 'KULLANICI' : (type == 'konu' ? 'KONU' : 'MEKAN');
+    Color typeColor = type == 'kullanici' ? AppColors.success : (type == 'konu' ? AppColors.primary : Colors.orange);
+
+
+    switch (type) {
+      case 'kullanici':
+        leading = CircleAvatar(
+          backgroundImage: (item['avatarUrl'] != null) ? CachedNetworkImageProvider(item['avatarUrl']) : null,
+          child: (item['avatarUrl'] == null && item['title'] != null && item['title'].isNotEmpty) 
+            ? Text(item['title'][0].toUpperCase()) 
+            : const Icon(Icons.person),
         );
-      },
-    );
-  }
-
-  // --- 3. MEKAN ARAMA (YEREL LİSTE) ---
-  Widget _buildLocationsTab() {
-    final filteredList = _allLocations.where((loc) {
-      final title = loc['title'].toString().toLowerCase();
-      final queryLower = _query.toLowerCase();
-      return title.contains(queryLower);
-    }).toList();
-
-    if (filteredList.isEmpty) return _buildNotFound("Mekan bulunamadı.");
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(10),
-      itemCount: filteredList.length,
-      itemBuilder: (context, index) {
-        final loc = filteredList[index];
+        subtitle = item['subtitle'] ?? '';
+        onTap = () {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => KullaniciProfilDetayEkrani(userId: item['id'], userName: item['title'])));
+        };
+        break;
+        
+      case 'konu':
+        leading = const Icon(Icons.article, color: AppColors.primary, size: 30);
+        // Post mesajının ilk 50 karakteri
+        subtitle = (item['subtitle'] as String? ?? '').length > 50 ? item['subtitle'].substring(0, 50) + '...' : item['subtitle']; 
+        onTap = () {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => GonderiDetayEkrani.fromDoc(item['doc'] as DocumentSnapshot)));
+        };
+        break;
+        
+      case 'mekan':
         IconData icon = Icons.place;
         Color color = Colors.red;
+        final locType = item['loc_type'];
+        if (locType == 'yemek') { icon = Icons.restaurant; color = Colors.orange; }
+        else if (locType == 'durak') { icon = Icons.directions_bus; color = Colors.blue; }
+        else if (locType == 'kutuphane') { icon = Icons.menu_book; color = Colors.purple; }
+        else if (locType == 'universite') { icon = Icons.school; color = Colors.red; }
+        
+        leading = CircleAvatar(backgroundColor: color.withOpacity(0.1), child: Icon(icon, color: color));
+        subtitle = item['subtitle'] ?? '';
+        onTap = () {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => KampusHaritasiSayfasi(initialFilter: locType)));
+        };
+        break;
+        
+      default:
+        leading = const Icon(Icons.help_outline);
+        subtitle = 'Bilinmeyen sonuç tipi';
+        onTap = () {};
+    }
 
-        if (loc['type'] == 'yemek') { icon = Icons.restaurant; color = Colors.orange; }
-        else if (loc['type'] == 'durak') { icon = Icons.directions_bus; color = Colors.blue; }
-        else if (loc['type'] == 'kutuphane') { icon = Icons.menu_book; color = Colors.purple; }
-        else if (loc['type'] == 'universite') { icon = Icons.school; color = Colors.red; }
 
-        return AnimatedListItem(
-          index: index,
-          child: Card(
-            margin: const EdgeInsets.symmetric(vertical: 5),
-            child: ListTile(
-              leading: CircleAvatar(backgroundColor: color.withOpacity(0.1), child: Icon(icon, color: color)),
-              title: Text(loc['title'], style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(loc['subtitle'] ?? ''),
-              trailing: const Icon(Icons.map, color: Colors.grey),
-              onTap: () {
-                // Haritayı aç ve o filtreyi uygula
-                Navigator.push(context, MaterialPageRoute(builder: (_) => KampusHaritasiSayfasi(initialFilter: loc['type'])));
-              },
-            ),
+    return AnimatedListItem(
+      index: index,
+      child: Card(
+        margin: const EdgeInsets.symmetric(vertical: 5),
+        child: ListTile(
+          leading: leading,
+          title: Text(item['title'] ?? 'Başlıksız', style: const TextStyle(fontWeight: FontWeight.bold)),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 4),
+              Text(
+                typeLabel, 
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: typeColor.withOpacity(0.7)),
+              )
+            ],
           ),
-        );
-      },
+          onTap: onTap,
+        ),
+      ),
     );
   }
 
@@ -257,7 +295,8 @@ class _AramaSayfasiState extends State<AramaSayfasi> with SingleTickerProviderSt
         children: [
           Icon(Icons.search_rounded, size: 80, color: isDark ? Colors.grey[800] : Colors.grey[300]),
           const SizedBox(height: 20),
-          Text("Aramak için yazmaya başlayın", style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+          Text("Tüm uygulamada arama yapın", style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+          Text("Kullanıcılar, konular ve mekanlar tek listede.", style: TextStyle(color: Colors.grey[500], fontSize: 14)),
         ],
       ),
     );

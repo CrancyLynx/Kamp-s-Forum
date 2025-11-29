@@ -64,10 +64,12 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
       final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
 
       if (pickedFile != null) {
-        setState(() {
-          _selectedImage = File(pickedFile.path);
-          // Not: Artık URL controller'ı yok, sadece dosya/url tutuyoruz.
-        });
+        if(mounted) { // mounted kontrolü eklendi
+          setState(() {
+            _selectedImage = File(pickedFile.path);
+            // Not: Artık URL controller'ı yok, sadece dosya/url tutuyoruz.
+          });
+        }
       }
     } catch (e) {
       if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Resim seçilemedi: $e"), backgroundColor: AppColors.error));
@@ -98,7 +100,7 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
     return _currentImageUrl;
   }
   
-
+  // HATA DÜZELTME: Seçim sonrası çökme için mounted kontrolü eklendi
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -122,9 +124,11 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
       },
     );
     if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
+      if(mounted) { // mounted kontrolü eklendi
+        setState(() {
+          _selectedDate = picked;
+        });
+      }
     }
   }
 

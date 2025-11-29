@@ -6,8 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart'; 
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:intl/intl.dart'; // YENİ EKLENDİ
-import 'package:intl/date_symbol_data_local.dart'; // HATA ÇÖZÜMÜ İÇİN EKLENDİ
+import 'package:intl/intl.dart'; 
+import 'package:intl/date_symbol_data_local.dart'; 
 
 // Servisler
 import 'services/push_notification_service.dart'; 
@@ -22,8 +22,28 @@ import '../screens/auth/dogrulama_ekrani.dart';
 import '../screens/home/ana_ekran.dart'; 
 import '../screens/auth/giris_ekrani.dart'; 
 import '../screens/auth/splash_screen.dart';
-import '../screens/auth/verification_wrapper.dart'; // GÜNCELLENDİ (Artık bu kullanılıyor)
+import '../screens/auth/verification_wrapper.dart'; 
 import 'utils/app_colors.dart';
+
+
+// --- BİLDİRİM HATA DÜZELTMESİ: TOP-LEVEL BACKGROUND HANDLER ---
+// Bu fonksiyon, FCM gereksinimi nedeniyle sınıf dışında (top-level) tanımlanmalıdır.
+@pragma('vm:entry-point')
+Future<void> firebaseBackgroundMessageHander(RemoteMessage message) async {
+  // Arka plan işlemleri için Firebase'in tekrar başlatılması gerekir.
+  // main() içinde çağrılsa bile arka plan izolatöründe başlatmak standarttır.
+  await Firebase.initializeApp(); 
+  print("Arka planda bir mesaj işleniyor: ${message.messageId}");
+  // Burada kritik arka plan işlemleri (örneğin loglama, veri güncelleme) yapılabilir.
+}
+// --- GLOBAL DEĞİŞKENLER ---
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+const List<String> kAdminUids = [
+  "oZ2RIhV1JdYVIr0xyqCwhX9fJYq1", 
+  "VD8MeJIhhRVtbT9iiUdMEaCe3MO2"
+];
+
 
 // --- TEMA YÖNETİCİSİ ---
 class ThemeProvider extends ChangeNotifier {
@@ -39,23 +59,15 @@ class ThemeProvider extends ChangeNotifier {
   }
 }
 
-// --- GLOBAL DEĞİŞKENLER ---
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-
-const List<String> kAdminUids = [
-  "oZ2RIhV1JdYVIr0xyqCwhX9fJYq1", 
-  "VD8MeJIhhRVtbT9iiUdMEaCe3MO2"
-];
-
-Future<void> _bgHandler(RemoteMessage message) => firebaseMessagingBackgroundHandler(message);
-
 // --- MAIN FONKSİYONU ---
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // HATA ÇÖZÜMÜ: Tarih formatlaması için Türkçe yerelleştirme verilerini yükle
   await initializeDateFormatting('tr_TR', null);
   await Firebase.initializeApp();
-  FirebaseMessaging.onBackgroundMessage(_bgHandler);
+  
+  // DÜZELTME: Top-level handler'ı doğrudan bağlıyoruz
+  FirebaseMessaging.onBackgroundMessage(firebaseBackgroundMessageHander); 
   
   Intl.defaultLocale = 'tr_TR'; 
   
@@ -89,7 +101,11 @@ class _BizimUygulamaState extends State<BizimUygulama> {
   @override
   void initState() {
     super.initState();
-    _notificationService.initialize();
+    // Bildirim servisinin initialize edilmesi
+    _notificationService.initialize(); 
+    
+    // Uygulama ön planda iken gelen mesajları dinleme (In-App Notification için)
+    // CRITICAL: Bu Stream'in PushNotificationService içinde doğru tanımlanıp açıldığını varsayıyoruz.
     _notificationService.onMessage.listen((message) {
       if (message.notification != null) {
         _showInAppNotification(

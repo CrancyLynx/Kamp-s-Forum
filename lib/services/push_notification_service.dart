@@ -1,77 +1,152 @@
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async'; 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart';
-import 'dart:async';
 
-// Arka plan işleyicisi (Bu fonksiyon en üstte olmalı, class içinde değil)
+// Uygulama tamamen kapatıldığında veya arka planda çalışırken gelen mesajları yönetir.
 @pragma('vm:entry-point')
-Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+Future<void> firebaseBackgroundMessageHander(RemoteMessage message) async {
   if (kDebugMode) {
-    print("Arka Plan Bildirimi Geldi: ${message.messageId}");
+    print("Arka plan mesajı alındı: ${message.messageId}");
   }
-  // Burada yerel bildirim göstermeye gerek yok, Firebase zaten sistem tepsisine atıyor.
+  // Bu fonksiyon, main.dart'ta FirebaseMessaging.onBackgroundMessage'e atanır.
 }
 
 class PushNotificationService {
-  final FirebaseMessaging _fcm = FirebaseMessaging.instance;
+  final _firebaseMessaging = FirebaseMessaging.instance;
+  final _localNotifications = FlutterLocalNotificationsPlugin();
   
-  // Stream Controller: Gelen mesajları UI'ya aktarmak için
-  // Broadcast stream kullanıyoruz ki birden fazla yer dinleyebilsin
+  // onMessage stream'ini oluşturur.
   final _messageStreamController = StreamController<RemoteMessage>.broadcast();
-  Stream<RemoteMessage> get onMessage => _messageStreamController.stream;
+  Stream<RemoteMessage> get onMessage => _messageStreamController.stream; 
 
+  // Bildirim servisini başlatır
   Future<void> initialize() async {
-    // 1. İzin İste (iOS ve Android 13+ için kritik)
-    NotificationSettings settings = await _fcm.requestPermission(
-      alert: true,
-      badge: true,
+    await _requestPermission();
+    await _saveDeviceToken();
+    _handleForegroundMessages();
+  }
+  
+  // --- FCM Token'ı alır ve Firestore'a kaydeder (EKSİKSİZ GÖVDE) ---
+  Future<void> _saveDeviceToken() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    // Kullanıcı henüz giriş yapmadıysa işlemi durdur.
+    if (currentUser == null) return; 
+
+    String? token = await _firebaseMessaging.getToken();
+
+    if (token != null) {
+      if (kDebugMode) {
+        print("FCM Token: $token");
+      }
+      // Cloud Function'ın beklediği DİZİ (fcmTokens) yapısına ekle
+      await FirebaseFirestore.instance.collection('kullanicilar').doc(currentUser.uid).set(
+        {'fcmTokens': FieldValue.arrayUnion([token])}, 
+        SetOptions(merge: true),
+      );
+    }
+    // Token yenileme işlemini dinler
+    _firebaseMessaging.onTokenRefresh.listen((newToken) {
+      if (kDebugMode) {
+        print("FCM Token Yenilendi: $newToken");
+      }
+      FirebaseFirestore.instance.collection('kullanicilar').doc(currentUser.uid).set(
+        {'fcmTokens': FieldValue.arrayUnion([newToken])}, 
+        SetOptions(merge: true),
+      );
+    });
+  }
+
+  // --- İzinleri İster (EKSİKSİZ GÖVDE) ---
+  Future<void> _requestPermission() async {
+    final settings = await _firebaseMessaging.requestPermission(
+      alert: true, 
+      announcement: false, 
+      badge: true, 
+      carPlay: false, 
+      criticalAlert: false, 
+      provisional: false, 
       sound: true,
-      provisional: false,
+    );
+    if (kDebugMode) {
+      print('Kullanıcıya izin verildi: ${settings.authorizationStatus}');
+    }
+  }
+
+  // --- Flutter Local Notifications için kurulum ---
+  void _setupLocalNotifications() {
+    const androidInitializationSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosInitializationSettings = DarwinInitializationSettings();
+    const initializationSettings = InitializationSettings(
+      android: androidInitializationSettings,
+      iOS: iosInitializationSettings,
     );
 
-    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      print('Bildirim izni verildi.');
-      await _saveTokenToDatabase();
-    } else {
-      print('Bildirim izni reddedildi.');
-    }
+    _localNotifications.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: (NotificationResponse response) async {
+        // Bildirime tıklandığında yapılacaklar
+      },
+    );
+  }
 
-    // 2. Ön Plan (Foreground) Dinleyicisi
-    // Uygulama açıkken bildirim gelince bu çalışır
+  // --- Ön plan mesajlarını yönetir ---
+  void _handleForegroundMessages() {
+    _setupLocalNotifications();
+
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print('Ön plan bildirimi alındı: ${message.notification?.title}');
-      // Stream'e ekle, main.dart bunu yakalayacak
-      _messageStreamController.add(message);
+      // Stream'e olayı ekle (main.dart'taki listener'ı besler)
+      _messageStreamController.add(message); 
+
+      final notification = message.notification;
+      final android = message.notification?.android;
+
+      if (notification != null && android != null) {
+        // Gelen bildirimi yerel bildirim olarak gösterir
+        _localNotifications.show(
+          notification.hashCode,
+          notification.title,
+          notification.body,
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              'high_importance_channel', 
+              'Yüksek Önemli Bildirimler', 
+              importance: Importance.max,
+              priority: Priority.high,
+              icon: android.smallIcon,
+            ),
+          ),
+          payload: message.data.toString(),
+        );
+      }
     });
 
-    // 3. Arka Plandan Açılış (Background/Terminated -> Open)
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      print('Bildirime tıklanarak açıldı: ${message.data}');
-      // Burada navigasyon işlemleri yapılabilir (örn: sohbete git)
-    });
-    
-    // Uygulama tamamen kapalıyken açıldıysa
-    _fcm.getInitialMessage().then((RemoteMessage? message) {
-      if (message != null) {
-        print('Uygulama kapalıyken bildirime tıklandı: ${message.data}');
+      if (kDebugMode) {
+        print('Uygulama açıldı: ${message.messageId}');
       }
     });
   }
 
-  Future<void> _saveTokenToDatabase() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+  // Kullanıcı çıkış yaptığında token'ı siler
+  Future<void> deleteDeviceToken() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
 
-    // Token al
-    String? token = await _fcm.getToken();
-    if (token == null) return;
-
-    final userRef = FirebaseFirestore.instance.collection('kullanicilar').doc(user.uid);
+    final currentToken = await _firebaseMessaging.getToken();
+    if (currentToken != null) {
+      await FirebaseFirestore.instance.collection('kullanicilar').doc(currentUser.uid).update(
+        {'fcmTokens': FieldValue.arrayRemove([currentToken])},
+      );
+    }
     
-    // Token dizisine ekle (ArrayUnion tekrarı önler)
-    await userRef.update({
-      'fcmTokens': FieldValue.arrayUnion([token])
-    }).catchError((e) => print("Token kaydetme hatası: $e"));
+    await _firebaseMessaging.deleteToken();
+  }
+  
+  // Stream Controller'ı kapatmayı unutmayın (gereklilik)
+  void dispose() {
+    _messageStreamController.close();
   }
 }

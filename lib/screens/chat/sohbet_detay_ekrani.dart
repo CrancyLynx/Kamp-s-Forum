@@ -7,7 +7,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart'; 
 import 'package:image_picker/image_picker.dart'; 
 import 'package:firebase_storage/firebase_storage.dart'; 
-// Düzeltilmiş Importlar
 import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart';
 import '../../widgets/typing_indicator.dart'; 
@@ -95,21 +94,27 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
   Future<void> _markMessagesAsRead() async {
     try {
       final docRef = FirebaseFirestore.instance.collection('sohbetler').doc(widget.chatId);
-      docRef.update({'unreadCount.$_currentUserId': 0});
-
-      final messagesQuery = docRef.collection('mesajlar')
-          .where('senderId', isEqualTo: widget.receiverId)
-          .where('isRead', isEqualTo: false);
-
-      final snapshot = await messagesQuery.get();
-      if (snapshot.docs.isNotEmpty) {
-        final batch = FirebaseFirestore.instance.batch();
-        for (var doc in snapshot.docs) {
-          batch.update(doc.reference, {'isRead': true});
+      final docSnapshot = await docRef.get();
+      
+      if (docSnapshot.exists) {
+        docRef.update({'unreadCount.$_currentUserId': 0});
+        
+        final messagesQuery = docRef.collection('mesajlar')
+            .where('senderId', isEqualTo: widget.receiverId)
+            .where('isRead', isEqualTo: false);
+  
+        final snapshot = await messagesQuery.get();
+        if (snapshot.docs.isNotEmpty) {
+          final batch = FirebaseFirestore.instance.batch();
+          for (var doc in snapshot.docs) {
+            batch.update(doc.reference, {'isRead': true});
+          }
+          await batch.commit();
         }
-        await batch.commit();
       }
-    } catch (_) {}
+    } catch (_) {
+      // Hata olsa bile çökmesini engeller
+    }
   }
 
   void _sendMessage({String? imageUrl, String messageType = 'text'}) async {
@@ -132,21 +137,44 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
     final chatDocRef = FirebaseFirestore.instance.collection('sohbetler').doc(widget.chatId);
 
     try {
-      await chatDocRef.collection('mesajlar').add(messageData);
+      // 1. Chat Oda Dokümanını oluştur veya güncelle
       await chatDocRef.set({
         'participants': FieldValue.arrayUnion([_currentUserId, widget.receiverId]),
         'participantsInfo': {
           _currentUserId: {'name': _myUserName ?? 'Ben', 'avatarUrl': _myAvatarUrl},
           widget.receiverId: {'name': widget.receiverName, 'avatarUrl': widget.receiverAvatarUrl},
         },
+        'typing': { _currentUserId: false } 
+      }, SetOptions(merge: true));
+
+      // 2. Mesajı alt koleksiyona ekle
+      await chatDocRef.collection('mesajlar').add(messageData);
+
+      // 3. Mesaj gönderildikten sonraki güncellemeleri yap
+      await chatDocRef.update({
         'lastMessage': messageType == 'text' ? messageText : '🖼️ Resim',
         'lastMessageTimestamp': FieldValue.serverTimestamp(),
         'unreadCount': {
           widget.receiverId: FieldValue.increment(1),
         },
-        'typing': { _currentUserId: false } 
-      }, SetOptions(merge: true));
-    } catch (_) {}
+      });
+      
+    } on FirebaseException catch (e) {
+      if (mounted) {
+        // İzin hatası (perm hatası) veya diğer Firestore hatalarını göster
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Mesaj gönderme hatası: İzin reddedildi veya bağlantı sorunu. Code: ${e.code}"), backgroundColor: AppColors.error)
+        );
+      }
+      debugPrint("Firestore Hata Kodu: ${e.code}, Mesaj: ${e.message}");
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Genel mesaj gönderme hatası: $e"), backgroundColor: AppColors.error)
+        );
+      }
+      debugPrint("Genel Mesaj Gönderme Hatası: $e");
+    }
   }
 
   Future<void> _pickAndUploadImage() async {
@@ -212,6 +240,7 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final chatBackgroundColor = isDark ? const Color(0xFF1E272C) : Colors.grey.shade100;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -288,68 +317,81 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
         ),
       ),
       
-      body: Column(
-        children: [
-          Expanded(
-            child: StreamBuilder<DocumentSnapshot>(
-              stream: _chatStream,
-              builder: (context, chatSnapshot) {
-                bool isReceiverTyping = false;
-                if (chatSnapshot.hasData && chatSnapshot.data!.exists) {
-                  final data = chatSnapshot.data!.data() as Map<String, dynamic>;
-                  isReceiverTyping = (data['typing'] as Map?)?[widget.receiverId] == true;
-                }
+      body: Container( 
+        color: chatBackgroundColor, 
+        child: Column(
+          children: [
+            Expanded(
+              child: StreamBuilder<DocumentSnapshot>(
+                stream: _chatStream,
+                builder: (context, chatSnapshot) {
+                  // YENİ DÜZELTME: Chat Stream Hatası Kontrolü (Beyaz Ekran Sorunu)
+                  if (chatSnapshot.hasError) {
+                    return Center(child: Text("Sohbet verisi yüklenirken hata oluştu: ${chatSnapshot.error}", textAlign: TextAlign.center, style: const TextStyle(color: AppColors.error)));
+                  }
 
-                return StreamBuilder<QuerySnapshot>(
-                  stream: _messagesStream,
-                  builder: (context, messageSnapshot) {
-                    if (messageSnapshot.connectionState == ConnectionState.waiting) {
-                      if (!messageSnapshot.hasData) return const Center(child: CircularProgressIndicator());
-                    }
-
-                    final docs = messageSnapshot.data?.docs ?? [];
-
-                    return ListView.builder(
-                      reverse: true, 
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      itemCount: docs.length + (isReceiverTyping ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        
-                        if (isReceiverTyping && index == 0) {
-                          return Align(
-                            alignment: Alignment.centerLeft,
-                            child: Padding(
-                              padding: const EdgeInsets.only(left: 38.0), 
-                              child: TypingIndicator(isDark: isDark),
-                            ),
+                  bool isReceiverTyping = false;
+                  if (chatSnapshot.hasData && chatSnapshot.data!.exists) {
+                    final data = chatSnapshot.data!.data() as Map<String, dynamic>;
+                    isReceiverTyping = (data['typing'] as Map?)?[widget.receiverId] == true;
+                  }
+  
+                  return StreamBuilder<QuerySnapshot>(
+                    stream: _messagesStream,
+                    builder: (context, messageSnapshot) {
+                      if (messageSnapshot.connectionState == ConnectionState.waiting) {
+                        // Veri gelene kadar yükleniyor göster
+                        if (!chatSnapshot.hasData) return const Center(child: CircularProgressIndicator()); 
+                      }
+                      
+                      if (messageSnapshot.hasError) {
+                         return Center(child: Text("Mesajlar yüklenirken hata oluştu: ${messageSnapshot.error}", textAlign: TextAlign.center, style: const TextStyle(color: AppColors.error)));
+                      }
+  
+                      final docs = messageSnapshot.data?.docs ?? [];
+  
+                      return ListView.builder(
+                        reverse: true, 
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        itemCount: docs.length + (isReceiverTyping ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          
+                          if (isReceiverTyping && index == 0) {
+                            return Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 38.0), 
+                                child: TypingIndicator(isDark: isDark),
+                              ),
+                            );
+                          }
+  
+                          final msgIndex = isReceiverTyping ? index - 1 : index;
+                          final messageDoc = docs[msgIndex];
+                          final messageData = messageDoc.data() as Map<String, dynamic>;
+  
+                          final bool isLastItem = msgIndex == docs.length - 1;
+                          final bool showDateHeader = isLastItem || !_isSameDay(
+                            messageData['timestamp'],
+                            (docs[msgIndex + 1].data() as Map)['timestamp']
                           );
-                        }
-
-                        final msgIndex = isReceiverTyping ? index - 1 : index;
-                        final messageDoc = docs[msgIndex];
-                        final messageData = messageDoc.data() as Map<String, dynamic>;
-
-                        final bool isLastItem = msgIndex == docs.length - 1;
-                        final bool showDateHeader = isLastItem || !_isSameDay(
-                          messageData['timestamp'],
-                          (docs[msgIndex + 1].data() as Map)['timestamp']
-                        );
-
-                        return Column(
-                          children: [
-                            if (showDateHeader) _buildDateHeader(messageData['timestamp']),
-                            _buildMessageBubble(messageData, isDark, messageDoc.metadata.hasPendingWrites),
-                          ],
-                        );
-                      },
-                    );
-                  },
-                );
-              },
+  
+                          return Column(
+                            children: [
+                              if (showDateHeader) _buildDateHeader(messageData['timestamp']),
+                              _buildMessageBubble(messageData, isDark, messageDoc.metadata.hasPendingWrites),
+                            ],
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
             ),
-          ),
-          _buildModernInputArea(isDark),
-        ],
+            _buildModernInputArea(isDark),
+          ],
+        ),
       ),
     );
   }
