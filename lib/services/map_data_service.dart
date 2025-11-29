@@ -1,6 +1,5 @@
 import 'dart:math';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:flutter/material.dart';
 
 class LocationModel {
   final String id;
@@ -34,70 +33,72 @@ class MapDataService {
   BitmapDescriptor? _iconDurak;
   BitmapDescriptor? _iconKutuphane;
 
-  // GENİŞLETİLMİŞ VE DÜZELTİLMİŞ LOKASYON VERİSİ
+  // DÜZELTME: Tüm verilere 'type': 'universite' eklendi.
   final List<Map<String, dynamic>> _fixedLocations = [
-    {'id': 'vak_u25', 'title': 'İstanbul Galata Üniversitesi', 'lat': 41.0286, 'lng': 28.9744}, // Şişhane Kampüsü
-    {'id': 'vak_u1', 'title': 'Koç Üniversitesi', 'lat': 41.2049, 'lng': 29.0718},
-    {'id': 'vak_u2', 'title': 'Sabancı Üniversitesi', 'lat': 40.8912, 'lng': 29.3787},
-    {'id': 'vak_u3', 'title': 'İstanbul Bilgi Üniversitesi (Santral)', 'lat': 41.0664, 'lng': 28.9458},
-    {'id': 'vak_u4', 'title': 'Bahçeşehir Üniversitesi (Beşiktaş)', 'lat': 41.0423, 'lng': 29.0095},
-    {'id': 'vak_u5', 'title': 'Yeditepe Üniversitesi', 'lat': 40.9739, 'lng': 29.1517},
-    {'id': 'vak_u6', 'title': 'İstanbul Aydın Üniversitesi', 'lat': 40.9930, 'lng': 28.7989},
-    {'id': 'vak_u7', 'title': 'İstanbul Medipol Üniversitesi (Kavacık)', 'lat': 41.0927, 'lng': 29.0935},
-    {'id': 'vak_u8', 'title': 'Özyeğin Üniversitesi', 'lat': 41.0347, 'lng': 29.2618},
-    {'id': 'vak_u9', 'title': 'Kadir Has Üniversitesi', 'lat': 41.0253, 'lng': 28.9592},
-    {'id': 'vak_u10', 'title': 'Acıbadem Üniversitesi', 'lat': 40.9764, 'lng': 29.1086},
-    {'id': 'vak_u11', 'title': 'Beykent Üniversitesi', 'lat': 41.1090, 'lng': 29.0060},
-    {'id': 'vak_u12', 'title': 'Haliç Üniversitesi', 'lat': 41.0663, 'lng': 28.9472},
-    {'id': 'vak_u13', 'title': 'Üsküdar Üniversitesi', 'lat': 41.0247, 'lng': 29.0353},
-    {'id': 'vak_u14', 'title': 'Piri Reis Üniversitesi', 'lat': 40.8936, 'lng': 29.3033},
-    {'id': 'vak_u15', 'title': 'İstanbul Ticaret Üniversitesi', 'lat': 41.0633, 'lng': 28.9511},
-    {'id': 'vak_u16', 'title': 'MEF Üniversitesi', 'lat': 41.1077, 'lng': 29.0232},
-    {'id': 'vak_u17', 'title': 'Bezmiâlem Vakıf Üniversitesi', 'lat': 41.0186, 'lng': 28.9392},
-    {'id': 'vak_u18', 'title': 'Fatih Sultan Mehmet Vakıf Üni.', 'lat': 41.0644, 'lng': 28.9497},
-    {'id': 'vak_u19', 'title': 'İstanbul Sabahattin Zaim Üni.', 'lat': 41.0294, 'lng': 28.7917},
-    {'id': 'vak_u20', 'title': 'Maltepe Üniversitesi', 'lat': 40.9572, 'lng': 29.2089},
-    {'id': 'vak_u21', 'title': 'Doğuş Üniversitesi (Dudullu)', 'lat': 41.0003, 'lng': 29.1561},
-    {'id': 'vak_u22', 'title': 'Işık Üniversitesi (Şile)', 'lat': 41.1714, 'lng': 29.5622},
-    {'id': 'vak_u23', 'title': 'Altınbaş Üniversitesi', 'lat': 41.0635, 'lng': 28.8239},
-    {'id': 'vak_u24', 'title': 'İstanbul Gelişim Üniversitesi', 'lat': 40.9936, 'lng': 28.7061},
+    // VAKIF ÜNİVERSİTELERİ
+    {'id': 'vak_u25', 'title': 'İstanbul Galata Üniversitesi', 'lat': 41.0286, 'lng': 28.9744, 'type': 'universite'},
+    {'id': 'vak_u1', 'title': 'Koç Üniversitesi', 'lat': 41.2049, 'lng': 29.0718, 'type': 'universite'},
+    {'id': 'vak_u2', 'title': 'Sabancı Üniversitesi', 'lat': 40.8912, 'lng': 29.3787, 'type': 'universite'},
+    {'id': 'vak_u3', 'title': 'İstanbul Bilgi Üniversitesi (Santral)', 'lat': 41.0664, 'lng': 28.9458, 'type': 'universite'},
+    {'id': 'vak_u4', 'title': 'Bahçeşehir Üniversitesi (Beşiktaş)', 'lat': 41.0423, 'lng': 29.0095, 'type': 'universite'},
+    {'id': 'vak_u5', 'title': 'Yeditepe Üniversitesi', 'lat': 40.9739, 'lng': 29.1517, 'type': 'universite'},
+    {'id': 'vak_u6', 'title': 'İstanbul Aydın Üniversitesi', 'lat': 40.9930, 'lng': 28.7989, 'type': 'universite'},
+    {'id': 'vak_u7', 'title': 'İstanbul Medipol Üniversitesi (Kavacık)', 'lat': 41.0927, 'lng': 29.0935, 'type': 'universite'},
+    {'id': 'vak_u8', 'title': 'Özyeğin Üniversitesi', 'lat': 41.0347, 'lng': 29.2618, 'type': 'universite'},
+    {'id': 'vak_u9', 'title': 'Kadir Has Üniversitesi', 'lat': 41.0253, 'lng': 28.9592, 'type': 'universite'},
+    {'id': 'vak_u10', 'title': 'Acıbadem Üniversitesi', 'lat': 40.9764, 'lng': 29.1086, 'type': 'universite'},
+    {'id': 'vak_u11', 'title': 'Beykent Üniversitesi', 'lat': 41.1090, 'lng': 29.0060, 'type': 'universite'},
+    {'id': 'vak_u12', 'title': 'Haliç Üniversitesi', 'lat': 41.0663, 'lng': 28.9472, 'type': 'universite'},
+    {'id': 'vak_u13', 'title': 'Üsküdar Üniversitesi', 'lat': 41.0247, 'lng': 29.0353, 'type': 'universite'},
+    {'id': 'vak_u14', 'title': 'Piri Reis Üniversitesi', 'lat': 40.8936, 'lng': 29.3033, 'type': 'universite'},
+    {'id': 'vak_u15', 'title': 'İstanbul Ticaret Üniversitesi', 'lat': 41.0633, 'lng': 28.9511, 'type': 'universite'},
+    {'id': 'vak_u16', 'title': 'MEF Üniversitesi', 'lat': 41.1077, 'lng': 29.0232, 'type': 'universite'},
+    {'id': 'vak_u17', 'title': 'Bezmiâlem Vakıf Üniversitesi', 'lat': 41.0186, 'lng': 28.9392, 'type': 'universite'},
+    {'id': 'vak_u18', 'title': 'Fatih Sultan Mehmet Vakıf Üni.', 'lat': 41.0644, 'lng': 28.9497, 'type': 'universite'},
+    {'id': 'vak_u19', 'title': 'İstanbul Sabahattin Zaim Üni.', 'lat': 41.0294, 'lng': 28.7917, 'type': 'universite'},
+    {'id': 'vak_u20', 'title': 'Maltepe Üniversitesi', 'lat': 40.9572, 'lng': 29.2089, 'type': 'universite'},
+    {'id': 'vak_u21', 'title': 'Doğuş Üniversitesi (Dudullu)', 'lat': 41.0003, 'lng': 29.1561, 'type': 'universite'},
+    {'id': 'vak_u22', 'title': 'Işık Üniversitesi (Şile)', 'lat': 41.1714, 'lng': 29.5622, 'type': 'universite'},
+    {'id': 'vak_u23', 'title': 'Altınbaş Üniversitesi', 'lat': 41.0635, 'lng': 28.8239, 'type': 'universite'},
+    {'id': 'vak_u24', 'title': 'İstanbul Gelişim Üniversitesi', 'lat': 40.9936, 'lng': 28.7061, 'type': 'universite'},
 
     // DEVLET ÜNİVERSİTELERİ
-    {'id': 'ist_u1', 'title': 'İstanbul Üniversitesi (Beyazıt)', 'lat': 41.0130, 'lng': 28.9636},
-    {'id': 'ist_u2', 'title': 'İstanbul Teknik Üniversitesi (Ayazağa)', 'lat': 41.1065, 'lng': 29.0229},
-    {'id': 'ist_u3', 'title': 'Boğaziçi Üniversitesi (Güney)', 'lat': 41.0833, 'lng': 29.0503},
-    {'id': 'ist_u4', 'title': 'Yıldız Teknik Üniversitesi (Davutpaşa)', 'lat': 41.0522, 'lng': 28.8927},
-    {'id': 'ist_u5', 'title': 'Marmara Üniversitesi (Göztepe)', 'lat': 40.9877, 'lng': 29.0528},
-    {'id': 'ist_u6', 'title': 'Mimar Sinan Güzel Sanatlar Üni.', 'lat': 41.0312, 'lng': 28.9902},
-    {'id': 'ist_u7', 'title': 'Türk-Alman Üniversitesi', 'lat': 41.1394, 'lng': 29.0833},
-    {'id': 'ist_u8', 'title': 'İstanbul Medeniyet Üniversitesi', 'lat': 40.9990, 'lng': 29.0622},
-    {'id': 'ist_u9', 'title': 'Galatasaray Üniversitesi', 'lat': 41.0475, 'lng': 29.0222},
-    {'id': 'ist_u10', 'title': 'Sağlık Bilimleri Üniversitesi', 'lat': 41.0053, 'lng': 29.0225},
-    {'id': 'ist_u11', 'title': 'İstanbul Cerrahpaşa Üniversitesi', 'lat': 40.9922, 'lng': 28.7303},
+    {'id': 'ist_u1', 'title': 'İstanbul Üniversitesi (Beyazıt)', 'lat': 41.0130, 'lng': 28.9636, 'type': 'universite'},
+    {'id': 'ist_u2', 'title': 'İstanbul Teknik Üniversitesi (Ayazağa)', 'lat': 41.1065, 'lng': 29.0229, 'type': 'universite'},
+    {'id': 'ist_u3', 'title': 'Boğaziçi Üniversitesi (Güney)', 'lat': 41.0833, 'lng': 29.0503, 'type': 'universite'},
+    {'id': 'ist_u4', 'title': 'Yıldız Teknik Üniversitesi (Davutpaşa)', 'lat': 41.0522, 'lng': 28.8927, 'type': 'universite'},
+    {'id': 'ist_u5', 'title': 'Marmara Üniversitesi (Göztepe)', 'lat': 40.9877, 'lng': 29.0528, 'type': 'universite'},
+    {'id': 'ist_u6', 'title': 'Mimar Sinan Güzel Sanatlar Üni.', 'lat': 41.0312, 'lng': 28.9902, 'type': 'universite'},
+    {'id': 'ist_u7', 'title': 'Türk-Alman Üniversitesi', 'lat': 41.1394, 'lng': 29.0833, 'type': 'universite'},
+    {'id': 'ist_u8', 'title': 'İstanbul Medeniyet Üniversitesi', 'lat': 40.9990, 'lng': 29.0622, 'type': 'universite'},
+    {'id': 'ist_u9', 'title': 'Galatasaray Üniversitesi', 'lat': 41.0475, 'lng': 29.0222, 'type': 'universite'},
+    {'id': 'ist_u10', 'title': 'Sağlık Bilimleri Üniversitesi', 'lat': 41.0053, 'lng': 29.0225, 'type': 'universite'},
+    {'id': 'ist_u11', 'title': 'İstanbul Cerrahpaşa Üniversitesi', 'lat': 40.9922, 'lng': 28.7303, 'type': 'universite'},
+    
     // ANKARA
-    {'id': 'ank1', 'title': 'ODTÜ (METU)', 'lat': 39.8914, 'lng': 32.7760},
-    {'id': 'ank2', 'title': 'Bilkent Üniversitesi', 'lat': 39.8687, 'lng': 32.7483},
-    {'id': 'ank3', 'title': 'Hacettepe Üniversitesi (Beytepe)', 'lat': 39.8656, 'lng': 32.7339},
-    {'id': 'ank4', 'title': 'Ankara Üniversitesi', 'lat': 39.9366, 'lng': 32.8303},
-    {'id': 'ank5', 'title': 'Gazi Üniversitesi', 'lat': 39.9372, 'lng': 32.8229},
+    {'id': 'ank1', 'title': 'ODTÜ (METU)', 'lat': 39.8914, 'lng': 32.7760, 'type': 'universite'},
+    {'id': 'ank2', 'title': 'Bilkent Üniversitesi', 'lat': 39.8687, 'lng': 32.7483, 'type': 'universite'},
+    {'id': 'ank3', 'title': 'Hacettepe Üniversitesi (Beytepe)', 'lat': 39.8656, 'lng': 32.7339, 'type': 'universite'},
+    {'id': 'ank4', 'title': 'Ankara Üniversitesi', 'lat': 39.9366, 'lng': 32.8303, 'type': 'universite'},
+    {'id': 'ank5', 'title': 'Gazi Üniversitesi', 'lat': 39.9372, 'lng': 32.8229, 'type': 'universite'},
 
     // İZMİR
-    {'id': 'izm1', 'title': 'Ege Üniversitesi', 'lat': 38.4595, 'lng': 27.2275},
-    {'id': 'izm2', 'title': 'Dokuz Eylül Üniversitesi', 'lat': 38.3707, 'lng': 27.2023},
-    {'id': 'izm3', 'title': 'İzmir Yüksek Teknoloji Enstitüsü', 'lat': 38.3236, 'lng': 26.6366},
+    {'id': 'izm1', 'title': 'Ege Üniversitesi', 'lat': 38.4595, 'lng': 27.2275, 'type': 'universite'},
+    {'id': 'izm2', 'title': 'Dokuz Eylül Üniversitesi', 'lat': 38.3707, 'lng': 27.2023, 'type': 'universite'},
+    {'id': 'izm3', 'title': 'İzmir Yüksek Teknoloji Enstitüsü', 'lat': 38.3236, 'lng': 26.6366, 'type': 'universite'},
 
     // DİĞER ŞEHİRLER
-    {'id': 'ant1', 'title': 'Akdeniz Üniversitesi (Antalya)', 'lat': 36.8970, 'lng': 30.6483},
-    {'id': 'esk1', 'title': 'Anadolu Üniversitesi (Eskişehir)', 'lat': 39.7915, 'lng': 30.5009},
-    {'id': 'bur1', 'title': 'Uludağ Üniversitesi (Bursa)', 'lat': 40.2234, 'lng': 28.8727},
-    {'id': 'kon1', 'title': 'Selçuk Üniversitesi (Konya)', 'lat': 38.0254, 'lng': 32.5108},
-    {'id': 'tra1', 'title': 'Karadeniz Teknik Üniversitesi (Trabzon)', 'lat': 40.9950, 'lng': 39.7717},
-    {'id': 'erz1', 'title': 'Atatürk Üniversitesi (Erzurum)', 'lat': 39.9022, 'lng': 41.2425},
-    {'id': 'gaz1', 'title': 'Gaziantep Üniversitesi', 'lat': 37.0346, 'lng': 37.3367},
-    {'id': 'kay1', 'title': 'Erciyes Üniversitesi (Kayseri)', 'lat': 38.7077, 'lng': 35.5262},
-    {'id': 'sak1', 'title': 'Sakarya Üniversitesi', 'lat': 40.7431, 'lng': 30.3323},
-    {'id': 'koc1', 'title': 'Kocaeli Üniversitesi', 'lat': 40.8225, 'lng': 29.9213},
-    {'id': 'can1', 'title': 'Çanakkale Onsekiz Mart Üniversitesi', 'lat': 40.1177, 'lng': 26.4109},
+    {'id': 'ant1', 'title': 'Akdeniz Üniversitesi (Antalya)', 'lat': 36.8970, 'lng': 30.6483, 'type': 'universite'},
+    {'id': 'esk1', 'title': 'Anadolu Üniversitesi (Eskişehir)', 'lat': 39.7915, 'lng': 30.5009, 'type': 'universite'},
+    {'id': 'bur1', 'title': 'Uludağ Üniversitesi (Bursa)', 'lat': 40.2234, 'lng': 28.8727, 'type': 'universite'},
+    {'id': 'kon1', 'title': 'Selçuk Üniversitesi (Konya)', 'lat': 38.0254, 'lng': 32.5108, 'type': 'universite'},
+    {'id': 'tra1', 'title': 'Karadeniz Teknik Üniversitesi (Trabzon)', 'lat': 40.9950, 'lng': 39.7717, 'type': 'universite'},
+    {'id': 'erz1', 'title': 'Atatürk Üniversitesi (Erzurum)', 'lat': 39.9022, 'lng': 41.2425, 'type': 'universite'},
+    {'id': 'gaz1', 'title': 'Gaziantep Üniversitesi', 'lat': 37.0346, 'lng': 37.3367, 'type': 'universite'},
+    {'id': 'kay1', 'title': 'Erciyes Üniversitesi (Kayseri)', 'lat': 38.7077, 'lng': 35.5262, 'type': 'universite'},
+    {'id': 'sak1', 'title': 'Sakarya Üniversitesi', 'lat': 40.7431, 'lng': 30.3323, 'type': 'universite'},
+    {'id': 'koc1', 'title': 'Kocaeli Üniversitesi', 'lat': 40.8225, 'lng': 29.9213, 'type': 'universite'},
+    {'id': 'can1', 'title': 'Çanakkale Onsekiz Mart Üniversitesi', 'lat': 40.1177, 'lng': 26.4109, 'type': 'universite'},
   ];
   
   void setIcons({
@@ -115,35 +116,37 @@ class MapDataService {
   List<LocationModel> generateLocations({required LatLng center, required String currentFilter}) {
     List<LocationModel> locations = [];
     
-    // Geçerli center'a yakınlık hesaplama mantığı eklenebilir.
-    // Şimdilik sadece filtreye göre tüm statik veriyi yüklüyoruz.
-    
     for (var data in _fixedLocations) {
-      // Filtreleme mantığı: Filtre 'all' değilse veya filtrelenmiş tipe eşitse göster.
-      if (currentFilter == 'all' || data['type'] == currentFilter) {
+      // Veri güvenliği kontrolü: type veya lat/lng null ise bu veriyi atla
+      if (data['type'] == null || data['lat'] == null || data['lng'] == null) continue;
+
+      String type = data['type'];
+
+      // Filtreleme mantığı
+      if (currentFilter == 'all' || type == currentFilter) {
         
         BitmapDescriptor? icon;
-        if (data['type'] == 'universite') icon = _iconUni;
-        else if (data['type'] == 'yemek') icon = _iconYemek;
-        else if (data['type'] == 'durak') icon = _iconDurak;
-        else if (data['type'] == 'kutuphane') icon = _iconKutuphane;
+        if (type == 'universite') icon = _iconUni;
+        else if (type == 'yemek') icon = _iconYemek;
+        else if (type == 'durak') icon = _iconDurak;
+        else if (type == 'kutuphane') icon = _iconKutuphane;
+        
+        // İkon yoksa varsayılan marker kullanılır
+        icon ??= BitmapDescriptor.defaultMarker;
 
         locations.add(LocationModel(
           id: data['id'], 
           title: data['title'], 
-          snippet: data['snippet'] ?? 'Detay yok.', 
-          type: data['type'], 
+          snippet: data['snippet'] ?? 'Detaylı bilgi bulunmuyor.', 
+          type: type, 
           position: LatLng(data['lat'], data['lng']), 
           icon: icon,
-          openingHours: data['hours'],
-          liveStatus: data['status'] ?? (_random.nextBool() ? 'Normal' : 'Açık'),
+          openingHours: data['hours'] ?? 'Saatler belirtilmedi',
+          liveStatus: data['status'] ?? (_random.nextBool() ? 'Normal' : 'Yoğun'),
           imageUrl: data['image'],
         ));
       }
     }
-
-    // Haritanın boş gelmesini engellemek için filtre dışındaki üniversiteleri de dahil edelim (opsiyonel)
-    // Bu, harita genelinde gezindiğinde marker görme olasılığını artırır.
     
     return locations;
   }
