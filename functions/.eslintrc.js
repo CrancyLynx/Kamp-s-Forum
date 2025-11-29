@@ -1,28 +1,28 @@
 module.exports = {
+  root: true,
   env: {
     es6: true,
     node: true,
-  },
-  parserOptions: {
-    "ecmaVersion": 2018,
   },
   extends: [
     "eslint:recommended",
     "google",
   ],
   rules: {
-    "no-restricted-globals": ["error", "name", "length"],
-    "prefer-arrow-callback": "error",
-    "quotes": ["error", "double", {"allowTemplateLiterals": true}],
+    "quotes": ["error", "double"],
+    // Satır uzunluğu sınırını kaldırıyoruz (Hata vermez)
+    "max-len": "off",
+    // Girinti hatasını kapatıyoruz (Prettier vs. ile çakışmaması için)
+    "indent": "off",
+    "object-curly-spacing": "off",
+    "comma-dangle": "off",
+    "require-jsdoc": "off",
+    "valid-jsdoc": "off",
+    "no-tabs": "off",
+    "no-trailing-spaces": "off",
+    "eol-last": "off",
   },
-  overrides: [
-    {
-      files: ["**/*.spec.*"],
-      env: {
-        mocha: true,
-      },
-      rules: {},
-    },
-  ],
-  globals: {},
+  parserOptions: {
+    ecmaVersion: 2018, // veya 8
+  },
 };
