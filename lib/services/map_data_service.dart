@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'dart:math';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter/material.dart'; 
 
 class LocationModel {
   final String id;
@@ -9,8 +12,9 @@ class LocationModel {
   final LatLng position;
   final BitmapDescriptor? icon;
   final String? openingHours; 
-  final String? liveStatus;   
-  final String? imageUrl; 
+  final String? liveStatus; // Sakin, Normal, Kalabalık
+  final List<String> photoUrls; // Çoklu fotoğraf desteği
+  final Map<String, dynamic>? votes; // Oylama sayıları
 
   LocationModel({
     required this.id,
@@ -21,21 +25,172 @@ class LocationModel {
     this.icon,
     this.openingHours,
     this.liveStatus,
-    this.imageUrl,
+    required this.photoUrls,
+    this.votes,
   });
+
+  // Firestore dökümanından model oluşturma
+  factory LocationModel.fromFirestore(DocumentSnapshot doc, BitmapDescriptor? icon) {
+    final data = doc.data() as Map<String, dynamic>;
+    
+    // Fotoğrafları listeye çevir
+    List<String> photos = [];
+    if (data['photos'] != null) {
+      photos = List<String>.from(data['photos']);
+    } else if (data['image'] != null) {
+      photos.add(data['image']);
+    } else {
+      // Varsayılan placeholder
+      photos.add("https://via.placeholder.com/800x600?text=Goruntu+Yok");
+    }
+
+    return LocationModel(
+      id: doc.id,
+      title: data['title'] ?? 'Başlıksız Mekan',
+      snippet: data['snippet'] ?? '',
+      type: data['type'] ?? 'diger',
+      position: LatLng(
+        (data['lat'] as num?)?.toDouble() ?? 0.0,
+        (data['lng'] as num?)?.toDouble() ?? 0.0,
+      ),
+      icon: icon,
+      openingHours: data['hours'],
+      liveStatus: data['status'],
+      photoUrls: photos,
+      votes: data['votes'],
+    );
+  }
 }
 
 class MapDataService {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final Random _random = Random();
   
   BitmapDescriptor? _iconUni;
   BitmapDescriptor? _iconYemek;
   BitmapDescriptor? _iconDurak;
   BitmapDescriptor? _iconKutuphane;
+  BitmapDescriptor? _iconDefault;
 
-  // DÜZELTME: Tüm verilere 'type': 'universite' eklendi.
+  void setIcons({
+    required BitmapDescriptor iconUni,
+    required BitmapDescriptor iconYemek,
+    required BitmapDescriptor iconDurak,
+    required BitmapDescriptor iconKutuphane,
+    BitmapDescriptor? iconDefault,
+  }) {
+    _iconUni = iconUni;
+    _iconYemek = iconYemek;
+    _iconDurak = iconDurak;
+    _iconKutuphane = iconKutuphane;
+    _iconDefault = iconDefault ?? BitmapDescriptor.defaultMarker;
+  }
+
+  BitmapDescriptor? getIconForType(String type) {
+    switch (type) {
+      case 'universite': return _iconUni;
+      case 'yemek': return _iconYemek;
+      case 'durak': return _iconDurak;
+      case 'kutuphane': return _iconKutuphane;
+      default: return _iconDefault;
+    }
+  }
+
+  // CANLI VERİ AKIŞI (STREAM)
+  Stream<List<LocationModel>> getLocationsStream(String filter) {
+    Query query = _firestore.collection('locations');
+
+    if (filter != 'all') {
+      query = query.where('type', isEqualTo: filter);
+    }
+
+    return query.snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        final type = data['type'] ?? 'diger';
+        return LocationModel.fromFirestore(doc, getIconForType(type));
+      }).toList();
+    });
+  }
+
+  // OYLAMA İŞLEMİ
+  Future<void> voteForStatus(String locationId, String status) async {
+    await _firestore.collection('locations').doc(locationId).update({
+      'status': status,
+      'lastUpdate': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // FOTOĞRAF EKLEME
+  Future<void> addPhotoToLocation(String locationId, String photoUrl) async {
+     await _firestore.collection('locations').doc(locationId).update({
+      'photos': FieldValue.arrayUnion([photoUrl]),
+    });
+  }
+
+  // VERİTABANI DOLDURMA (SEEDING)
+  Future<void> seedDatabaseIfEmpty() async {
+    final snapshot = await _firestore.collection('locations').limit(1).get();
+    if (snapshot.docs.isEmpty) {
+      final batch = _firestore.batch();
+      
+      for (var loc in _fixedLocations) {
+        final docRef = _firestore.collection('locations').doc(loc['id'].toString());
+        
+        // Rastgele fotoğraflar (Demo için)
+        List<String> mockPhotos = [
+          "https://picsum.photos/seed/${loc['id']}/800/600",
+          "https://picsum.photos/seed/${loc['id']}detail/800/600",
+          "https://picsum.photos/seed/${loc['id']}extra/800/600",
+        ];
+
+        batch.set(docRef, {
+          'title': loc['title'],
+          'lat': loc['lat'],
+          'lng': loc['lng'],
+          'type': loc['type'],
+          'snippet': loc['snippet'] ?? 'Kampüs mekanı.',
+          'hours': loc['hours'] ?? '08:00 - 17:00',
+          'status': loc['status'] ?? (_random.nextBool() ? 'Sakin' : 'Yoğun'),
+          'photos': mockPhotos,
+        });
+      }
+      
+      await batch.commit();
+    }
+  }
+
+  // YEDEK (FALLBACK) LİSTE - İNTERNET YOKKEN ÇALIŞIR
+  List<LocationModel> getFallbackLocations(String currentFilter) {
+    List<LocationModel> locations = [];
+    for (var data in _fixedLocations) {
+      if (data['type'] == null || data['lat'] == null || data['lng'] == null) continue;
+      String type = data['type'];
+
+      if (currentFilter == 'all' || type == currentFilter) {
+        List<String> mockPhotos = [
+          "https://picsum.photos/seed/${data['id']}/800/600",
+          "https://picsum.photos/seed/${data['id']}extra/800/600",
+        ];
+
+        locations.add(LocationModel(
+          id: data['id'], 
+          title: data['title'], 
+          snippet: data['snippet'] ?? 'Detaylı bilgi bulunmuyor.', 
+          type: type, 
+          position: LatLng(data['lat'], data['lng']), 
+          icon: getIconForType(type) ?? BitmapDescriptor.defaultMarker,
+          openingHours: data['hours'] ?? 'Saatler belirtilmedi',
+          liveStatus: data['status'] ?? 'Normal',
+          photoUrls: mockPhotos,
+        ));
+      }
+    }
+    return locations;
+  }
+
   final List<Map<String, dynamic>> _fixedLocations = [
-    // VAKIF ÜNİVERSİTELERİ
+  // VAKIF ÜNİVERSİTELERİ
     {'id': 'vak_u25', 'title': 'İstanbul Galata Üniversitesi', 'lat': 41.0286, 'lng': 28.9744, 'type': 'universite'},
     {'id': 'vak_u1', 'title': 'Koç Üniversitesi', 'lat': 41.2049, 'lng': 29.0718, 'type': 'universite'},
     {'id': 'vak_u2', 'title': 'Sabancı Üniversitesi', 'lat': 40.8912, 'lng': 29.3787, 'type': 'universite'},
@@ -61,7 +216,6 @@ class MapDataService {
     {'id': 'vak_u22', 'title': 'Işık Üniversitesi (Şile)', 'lat': 41.1714, 'lng': 29.5622, 'type': 'universite'},
     {'id': 'vak_u23', 'title': 'Altınbaş Üniversitesi', 'lat': 41.0635, 'lng': 28.8239, 'type': 'universite'},
     {'id': 'vak_u24', 'title': 'İstanbul Gelişim Üniversitesi', 'lat': 40.9936, 'lng': 28.7061, 'type': 'universite'},
-
     // DEVLET ÜNİVERSİTELERİ
     {'id': 'ist_u1', 'title': 'İstanbul Üniversitesi (Beyazıt)', 'lat': 41.0130, 'lng': 28.9636, 'type': 'universite'},
     {'id': 'ist_u2', 'title': 'İstanbul Teknik Üniversitesi (Ayazağa)', 'lat': 41.1065, 'lng': 29.0229, 'type': 'universite'},
@@ -74,19 +228,16 @@ class MapDataService {
     {'id': 'ist_u9', 'title': 'Galatasaray Üniversitesi', 'lat': 41.0475, 'lng': 29.0222, 'type': 'universite'},
     {'id': 'ist_u10', 'title': 'Sağlık Bilimleri Üniversitesi', 'lat': 41.0053, 'lng': 29.0225, 'type': 'universite'},
     {'id': 'ist_u11', 'title': 'İstanbul Cerrahpaşa Üniversitesi', 'lat': 40.9922, 'lng': 28.7303, 'type': 'universite'},
-    
     // ANKARA
     {'id': 'ank1', 'title': 'ODTÜ (METU)', 'lat': 39.8914, 'lng': 32.7760, 'type': 'universite'},
     {'id': 'ank2', 'title': 'Bilkent Üniversitesi', 'lat': 39.8687, 'lng': 32.7483, 'type': 'universite'},
     {'id': 'ank3', 'title': 'Hacettepe Üniversitesi (Beytepe)', 'lat': 39.8656, 'lng': 32.7339, 'type': 'universite'},
     {'id': 'ank4', 'title': 'Ankara Üniversitesi', 'lat': 39.9366, 'lng': 32.8303, 'type': 'universite'},
     {'id': 'ank5', 'title': 'Gazi Üniversitesi', 'lat': 39.9372, 'lng': 32.8229, 'type': 'universite'},
-
     // İZMİR
     {'id': 'izm1', 'title': 'Ege Üniversitesi', 'lat': 38.4595, 'lng': 27.2275, 'type': 'universite'},
     {'id': 'izm2', 'title': 'Dokuz Eylül Üniversitesi', 'lat': 38.3707, 'lng': 27.2023, 'type': 'universite'},
     {'id': 'izm3', 'title': 'İzmir Yüksek Teknoloji Enstitüsü', 'lat': 38.3236, 'lng': 26.6366, 'type': 'universite'},
-
     // DİĞER ŞEHİRLER
     {'id': 'ant1', 'title': 'Akdeniz Üniversitesi (Antalya)', 'lat': 36.8970, 'lng': 30.6483, 'type': 'universite'},
     {'id': 'esk1', 'title': 'Anadolu Üniversitesi (Eskişehir)', 'lat': 39.7915, 'lng': 30.5009, 'type': 'universite'},
@@ -99,55 +250,9 @@ class MapDataService {
     {'id': 'sak1', 'title': 'Sakarya Üniversitesi', 'lat': 40.7431, 'lng': 30.3323, 'type': 'universite'},
     {'id': 'koc1', 'title': 'Kocaeli Üniversitesi', 'lat': 40.8225, 'lng': 29.9213, 'type': 'universite'},
     {'id': 'can1', 'title': 'Çanakkale Onsekiz Mart Üniversitesi', 'lat': 40.1177, 'lng': 26.4109, 'type': 'universite'},
+    // Ekstra Örnekler (Mekan Tipleri İçin)
+    {'id': 'ymk1', 'title': 'Merkez Yemekhane', 'lat': 41.1055, 'lng': 29.0239, 'type': 'yemek', 'snippet': 'Öğle yemeği servisi 11:30 - 14:30', 'hours': '11:30-14:30'},
+    {'id': 'drk1', 'title': 'Metro Girişi', 'lat': 41.1070, 'lng': 29.0210, 'type': 'durak', 'snippet': 'M2 Hattı', 'hours': '06:00-00:00'},
+    {'id': 'kut1', 'title': 'Mustafa İnan Kütüphanesi', 'lat': 41.1045, 'lng': 29.0250, 'type': 'kutuphane', 'snippet': '7/24 Açık', 'hours': '24 Saat'},
   ];
-  
-  void setIcons({
-    required BitmapDescriptor iconUni,
-    required BitmapDescriptor iconYemek,
-    required BitmapDescriptor iconDurak,
-    required BitmapDescriptor iconKutuphane,
-  }) {
-    _iconUni = iconUni;
-    _iconYemek = iconYemek;
-    _iconDurak = iconDurak;
-    _iconKutuphane = iconKutuphane;
-  }
-
-  List<LocationModel> generateLocations({required LatLng center, required String currentFilter}) {
-    List<LocationModel> locations = [];
-    
-    for (var data in _fixedLocations) {
-      // Veri güvenliği kontrolü: type veya lat/lng null ise bu veriyi atla
-      if (data['type'] == null || data['lat'] == null || data['lng'] == null) continue;
-
-      String type = data['type'];
-
-      // Filtreleme mantığı
-      if (currentFilter == 'all' || type == currentFilter) {
-        
-        BitmapDescriptor? icon;
-        if (type == 'universite') icon = _iconUni;
-        else if (type == 'yemek') icon = _iconYemek;
-        else if (type == 'durak') icon = _iconDurak;
-        else if (type == 'kutuphane') icon = _iconKutuphane;
-        
-        // İkon yoksa varsayılan marker kullanılır
-        icon ??= BitmapDescriptor.defaultMarker;
-
-        locations.add(LocationModel(
-          id: data['id'], 
-          title: data['title'], 
-          snippet: data['snippet'] ?? 'Detaylı bilgi bulunmuyor.', 
-          type: type, 
-          position: LatLng(data['lat'], data['lng']), 
-          icon: icon,
-          openingHours: data['hours'] ?? 'Saatler belirtilmedi',
-          liveStatus: data['status'] ?? (_random.nextBool() ? 'Normal' : 'Yoğun'),
-          imageUrl: data['image'],
-        ));
-      }
-    }
-    
-    return locations;
-  }
 }
