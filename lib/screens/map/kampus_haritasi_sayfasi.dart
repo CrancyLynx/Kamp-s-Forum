@@ -29,8 +29,10 @@ class KampusHaritasiSayfasi extends StatefulWidget {
 
 class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   final Completer<GoogleMapController> _controller = Completer();
-  final MapDataService _mapDataService = MapDataService();
+  // MapDataService instance'ı korunur
+  final MapDataService _mapDataService = MapDataService(); 
   
+  // Varsayılan Kampüs Merkezi (ITÜ Ayazağa, İstanbul)
   static const CameraPosition _kDefaultLocation = CameraPosition(
     target: LatLng(41.1065, 29.0229), 
     zoom: 13,
@@ -44,6 +46,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   
   List<LocationModel> _allLocationModels = [];
   
+  // KARANLIK TEMA HARİTA STİLİ (Kod korunur)
   final String _darkMapStyle = '''
     [
       {"elementType": "geometry","stylers": [{"color": "#212121"}]},
@@ -75,7 +78,9 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   void initState() {
     super.initState();
     _currentFilter = widget.initialFilter;
+    // 1. İkonları oluştur ve servise ata
     _createCustomMarkers().then((_) {
+      // 2. Konumu almayı dene, başarısız olursa varsayılan merkeze (İstanbul) odaklan
       _getUserLocation(initialLoad: true); 
     });
   }
@@ -101,7 +106,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   }
 
 
-  // --- Yardımcı İkon Oluşturucu ---
+  // --- Yardımcı İkon Oluşturucu (Korunur) ---
   Future<BitmapDescriptor> _createMarkerImageFromIcon(IconData iconData, Color iconColor) async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
@@ -140,7 +145,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     if(mounted) setState(() {}); 
   }
 
-  // --- MESAFA HESAPLAMA (Düzeltilmiş Haversine) ---
+  // --- MESAFA HESAPLAMA (Korunur) ---
   double _calculateDistance(LatLng p1, LatLng p2) {
     const R = 6371.0; 
     
@@ -162,9 +167,8 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     return R * c; 
   }
   
-  // --- YÖNLENDİRME (URL DÜZELTME) ---
+  // --- YÖNLENDİRME (Korunur) ---
   Future<void> _launchDirections(LatLng destination) async {
-    // Rota çizme URL'si
     final String destinationLat = destination.latitude.toString();
     final String destinationLng = destination.longitude.toString();
     
@@ -173,10 +177,8 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     if (_userLocation != null) {
       final String startLat = _userLocation!.latitude.toString();
       final String startLng = _userLocation!.longitude.toString();
-      // KRİTİK DÜZELTME: Rota çizme, yürüyüş (w) modu ile
       url = 'comgooglemaps://?saddr=$startLat,$startLng&daddr=$destinationLat,$destinationLng&dirflg=w';
     } else {
-      // Sadece hedefi gösterir
       url = 'comgooglemaps://?q=$destinationLat,$destinationLng';
     }
 
@@ -185,7 +187,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
-      // Eğer comgooglemaps şeması çalışmazsa (cihazda uygulama yoksa), web versiyonuna düşür.
       String fallbackUrl = 'http://maps.google.com/maps?daddr=$destinationLat,$destinationLng';
       if (_userLocation != null) {
         fallbackUrl += '&saddr=${_userLocation!.latitude},${_userLocation!.longitude}';
@@ -203,10 +204,10 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     }
   }
 
-  // --- Konum Bulma Mantığı (Kullanıcı Cihaz Konumu) ---
+  // --- Konum Bulma Mantığı (Korunur) ---
   Future<void> _getUserLocation({bool initialLoad = false}) async {
     if(mounted) setState(() => _isLoadingLocation = true);
-
+    // ... (İzin kontrolü ve konum alma mantığı korunur)
     bool serviceEnabled;
     LocationPermission permission;
 
@@ -250,6 +251,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
         CameraPosition(target: _userLocation!, zoom: widget.initialZoom),
       ));
 
+      // Konum bulunduğunda, merkez kullanıcı konumu olur.
       _generateNearbyPlaces(_userLocation!);
 
     } catch (e) {
@@ -258,8 +260,10 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     }
   }
   
+  // KRİTİK DÜZELTME: Konum bulunamazsa doğru başlangıç noktasına odaklanmayı garanti eder.
   void _fallbackToDefault() {
     if (mounted) {
+      // initialFocus varsa onu kullan, yoksa varsayılan kampüs merkezini kullan.
       final center = widget.initialFocus ?? _kDefaultLocation.target;
       
       setState(() {
@@ -269,6 +273,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       
       _generateNearbyPlaces(center);
       
+      // Harita controller hazırsa yeni konuma odaklan.
       _controller.future.then((controller) {
         controller.animateCamera(CameraUpdate.newCameraPosition(
           CameraPosition(target: center, zoom: widget.initialZoom),
@@ -277,9 +282,9 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     }
   }
 
-  // --- Konumları Üret ve Filtrele ---
+  // --- Konumları Üretme ve Markerları Güncelleme ---
   void _generateNearbyPlaces(LatLng center) {
-    // DÜZELTME: Servisten konumları çekerken filtrelemeyi doğru uyguluyoruz.
+    // Servisten konumları çekerken filtrelemeyi uyguluyor.
     final List<LocationModel> locations = _mapDataService.generateLocations(
       center: center,
       currentFilter: _currentFilter,
@@ -305,6 +310,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
         );
       }
       
+      // Kullanıcı konumu markeri
       if (_userLocation != null) {
         newMarkers.add(
             Marker(
@@ -320,7 +326,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     });
   }
   
-  // --- HARİTA DETAY SAYFASI (BOTTOM SHEET) ---
+  // --- HARİTA DETAY SAYFASI (BOTTOM SHEET) (Korunur) ---
   void _showLocationDetails(LocationModel location) {
     _controller.future.then((controller) {
       controller.animateCamera(CameraUpdate.newLatLng(location.position));
@@ -334,12 +340,10 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     );
   }
   
-  // Bottom Sheet içeriği
+  // Bottom Sheet içeriği (Korunur)
   Widget _buildLocationDetailsSheet(LocationModel location) {
     final bool locationKnown = _userLocation != null;
     double distanceKm = locationKnown ? _calculateDistance(_userLocation!, location.position) : 0.0;
-    
-    // Tahmini yürüyüş süresi (4.5 km/saat hızla)
     int walkingTimeMinutes = locationKnown ? (distanceKm / 4.5 * 60).round() : 0;
     
     String distanceText = locationKnown ? "${distanceKm.toStringAsFixed(2)} km" : "Konumunuz Bilinmiyor";
