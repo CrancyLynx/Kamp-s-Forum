@@ -362,12 +362,9 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
           final postData = snapshot.data!.data() as Map<String, dynamic>;
           final List likes = postData['likes'] ?? [];
           final List postImages = postData['imageUrls'] ?? widget.imageUrls;
-          
-          if (!_isPosting) {
-             _likeCount = likes.length;
-             _isLiked = likes.contains(_currentUserId);
-          }
 
+          _likeCount = likes.length;
+          _isLiked = likes.contains(_currentUserId);
           return Stack(
             children: [
               CustomScrollView(

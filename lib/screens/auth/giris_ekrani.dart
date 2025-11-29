@@ -219,9 +219,9 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
         if (query.docs.isEmpty) throw Exception("Numara kayıtlı değil.");
         final email = query.docs.first['email'];
         
-        // Şifre doğru mu?
-        final result = await _authService.signInWithEmail(email, password, false);
-        if (result != "success" && result != "mfa_required") throw Exception(result);
+        // HATA DÜZELTME: Sadece şifreyi doğrulayan yeni metot kullanılıyor.
+        final error = await _authService.validatePhonePassword(phone, password);
+        if (error != null) throw Exception(error);
         
         // Şifre doğru, şimdi SMS gönder
         await _sendSmsCode(phone);

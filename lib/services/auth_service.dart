@@ -199,12 +199,20 @@ class AuthService {
     return await _storage.read(key: 'saved_email');
   }
   
-  // Telefonla Giriş İçin Şifre Kontrolü
+  // --- 8. PROFİL GÜNCELLEME YARDIMCISI ---
+  Future<void> updatePhoneNumberInFirestore(String uid, String phone) async {
+    await _firestore.collection('kullanicilar').doc(uid).update({
+      'phoneNumber': phone,
+    });
+  }
+  // YENİ: Telefonla Giriş İçin Sadece Şifre Kontrolü Yapan Metot
   Future<String?> validatePhonePassword(String phone, String password) async {
     try {
       final query = await _firestore.collection('kullanicilar').where('phoneNumber', isEqualTo: phone).limit(1).get();
       if (query.docs.isEmpty) return "Bu numara kayıtlı değil.";
       final email = query.docs.first['email'];
+      // signInWithEmailAndPassword sadece şifre doğruluğunu kontrol eder,
+      // signInWithEmail gibi ek işlemler (MFA, Beni Hatırla) yapmaz.
       await _auth.signInWithEmailAndPassword(email: email, password: password);
       return null; 
     } catch (e) { return _handleError(e); }
