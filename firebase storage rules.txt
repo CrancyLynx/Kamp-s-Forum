@@ -1,61 +1,44 @@
 rules_version = '2';
-
 service firebase.storage {
-  match /b/{bucket}/o {
+match /b/{bucket}/o {
 
-    // YARDIMCI FONKSİYONLAR
-    function isSignedIn() {
-      return request.auth != null;
-    }
+// Yardımcı Fonksiyonlar
+function isSignedIn() {
+  return request.auth != null;
+}
 
-    function isImage() {
-      // Sadece resim dosyalarına ve max 5MB boyutuna izin ver
-      return request.resource.contentType.matches('image/.*')
-               && request.resource.size < 5 * 1024 * 1024;
-    }
+// Resim kontrolü: İçerik tipi resim olmalı ve boyutu 10MB'dan küçük olmalı
+function isValidImage() {
+  return request.resource.contentType.matches('image/.*')
+         && request.resource.size < 10 * 1024 * 1024;
+}
 
-    // 1. PROFİL RESİMLERİ (Kullanıcı sadece kendi resmini değiştirebilir)
-    match /profil_resimleri/{fileName} {
-      allow read: if true;
-      allow write: if isSignedIn()
-                       && fileName == request.auth.uid + ".jpg"
-                       && (request.resource == null || isImage());
-    }
+// Profil Resimleri
+// Sadece kendi profil resmini (dosya adı kendi UID'si olan) yükleyebilir.
+match /profil_resimleri/{userId}/{fileName} {
+  allow read: if true;
+  allow write: if isSignedIn() && request.auth.uid == userId && isValidImage();
+}
 
-    // 2. GÖNDERİ RESİMLERİ (Herkes görebilir, üyeler yükleyebilir)
-    match /gonderi_resimleri/{fileName} {
-      allow read: if true;
-      allow write: if isSignedIn() && isImage();
-    }
+// Gönderi, Yorum, Ürün, Anket ve Etkinlik Resimleri
+// Yükleyen kullanıcının UID'sini içeren bir yola yazmayı zorunlu kılar.
+match /{folder}/{userId}/{allPaths=**} {
+  allow read: if true;
+  allow write: if isSignedIn() && request.auth.uid == userId && isValidImage();
+}
 
-    // 3. YORUM RESİMLERİ (Herkes görebilir, üyeler yükleyebilir)
-    match /yorum_resimleri/{fileName} {
-      allow read: if true;
-      allow write: if isSignedIn() && isImage();
-    }
-
-    // 4. SOHBET RESİMLERİ (Sadece giriş yapmış kullanıcılar görebilir/yükleyebilir)
-    match /chat_images/{chatId}/{fileName} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && isImage();
-    }
-
-    // 5. ÜRÜN RESİMLERİ
-    match /urun_resimleri/{fileName} {
-      allow read: if true;
-      allow write: if isSignedIn() && isImage();
-    }
-
-    // 6. ANKET RESİMLERİ
-    match /anket_resimleri/{fileName} {
-      allow read: if true;
-      allow write: if isSignedIn() && isImage();
-    }
-    
-    // 7. ETKİNLİK RESİMLERİ (DÜZELTME)
-    match /events/{fileName} {
-      allow read: if true;
-      allow write: if isSignedIn() && isImage();
-    }
+// Sohbet Resimleri
+// Sadece sohbetin katılımcılarından biri resim yükleyebilir.
+// Bu kural, sohbet belgesini okuyarak katılımcıları doğrular.
+match /chat_images/{chatId}/{fileName} {
+  function isChatParticipant() {
+    return request.auth.uid in get(/databases/$(database)/documents/sohbetler/$(chatId)).data.participants;
   }
+  
+  allow read: if isSignedIn() && isChatParticipant();
+  allow write: if isSignedIn() && isChatParticipant() && isValidImage();
+}
+
+
+}
 }

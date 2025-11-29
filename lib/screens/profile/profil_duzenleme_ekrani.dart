@@ -5,10 +5,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart'; // Cloud Function için gerekli
 import 'package:cached_network_image/cached_network_image.dart';
-// Düzeltilmiş Importlar
 import '../../utils/app_colors.dart';
-
+import '../auth/giris_ekrani.dart'; // Silince giriş ekranına atmak için
 
 Future<File> _compressImage(File file) async {
   return file; 
@@ -78,7 +78,66 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
     }
   }
 
-  // YENİ: Değişiklik Talep Dialog'u
+  // --- HESAP SİLME FONKSİYONU (GÜNCELLENDİ) ---
+  Future<void> _deleteAccount() async {
+    // 1. Onay Dialogu
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Hesabı Sil", style: TextStyle(color: Colors.red)),
+        content: const Text(
+          "Hesabınızı silmek istediğinize emin misiniz?\n\n"
+          "DİKKAT: Kişisel verileriniz (profil fotoğrafı, isim vb.) tamamen silinecek, ancak yazdığınız gönderiler ve yorumlar 'Silinmiş Üye' adıyla forumda kalmaya devam edecektir.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("İptal"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Evet, Hesabımı Sil", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      // 2. Cloud Function Çağrısı (Anonymization)
+      final result = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('deleteUserAccount')
+          .call();
+
+      if (result.data['success'] == true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Hesabınız başarıyla silindi.")),
+          );
+          // 3. Giriş Ekranına Yönlendir
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const GirisEkrani()),
+            (route) => false,
+          );
+        }
+      } else {
+        throw Exception(result.data['message'] ?? "Bilinmeyen hata.");
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Silme hatası: $e"), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   void _showChangeRequestDialog() {
     final uniController = TextEditingController(text: _university);
     final deptController = TextEditingController(text: _department);
@@ -123,11 +182,8 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Lütfen üniversite ve bölüm adını giriniz.")));
                 return;
               }
-              
               Navigator.pop(ctx);
-              
               try {
-                // Talebi Firestore'a kaydet
                 await FirebaseFirestore.instance.collection('degisiklik_istekleri').add({
                   'userId': _userId,
                   'userEmail': FirebaseAuth.instance.currentUser?.email,
@@ -137,10 +193,9 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                   'newUniversity': uniController.text.trim(),
                   'newDepartment': deptController.text.trim(),
                   'note': noteController.text.trim(),
-                  'status': 'pending', // beklemede
+                  'status': 'pending',
                   'timestamp': FieldValue.serverTimestamp(),
                 });
-                
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Talebiniz yöneticiye iletildi."), backgroundColor: AppColors.success));
                 }
@@ -157,7 +212,6 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
     );
   }
 
-  // ... (Resim seçme fonksiyonları aynen kalıyor) ...
   void _showImageSourceActionSheet() {
     showModalBottomSheet(
       context: context,
@@ -402,11 +456,10 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                   ],
                 ),
               ),
-              // YENİ: Değişiklik Butonu
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
-                  onPressed: _showChangeRequestDialog, // Fonksiyonu bağladık
+                  onPressed: _showChangeRequestDialog,
                   icon: const Icon(Icons.edit_note, size: 16),
                   label: const Text("Değişiklik Talep Et"),
                   style: TextButton.styleFrom(foregroundColor: AppColors.primary),
@@ -433,6 +486,24 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                     elevation: 2,
                   ),
                   child: const Text("Kaydet", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              
+              // --- HESAP SİLME BUTONU (ANONİMLEŞTİRME UYARISI İLE) ---
+              const SizedBox(height: 20),
+              Divider(color: Colors.grey.withOpacity(0.3)),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 45,
+                child: TextButton.icon(
+                  onPressed: _isLoading ? null : _deleteAccount,
+                  icon: const Icon(Icons.delete_forever, color: Colors.red),
+                  label: const Text("Hesabımı Sil", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.red.withOpacity(0.1),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
                 ),
               ),
               const SizedBox(height: 30),

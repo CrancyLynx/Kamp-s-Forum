@@ -67,7 +67,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
         // Takipten Çık
         await targetRef.update({'followers': FieldValue.arrayRemove([_currentUserId]), 'followerCount': FieldValue.increment(-1)});
         await myRef.update({'following': FieldValue.arrayRemove([widget.userId]), 'followingCount': FieldValue.increment(-1)});
-        setState(() => _isFollowing = false);
+        if (mounted) setState(() => _isFollowing = false);
       } else {
         // Takip Et
         await targetRef.update({'followers': FieldValue.arrayUnion([_currentUserId]), 'followerCount': FieldValue.increment(1)});
@@ -83,10 +83,10 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
           'timestamp': FieldValue.serverTimestamp(),
         });
         
-        setState(() => _isFollowing = true);
+        if (mounted) setState(() => _isFollowing = true);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Hata: $e")));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Hata: $e")));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -98,7 +98,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Link açılamadı.")));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Link açılamadı.")));
     }
   }
 
@@ -109,18 +109,27 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
        await FirebaseFirestore.instance.collection('kullanicilar').doc(targetUserId).update({
          'role': newRole
        });
-       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isCurrentlyAdmin ? "Admin yetkisi alındı." : "Admin yetkisi verildi.")));
-       setState(() {}); // Ekranı yenile
+       if (mounted) {
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isCurrentlyAdmin ? "Admin yetkisi alındı." : "Admin yetkisi verildi.")));
+         setState(() {}); // Ekranı yenile
+       }
      } catch (e) {
-       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Hata: $e")));
+       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Hata: $e")));
      }
+  }
+
+  // İki kullanıcı ID'sinden benzersiz bir sohbet ID'si oluşturur.
+  String _getChatId(String uid1, String uid2) {
+    List<String> ids = [uid1, uid2];
+    ids.sort(); // ID'leri sıralayarak her zaman aynı ID'yi elde etmeyi sağlar.
+    return ids.join('_');
   }
 
   @override
   Widget build(BuildContext context) {
     final targetId = widget.userId ?? _currentUserId;
 
-    // 1. SİLİNMİŞ KULLANICI KONTROLÜ (Bu kısım eksikti)
+    // 1. SİLİNMİŞ KULLANICI KONTROLÜ
     if (targetId == 'deleted_user') {
        return Scaffold(
          appBar: AppBar(title: const Text("Profil Bulunamadı")),
@@ -154,7 +163,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
           final data = snapshot.data!.data() as Map<String, dynamic>;
           final badges = List<String>.from(data['earnedBadges'] ?? []);
           
-          // 2. YENİ ROL KONTROLÜ (Eski kAdminUids yerine burası çalışacak)
           final String role = data['role'] ?? 'user';
           final bool isAdmin = (role == 'admin');
 
@@ -273,7 +281,12 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                           Expanded(
                             child: OutlinedButton(
                               onPressed: () {
-                                Navigator.push(context, MaterialPageRoute(builder: (context) => SohbetDetayEkrani(receiverId: widget.userId!, receiverName: data['takmaAd'] ?? 'Kullanıcı', receiverAvatar: data['avatarUrl'])));
+                                final chatId = _getChatId(_currentUserId, widget.userId!);
+                                Navigator.push(context, MaterialPageRoute(builder: (context) => SohbetDetayEkrani(
+                                  chatId: chatId,
+                                  receiverId: widget.userId!, 
+                                  receiverName: data['takmaAd'] ?? 'Kullanıcı', 
+                                  receiverAvatarUrl: data['avatarUrl'])));
                               },
                               child: const Text("Mesaj Gönder"),
                             ),
@@ -281,7 +294,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                         ],
                       ),
                       
-                    // 3. YÖNETİCİ PANELİ (Eksik Olan Kısım)
+                    // 3. YÖNETİCİ PANELİ
                     // Sadece BEN Adminsem ve profiline baktığım kişi başkasıysa bu paneli göster
                     if (amIAdmin && widget.userId != null && widget.userId != _currentUserId)
                        Container(
@@ -308,7 +321,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                        ),
 
                     const SizedBox(height: 24),
-                    // ROZETLER VİTRİNİ (Eksik Olan Kısım)
+                    // ROZETLER VİTRİNİ
                     if (badges.isNotEmpty) ...[
                       const Align(alignment: Alignment.centerLeft, child: Text("Kazanılan Rozetler", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
                       const SizedBox(height: 10),

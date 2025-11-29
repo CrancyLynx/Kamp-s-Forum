@@ -2,7 +2,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // YARDIMCI FONKSİYONLAR
+    // --- YARDIMCI FONKSİYONLAR ---
+    
     function isSignedIn() {
       return request.auth != null;
     }
@@ -11,42 +12,49 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
     
+    // GÜNCELLEME: Admin kontrolü artık veritabanından yapılıyor.
+    // Kullanıcının kendi dokümanını okuyup 'role' alanına bakıyoruz.
     function isAdmin() {
-      let admins = ['oZ2RIhV1JdYVIr0xyqCwhX9fJYq1', 'VD8MeJIhhRVtbT9iiUdMEaCe3MO2']; 
-      return isSignedIn() && request.auth.uid in admins;
+      return isSignedIn() && 
+             get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.role == 'admin';
     }
     
-    // Sadece takip/takipçi alanlarını güncellediğimizi kontrol eder.
-    function isFollowUpdate() {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followers', 'followerCount']);
-    }
-
     // -----------------------------------------------------------
-    // 1. KULLANICILAR KOLEKSİYONU (Admin Takibi Sorunu Çözüldü)
+    // 1. KULLANICILAR KOLEKSİYONU
     // -----------------------------------------------------------
     match /kullanicilar/{userId} {
-      allow read: if isSignedIn(); 
-      allow create: if isSignedIn(); 
+      allow read: if isSignedIn();
+      // Sadece kendi hesabını oluşturabilir ve rolü 'user' olmalı.
+      allow create: if isOwner(userId) && request.resource.data.role == 'user'; 
       
-      // Kendi dokümanını güncelleyebilir VEYA Admin ise her şeyi güncelleyebilir VEYA
-      // Başkasının followers alanını güncelleyebilir (Takip işlemi)
-      allow update: if isOwner(userId) || isAdmin() || 
-                      (isSignedIn() && isFollowUpdate());
+      // Bir kullanıcı kendi profilini güncelleyebilir AMA rolünü değiştiremez.
+      // Adminler rolü güncelleyebilir.
+      // Diğer kullanıcılar sadece takipçi listesini güncelleyebilir.
+      allow update: if (isOwner(userId) && !('role' in request.resource.data.diff(resource.data).affectedKeys())) ||
+                      (isAdmin() && 'role' in request.resource.data.diff(resource.data).affectedKeys()) ||
+                      (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followers', 'followerCount']));
     }
     
     // -----------------------------------------------------------
     // 2. GÖNDERİLER KOLEKSİYONU
     // -----------------------------------------------------------
     match /gonderiler/{postId} {
-      allow read: if true; 
-      allow create: if isSignedIn();
-      allow update, delete: if isOwner(resource.data.userId) || isAdmin();
+      allow read: if true;
+      // Gönderi oluştururken userId kendi id'si olmalı.
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      // Güncellerken beğeni ve yorum sayısı gibi alanlar doğrudan değiştirilemez.
+      allow update: if (isOwner(resource.data.userId) || isAdmin()) &&
+                       !('likes' in request.resource.data.diff(resource.data).affectedKeys()) &&
+                       !('commentCount' in request.resource.data.diff(resource.data).affectedKeys());
+      allow delete: if isOwner(resource.data.userId) || isAdmin();
       
       // Yorumlar (Subcollection)
       match /yorumlar/{commentId} {
         allow read: if true;
-        allow create: if isSignedIn();
-        allow update, delete: if isOwner(resource.data.userId) || isOwner(get(/databases/$(database)/documents/gonderiler/$(postId)).data.userId) || isAdmin();
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+        allow update, delete: if isOwner(resource.data.userId) || 
+                             isOwner(get(/databases/$(database)/documents/gonderiler/$(postId)).data.userId) || 
+                             isAdmin();
       }
     }
     
@@ -67,10 +75,32 @@ service cloud.firestore {
     // -----------------------------------------------------------
     // DİĞER KOLEKSİYONLAR
     // -----------------------------------------------------------
-    match /urunler/{productId} { allow read: if true; allow create: if isSignedIn(); allow update, delete: if isOwner(resource.data.sellerId) || isAdmin(); }
-    match /etkinlikler/{eventId} { allow read: if true; allow write: if isAdmin(); }
-    match /bildirimler/{notificationId} { allow read, update: if isOwner(resource.data.userId) || isAdmin(); allow create: if isSignedIn(); allow delete: if isOwner(resource.data.userId) || isAdmin(); }
-    match /sikayetler/{reportId} { allow read, delete: if isAdmin(); allow create: if isSignedIn(); }
-    match /degisiklik_istekleri/{requestId} { allow read, update, delete: if isAdmin(); allow create: if isSignedIn(); }
+    match /urunler/{productId} { 
+      allow read: if true;
+      allow create: if isSignedIn(); 
+      allow update, delete: if isOwner(resource.data.sellerId) || isAdmin();
+    }
+    
+    match /etkinlikler/{eventId} { 
+      allow read: if true; 
+      allow write: if isAdmin(); // Sadece Admin yazabilir
+    }
+    
+    match /bildirimler/{notificationId} { 
+      allow read, update: if isOwner(resource.data.userId) || isAdmin(); 
+      // Bildirimler client tarafından değil, sunucu (Cloud Functions) veya güvenli işlemlerle oluşturulmalı.
+      allow create: if false;
+      allow delete: if isOwner(resource.data.userId) || isAdmin(); 
+    }
+    
+    match /sikayetler/{reportId} { 
+      allow read, delete: if isAdmin();
+      allow create: if isSignedIn(); 
+    }
+    
+    match /degisiklik_istekleri/{requestId} { 
+      allow read, update, delete: if isAdmin();
+      allow create: if isSignedIn(); 
+    }
   }
 }

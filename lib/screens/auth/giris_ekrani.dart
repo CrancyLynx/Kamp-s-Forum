@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Sadece Credential tipleri için
+import 'package:cloud_firestore/cloud_firestore.dart'; // Sadece telefon sorgusu için
 import 'package:provider/provider.dart';
 import 'dart:math' as math;
 import '../../utils/app_colors.dart';
 import '../../main.dart';
 import '../../widgets/app_logo.dart';
-import '../../services/auth_service.dart'; // YENİ SERVİSİMİZ
+import '../../services/auth_service.dart'; // Servisimizi ekledik
 
 class GirisEkrani extends StatefulWidget {
   const GirisEkrani({super.key});
@@ -18,7 +19,7 @@ class GirisEkrani extends StatefulWidget {
 
 class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
-  final AuthService _authService = AuthService(); // Servisi başlatıyoruz
+  final AuthService _authService = AuthService();
 
   // Controllerlar
   final TextEditingController emailController = TextEditingController();
@@ -27,7 +28,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
   final TextEditingController _takmaAdController = TextEditingController();
   final TextEditingController _adSoyadController = TextEditingController();
   
-  // Telefon Girişi
+  // Telefon/SMS Girişi
   final TextEditingController _phoneController = TextEditingController(); 
   final TextEditingController _smsCodeController = TextEditingController();
 
@@ -37,11 +38,11 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
   bool _isEduEmail = false;
   bool _isLoading = false;
   
-  // Telefon Modu
-  bool _isPhoneLoginMode = false; 
-  bool _codeSent = false; 
+  // 2FA ve Telefon Modu
+  bool _isPhoneLoginMode = false; // Telefon sekmesi açık mı?
+  bool _isMfaVerification = false; // E-posta sonrası 2FA doğrulaması mı yapılıyor?
+  bool _codeSent = false; // SMS kodu gönderildi mi?
   String? _verificationId; 
-  int? _resendToken; 
 
   @override
   void initState() {
@@ -126,7 +127,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
             onPressed: () async {
               if (resetEmailController.text.isEmpty) return;
               Navigator.pop(ctx);
-              final error = await _authService.sendPasswordResetEmail(resetEmailController.text.trim());
+              final error = await _authService.sendPasswordReset(resetEmailController.text.trim());
               showSnackBar(error ?? "Şifre sıfırlama linki gönderildi.", isError: error != null);
             },
             child: const Text("Gönder"),
@@ -136,70 +137,59 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     );
   }
 
-  // --- TELEFON GİRİŞİ İŞLEMLERİ (UI Tarafında Kalması Gereken Kısım) ---
-  Future<void> _startPhoneAuth() async {
-    final phone = _phoneController.text.trim();
-    final password = passwordController.text;
-
-    if (phone.isEmpty || phone.length < 10) return showSnackBar("Geçerli numara girin.", isError: true);
-    if (password.isEmpty) return showSnackBar("Şifrenizi girin.", isError: true);
-
+  // --- SMS GÖNDERME İŞLEMİ ---
+  Future<void> _sendSmsCode(String phone) async {
     setState(() => _isLoading = true);
-
-    // 1. Önce Şifre Kontrolü (Servisten)
-    final error = await _authService.validatePhonePassword(phone, password);
-    if (error != null) {
-      setState(() => _isLoading = false);
-      return showSnackBar(error, isError: true);
-    }
-
-    // 2. Şifre Doğruysa SMS Gönder (Firebase SDK UI Callbacks Gerektirir)
-    await FirebaseAuth.instance.verifyPhoneNumber(
+    await _authService.verifyPhone(
       phoneNumber: phone,
-      verificationCompleted: (PhoneAuthCredential credential) async {
-        await _finalizePhoneLogin(credential);
-      },
-      verificationFailed: (FirebaseAuthException e) {
-        setState(() => _isLoading = false);
-        showSnackBar("SMS Hatası: ${e.message}", isError: true);
-      },
-      codeSent: (String verificationId, int? resendToken) {
+      onCodeSent: (verId) {
         setState(() {
-          _verificationId = verificationId;
-          _resendToken = resendToken;
+          _verificationId = verId;
           _codeSent = true;
           _isLoading = false;
         });
-        showSnackBar("Şifre doğru. Doğrulama kodu gönderildi.");
+        showSnackBar("Doğrulama kodu gönderildi.");
       },
-      codeAutoRetrievalTimeout: (String verificationId) {
-        if (mounted) setState(() => _verificationId = verificationId);
+      onError: (msg) {
+        setState(() => _isLoading = false);
+        showSnackBar(msg, isError: true);
       },
-      forceResendingToken: _resendToken,
     );
   }
 
-  Future<void> _finalizePhoneLogin(PhoneAuthCredential credential) async {
+  // --- SMS KODU DOĞRULAMA (SON ADIM) ---
+  Future<void> _verifySmsCode() async {
+    if (_smsCodeController.text.length < 6) {
+      showSnackBar("Lütfen kodu tam girin.", isError: true);
+      return;
+    }
+    setState(() => _isLoading = true);
+
     try {
+      PhoneAuthCredential credential = PhoneAuthProvider.credential(
+        verificationId: _verificationId!,
+        smsCode: _smsCodeController.text.trim(),
+      );
+
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        // Zaten şifre ile giriş yapmıştık, şimdi telefon yetkisini bağlıyoruz
-        if (user.phoneNumber == null || user.phoneNumber != _phoneController.text.trim()) {
-           try {
-              await user.linkWithCredential(credential);
-           } on FirebaseAuthException catch(e) {
-              if (e.code != 'provider-already-linked' && e.code != 'credential-already-in-use') rethrow;
-           }
-        }
+        // Mevcut oturuma telefonu bağla (MFA için)
+        await user.linkWithCredential(credential);
         await user.reload();
         showSnackBar("Giriş Başarılı!");
       } else {
-         await FirebaseAuth.instance.signInWithCredential(credential);
+        // Sıfırdan telefonla giriş
+        await FirebaseAuth.instance.signInWithCredential(credential);
       }
     } catch (e) {
-       showSnackBar("Giriş tamamlama hatası: $e", isError: true);
+      // Zaten bağlıysa hata verebilir, yutuyoruz
+      if (!e.toString().contains('credential-already-in-use')) {
+        showSnackBar("Hatalı kod veya işlem başarısız.", isError: true);
+      } else {
+        showSnackBar("Giriş Başarılı!");
+      }
     } finally {
-       if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -207,66 +197,99 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
   void handleAuth() async {
     FocusScope.of(context).unfocus();
 
-    // 1. Telefon Girişi Modu
+    // 1. KOD GİRME AŞAMASI (Hem Telefon Girişi hem MFA için)
+    if (_codeSent) {
+      _verifySmsCode();
+      return;
+    }
+
+    // 2. TELEFON GİRİŞİ BAŞLATMA
     if (isLogin && _isPhoneLoginMode) {
-      if (_codeSent) {
-        // Kod Doğrulama
-        if (_smsCodeController.text.length < 6) return showSnackBar("Kodu tam girin.", isError: true);
+      final phone = _phoneController.text.trim();
+      final password = passwordController.text; // Telefon girişinde de şifre soruyoruz (Güvenlik)
+      
+      if (phone.isEmpty || phone.length < 10) return showSnackBar("Geçerli numara girin.", isError: true);
+      if (password.isEmpty) return showSnackBar("Şifrenizi girin.", isError: true);
+
+      // Önce şifreyi doğrula (Manuel Query - Sadece telefon girişine özel)
+      // Not: Bu kısım normalde Backend'de olmalı ama basitlik için burada bırakıyorum.
+      try {
         setState(() => _isLoading = true);
-        try {
-          PhoneAuthCredential credential = PhoneAuthProvider.credential(
-            verificationId: _verificationId!,
-            smsCode: _smsCodeController.text.trim(),
-          );
-          await _finalizePhoneLogin(credential);
-        } catch (e) {
-          setState(() => _isLoading = false);
-          showSnackBar("Hatalı kod.", isError: true);
-        }
-      } else {
-        // SMS Gönderme
-        _startPhoneAuth();
+        final query = await FirebaseFirestore.instance.collection('kullanicilar').where('phoneNumber', isEqualTo: phone).limit(1).get();
+        if (query.docs.isEmpty) throw Exception("Numara kayıtlı değil.");
+        final email = query.docs.first['email'];
+        
+        // Şifre doğru mu?
+        final result = await _authService.signInWithEmail(email, password, false);
+        if (result != "success" && result != "mfa_required") throw Exception(result);
+        
+        // Şifre doğru, şimdi SMS gönder
+        await _sendSmsCode(phone);
+      } catch (e) {
+        setState(() => _isLoading = false);
+        showSnackBar(e.toString().replaceAll("Exception: ", ""), isError: true);
       }
       return;
     }
 
-    // 2. E-posta / Kayıt Modu
+    // 3. E-POSTA İLE GİRİŞ / KAYIT
     setState(() => _isLoading = true);
-    String? error;
-
-    if (!isLogin) {
-      // Kayıt Ol
-      if (passwordController.text != _confirmPasswordController.text) {
-        error = "Şifreler eşleşmiyor.";
-      } else if (emailController.text.isEmpty || passwordController.text.isEmpty || _adSoyadController.text.isEmpty || _takmaAdController.text.isEmpty) {
-        error = "Lütfen tüm alanları doldurun.";
-      } else {
-        error = await _authService.register(
-          email: emailController.text.trim(),
-          password: passwordController.text,
-          adSoyad: _adSoyadController.text.trim(),
-          takmaAd: _takmaAdController.text.trim(),
-          phone: _phoneController.text.trim(),
-        );
-      }
-      if (error == null) showSnackBar("Kayıt başarılı! Yönlendiriliyorsunuz...");
     
+    if (!isLogin) {
+      // --- KAYIT OL ---
+      if (passwordController.text != _confirmPasswordController.text) {
+        setState(() => _isLoading = false);
+        showSnackBar("Şifreler eşleşmiyor.", isError: true);
+        return;
+      }
+      
+      final error = await _authService.register(
+        email: emailController.text.trim(),
+        password: passwordController.text,
+        adSoyad: _adSoyadController.text.trim(),
+        takmaAd: _takmaAdController.text.trim(),
+        phone: _phoneController.text.trim(),
+      );
+      
+      setState(() => _isLoading = false);
+      if (error == null) showSnackBar("Kayıt başarılı! Yönlendiriliyorsunuz...");
+      else showSnackBar(error, isError: true);
+
     } else {
-      // Giriş Yap
-      error = await _authService.signInWithEmail(
+      // --- GİRİŞ YAP ---
+      final result = await _authService.signInWithEmail(
         emailController.text.trim(),
         passwordController.text,
         _rememberMe
       );
-    }
 
-    if (mounted) {
-      setState(() => _isLoading = false);
-      if (error != null) showSnackBar(error, isError: true);
+      if (result == "success") {
+        setState(() => _isLoading = false);
+        // Main.dart otomatik yönlendirecek
+      } else if (result == "mfa_required") {
+        // MFA Gerekli: Kullanıcının telefon numarasını bul ve SMS gönder
+        final user = FirebaseAuth.instance.currentUser;
+        final doc = await FirebaseFirestore.instance.collection('kullanicilar').doc(user!.uid).get();
+        final phone = doc.data()?['phoneNumber'];
+        
+        if (phone != null) {
+          setState(() {
+            _isMfaVerification = true; // Arayüzü güncelle
+            _isPhoneLoginMode = true; // Telefon formunu göster
+          });
+          await _sendSmsCode(phone);
+          showSnackBar("2 Aşamalı Doğrulama: Kod gönderildi.");
+        } else {
+          setState(() => _isLoading = false);
+          showSnackBar("Hesabınızda kayıtlı telefon numarası yok.", isError: true);
+        }
+      } else {
+        setState(() => _isLoading = false);
+        showSnackBar(result, isError: true);
+      }
     }
   }
 
-  // --- ARAYÜZ (TASARIM VE ANİMASYONLAR AYNEN KORUNDU) ---
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -277,7 +300,6 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       resizeToAvoidBottomInset: false, 
       body: Stack(
         children: [
-          // Animasyonlu Arka Plan (Blob'lar)
           Positioned.fill(
             child: Container(
               color: isDark ? const Color(0xFF121212) : const Color(0xFFF5F5F5),
@@ -301,7 +323,6 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
             ),
           ),
           
-          // Kart ve Form İçeriği
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -329,18 +350,21 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          // BAŞLIK ALANI
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               AnimatedSwitcher(
                                 duration: const Duration(milliseconds: 300),
                                 child: Text(
-                                  isLogin ? "Giriş Yap" : "Öğrenci Kaydı",
-                                  key: ValueKey<bool>(isLogin),
+                                  _isMfaVerification 
+                                      ? "Güvenlik Kodu" 
+                                      : (isLogin ? "Giriş Yap" : "Öğrenci Kaydı"),
+                                  key: ValueKey<String>(_isMfaVerification ? 'mfa' : (isLogin ? 'login' : 'register')),
                                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textColor),
                                 ),
                               ),
-                              if (isLogin)
+                              if (isLogin && !_isMfaVerification)
                                 Container(
                                   padding: const EdgeInsets.all(4),
                                   decoration: BoxDecoration(
@@ -358,20 +382,21 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                           ),
                           const SizedBox(height: 20),
 
+                          // FORM ALANI
                           AnimatedSwitcher(
                             duration: const Duration(milliseconds: 500),
-                            transitionBuilder: (Widget child, Animation<double> animation) {
-                              return FadeTransition(opacity: animation, child: SizeTransition(sizeFactor: animation, child: child));
-                            },
-                            child: !isLogin 
-                                ? _buildRegisterForm(isDark)
-                                : (_isPhoneLoginMode 
-                                    ? _buildPhoneLoginForm(isDark, textColor) 
-                                    : _buildEmailLoginForm(isDark, textColor)),
+                            child: _isMfaVerification || (_isPhoneLoginMode && _codeSent)
+                                ? _buildSmsCodeForm(isDark, textColor) // Kod Girme Ekranı
+                                : (!isLogin 
+                                    ? _buildRegisterForm(isDark) // Kayıt Ekranı
+                                    : (_isPhoneLoginMode 
+                                        ? _buildPhoneLoginForm(isDark) // Telefonla Giriş
+                                        : _buildEmailLoginForm(isDark, textColor))), // E-posta Giriş
                           ),
                           
                           const SizedBox(height: 20),
                           
+                          // BUTON
                           SizedBox(
                             width: double.infinity,
                             height: 50,
@@ -381,42 +406,53 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                               child: _isLoading 
                                   ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                                   : Text(
-                                      !isLogin ? "Kayıt Ol" : (_isPhoneLoginMode ? (_codeSent ? "Giriş Yap" : "Kod Gönder") : "Giriş Yap"), 
+                                      _isMfaVerification || _codeSent 
+                                          ? "Doğrula" 
+                                          : (!isLogin ? "Kayıt Ol" : (_isPhoneLoginMode ? "Kod Gönder" : "Giriş Yap")), 
                                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)
                                     ),
                             ),
                           ),
-                          if (_isPhoneLoginMode && _codeSent)
+                          if ((_isPhoneLoginMode && _codeSent) || _isMfaVerification)
                             TextButton(
-                              onPressed: () => setState(() => _codeSent = false),
-                              child: const Text("Numarayı Düzenle", style: TextStyle(color: Colors.grey)),
+                              onPressed: () {
+                                setState(() {
+                                  _codeSent = false;
+                                  _isMfaVerification = false;
+                                  _isPhoneLoginMode = false;
+                                  _isLoading = false;
+                                });
+                              },
+                              child: const Text("Vazgeç / Düzenle", style: TextStyle(color: Colors.grey)),
                             ),
                         ],
                       ),
                     ),
                     
                     const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(isLogin ? "Hesabın yok mu?" : "Zaten hesabın var mı?", style: TextStyle(color: textColor.withOpacity(0.7))),
-                        TextButton(
-                          onPressed: () => setState(() { isLogin = !isLogin; _isPhoneLoginMode = false; _codeSent = false; }),
-                          child: Text(isLogin ? "Kayıt Ol" : "Giriş Yap", style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
-                        ),
-                      ],
-                    ),
-                    if (isLogin)
-                      TextButton.icon(
-                        onPressed: () async {
-                          setState(() => _isLoading = true);
-                          final error = await _authService.signInGuest();
-                          if (mounted) setState(() => _isLoading = false);
-                          if (error != null) showSnackBar(error, isError: true);
-                        }, 
-                        icon: Icon(Icons.person_outline, size: 18, color: textColor.withOpacity(0.6)), 
-                        label: Text("Misafir Olarak Göz At", style: TextStyle(color: textColor.withOpacity(0.6)))
+                    if (!_isMfaVerification) ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(isLogin ? "Hesabın yok mu?" : "Zaten hesabın var mı?", style: TextStyle(color: textColor.withOpacity(0.7))),
+                          TextButton(
+                            onPressed: () => setState(() { isLogin = !isLogin; _isPhoneLoginMode = false; _codeSent = false; }),
+                            child: Text(isLogin ? "Kayıt Ol" : "Giriş Yap", style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
                       ),
+                      if (isLogin)
+                        TextButton.icon(
+                          onPressed: () async {
+                            setState(() => _isLoading = true);
+                            final error = await _authService.signInGuest();
+                            if (mounted) setState(() => _isLoading = false);
+                            if (error != null) showSnackBar(error, isError: true);
+                          },
+                          icon: Icon(Icons.person_outline, size: 18, color: textColor.withOpacity(0.6)), 
+                          label: Text("Misafir Olarak Göz At", style: TextStyle(color: textColor.withOpacity(0.6)))
+                        ),
+                    ],
                     const SizedBox(height: 20),
                     Consumer<ThemeProvider>(
                       builder: (context, themeProvider, child) {
@@ -434,7 +470,17 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     );
   }
 
-  // --- WIDGET HELPERLAR (AYNEN KALDI) ---
+  // --- FORM WIDGETLARI ---
+  Widget _buildSmsCodeForm(bool isDark, Color textColor) {
+    return Column(
+      children: [
+        Text("Lütfen telefonunuza gönderilen 6 haneli kodu girin.", textAlign: TextAlign.center, style: TextStyle(color: textColor.withOpacity(0.7))),
+        const SizedBox(height: 16),
+        _buildModernTextField(controller: _smsCodeController, label: "SMS Kodu", icon: Icons.lock_clock, isDark: isDark, inputType: TextInputType.number),
+      ],
+    );
+  }
+
   Widget _buildRegisterForm(bool isDark) {
     return Column(
       key: const ValueKey('register'), 
@@ -482,23 +528,13 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildPhoneLoginForm(bool isDark, Color textColor) {
+  Widget _buildPhoneLoginForm(bool isDark) {
     return Column(
       key: const ValueKey('phone_login'), 
       children: [
-        if (!_codeSent) ...[
-          _buildModernTextField(controller: _phoneController, label: "Telefon Numarası", icon: Icons.phone_android, isDark: isDark, inputType: TextInputType.phone),
-          const SizedBox(height: 16),
-          _buildModernTextField(controller: passwordController, label: "Şifre", icon: Icons.lock_outline, isDark: isDark, isPassword: true),
-        ] else ...[
-          Column(
-            children: [
-              Text("Şifre doğrulandı. $_verificationId adresine gönderilen kodu girin.", textAlign: TextAlign.center, style: TextStyle(color: textColor.withOpacity(0.6), fontSize: 12)),
-              const SizedBox(height: 10),
-              _buildModernTextField(controller: _smsCodeController, label: "SMS Kodu", icon: Icons.lock_clock, isDark: isDark, inputType: TextInputType.number),
-            ],
-          ),
-        ]
+        _buildModernTextField(controller: _phoneController, label: "Telefon Numarası", icon: Icons.phone_android, isDark: isDark, inputType: TextInputType.phone),
+        const SizedBox(height: 16),
+        _buildModernTextField(controller: passwordController, label: "Şifre", icon: Icons.lock_outline, isDark: isDark, isPassword: true),
       ],
     );
   }
