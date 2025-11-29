@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart'; // Sayaç düzeltme fonksiyonu için
 import '../forum/forum_sayfasi.dart';
 import 'kesfet_sayfasi.dart';
-import '../market/pazar_sayfasi.dart'; // YENİ: Pazar sayfası import edildi
-import '../chat/sohbet_listesi_ekrani.dart'; // Mesajlara gitmek için
-import '../notification/bildirim_ekrani.dart'; // Bildirimlere gitmek için
-// Düzeltilmiş Importlar
+import '../market/pazar_sayfasi.dart'; 
+import '../chat/sohbet_listesi_ekrani.dart'; 
+import '../notification/bildirim_ekrani.dart'; 
 import '../../utils/app_colors.dart';
 
 class AnaEkran extends StatefulWidget {
@@ -36,6 +36,30 @@ class _AnaEkranState extends State<AnaEkran> {
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: _selectedIndex);
+    
+    // UYGULAMA AÇILINCA SAYAÇLARI BİR KERE KONTROL ET (Opsiyonel Güvenlik)
+    if (!_currentUserId.isEmpty && !widget.isGuest) {
+      _verifyCounters();
+    }
+  }
+  
+  // Eğer sayaçlar hiç yoksa (eski kullanıcı), Cloud Function ile hesaplat
+  Future<void> _verifyCounters() async {
+    try {
+      final doc = await FirebaseFirestore.instance.collection('kullanicilar').doc(_currentUserId).get();
+      if (doc.exists) {
+        final data = doc.data();
+        if (data != null && (data['totalUnreadMessages'] == null || data['unreadNotifications'] == null)) {
+          // Sayaçlar eksik, fonksiyonu çağır
+          await FirebaseFunctions.instanceFor(region: 'europe-west1')
+              .httpsCallable('recalculateUserCounters')
+              .call();
+          debugPrint("Sayaçlar onarıldı.");
+        }
+      }
+    } catch (e) {
+      debugPrint("Sayaç kontrol hatası: $e");
+    }
   }
 
   @override
@@ -56,7 +80,6 @@ class _AnaEkranState extends State<AnaEkran> {
   Widget build(BuildContext context) {
     return Scaffold(
       // SADECE KEŞFET SAYFASINDA ÖZEL APP BAR GÖSTERELİM
-      // Diğer sayfalarda kendi AppBar'ları var.
       appBar: (_selectedIndex == 0) ? _buildKesfetAppBar() : null,
       
       body: PageView(
@@ -64,10 +87,10 @@ class _AnaEkranState extends State<AnaEkran> {
         onPageChanged: (index) {
           setState(() => _selectedIndex = index);
         },
-        physics: const NeverScrollableScrollPhysics(), // Sayfalar arası kaydırmayı engelle
+        physics: const NeverScrollableScrollPhysics(),
         children: [
           const KesfetSayfasi(),
-          const PazarSayfasi(), // HATA DÜZELTME: Pazar sayfası 2. sıraya (index 1) alındı.
+          const PazarSayfasi(), 
           ForumSayfasi(
             isGuest: widget.isGuest,
             isAdmin: widget.isAdmin,
@@ -81,7 +104,7 @@ class _AnaEkranState extends State<AnaEkran> {
         onTap: _onItemTapped,
         selectedItemColor: AppColors.primary,
         unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType.fixed, // 3'ten fazla item için gerekli
+        type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(
               icon: Icon(Icons.explore_outlined),
@@ -100,16 +123,15 @@ class _AnaEkranState extends State<AnaEkran> {
     );
   }
 
-  // --- ÖZEL APP BAR (Mesaj Sayacı İçeren) ---
+  // --- OPTİMİZE EDİLMİŞ ÖZEL APP BAR ---
   AppBar _buildKesfetAppBar() {
     return AppBar(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       elevation: 0,
       title: Row(
         children: [
-          // Küçük bir logo veya başlık
           Icon(Icons.school, color: AppColors.primary, size: 24),
-          SizedBox(width: 8),
+          const SizedBox(width: 8),
           Text(
             "Kampüs", 
             style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color, fontWeight: FontWeight.bold)
@@ -117,94 +139,85 @@ class _AnaEkranState extends State<AnaEkran> {
         ],
       ),
       actions: [
-        // 1. MESAJ İKONU (SAYAÇLI)
-        StreamBuilder<QuerySnapshot>(
-          // HATA DÜZELTME: Kullanıcı ID'si boşsa (misafir vb.) sorguyu çalıştırma.
+        // TEK BİR STREAM İLE HEM MESAJ HEM BİLDİRİM SAYISINI ALIYORUZ
+        // Bu, önceki koddaki 2 ayrı ağır sorgu yerine sadece 1 basit okuma yapar.
+        StreamBuilder<DocumentSnapshot>(
           stream: _currentUserId.isEmpty
               ? null
               : FirebaseFirestore.instance
-                  .collection('sohbetler')
-                  .where('participants', arrayContains: _currentUserId)
+                  .collection('kullanicilar')
+                  .doc(_currentUserId)
                   .snapshots(),
           builder: (context, snapshot) {
-            int unreadCount = 0;
-            if (snapshot.hasData) {
-              for (var doc in snapshot.data!.docs) {
-                final data = doc.data() as Map<String, dynamic>;
-                final countMap = data['unreadCount'] as Map<String, dynamic>?;
-                if (countMap != null) {
-                  unreadCount += (countMap[_currentUserId] as int? ?? 0);
-                }
+            int unreadMsgCount = 0;
+            int unreadNotifCount = 0;
+
+            if (snapshot.hasData && snapshot.data!.exists) {
+              final data = snapshot.data!.data() as Map<String, dynamic>?;
+              if (data != null) {
+                unreadMsgCount = data['totalUnreadMessages'] ?? 0;
+                unreadNotifCount = data['unreadNotifications'] ?? 0;
               }
             }
 
-            return Stack(
+            return Row(
               children: [
-                IconButton(
-                  icon: const Icon(Icons.chat_bubble_outline_rounded, color: Colors.grey),
-                  onPressed: () {
-                    if (widget.isGuest) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Giriş yapmalısınız.")));
-                    } else {
-                      Navigator.push(context, MaterialPageRoute(builder: (context) => const SohbetListesiEkrani()));
-                    }
-                  },
-                ),
-                if (unreadCount > 0)
-                  Positioned(
-                    right: 8,
-                    top: 8,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                      child: Text(
-                        unreadCount > 9 ? '9+' : unreadCount.toString(),
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                        textAlign: TextAlign.center,
+                // 1. MESAJ İKONU
+                Stack(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.chat_bubble_outline_rounded, color: Colors.grey),
+                      onPressed: () {
+                        if (widget.isGuest) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Giriş yapmalısınız.")));
+                        } else {
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const SohbetListesiEkrani()));
+                        }
+                      },
+                    ),
+                    if (unreadMsgCount > 0)
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                          child: Text(
+                            unreadMsgCount > 9 ? '9+' : unreadMsgCount.toString(),
+                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
-
-        // 2. BİLDİRİM İKONU (SAYAÇLI)
-        StreamBuilder<QuerySnapshot>(
-          // HATA DÜZELTME: Kullanıcı ID'si boşsa (misafir vb.) sorguyu çalıştırma.
-          stream: _currentUserId.isEmpty
-              ? null
-              : FirebaseFirestore.instance
-                  .collection('bildirimler')
-                  .where('userId', isEqualTo: _currentUserId)
-                  .where('isRead', isEqualTo: false)
-                  .snapshots(),
-          builder: (context, snapshot) {
-            int notifCount = snapshot.hasData ? snapshot.data!.docs.length : 0;
-            
-            return Stack(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.notifications_none_rounded, color: Colors.grey),
-                  onPressed: () {
-                     if (widget.isGuest) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Giriş yapmalısınız.")));
-                    } else {
-                      Navigator.push(context, MaterialPageRoute(builder: (context) => const BildirimEkrani()));
-                    }
-                  },
+                  ],
                 ),
-                if (notifCount > 0)
-                  Positioned(
-                    right: 12,
-                    top: 12,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+
+                // 2. BİLDİRİM İKONU
+                Stack(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_none_rounded, color: Colors.grey),
+                      onPressed: () {
+                         if (widget.isGuest) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Giriş yapmalısınız.")));
+                        } else {
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const BildirimEkrani()));
+                        }
+                      },
                     ),
-                  ),
+                    if (unreadNotifCount > 0)
+                      Positioned(
+                        right: 12,
+                        top: 12,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                        ),
+                      ),
+                  ],
+                ),
               ],
             );
           },

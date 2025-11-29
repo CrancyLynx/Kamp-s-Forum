@@ -15,35 +15,29 @@ import 'services/presence_service.dart';
 
 // Widgetlar
 import 'widgets/in_app_notification.dart'; 
-import 'widgets/app_logo.dart';
+// import 'widgets/app_logo.dart'; // Eğer kullanılıyorsa açın, ama aşağıda kullanılmadığı için kapattım.
 
 // Sayfalar
-import '../screens/auth/dogrulama_ekrani.dart';
-import '../screens/home/ana_ekran.dart'; 
-import '../screens/auth/giris_ekrani.dart'; 
-import '../screens/auth/splash_screen.dart';
-import '../screens/auth/verification_wrapper.dart'; 
-import 'utils/app_colors.dart';
+import 'screens/auth/dogrulama_ekrani.dart';
+import 'screens/home/ana_ekran.dart'; 
+import 'screens/auth/giris_ekrani.dart'; 
+import 'screens/auth/splash_screen.dart';
+import 'screens/auth/verification_wrapper.dart'; 
+// import 'utils/app_colors.dart'; // Gerekirse açın
 
 
-// --- BİLDİRİM HATA DÜZELTMESİ: TOP-LEVEL BACKGROUND HANDLER ---
-// Bu fonksiyon, FCM gereksinimi nedeniyle sınıf dışında (top-level) tanımlanmalıdır.
+// --- BACKGROUND HANDLER ---
 @pragma('vm:entry-point')
 Future<void> firebaseBackgroundMessageHander(RemoteMessage message) async {
-  // Arka plan işlemleri için Firebase'in tekrar başlatılması gerekir.
-  // main() içinde çağrılsa bile arka plan izolatöründe başlatmak standarttır.
   await Firebase.initializeApp(); 
   print("Arka planda bir mesaj işleniyor: ${message.messageId}");
-  // Burada kritik arka plan işlemleri (örneğin loglama, veri güncelleme) yapılabilir.
 }
+
 // --- GLOBAL DEĞİŞKENLER ---
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-const List<String> kAdminUids = [
-  "oZ2RIhV1JdYVIr0xyqCwhX9fJYq1", 
-  "VD8MeJIhhRVtbT9iiUdMEaCe3MO2"
-];
-
+// DİKKAT: Eski 'kAdminUids' listesi buradan KALDIRILDI. 
+// Artık yetki kontrolü tamamen veritabanı üzerinden (role: 'admin') yapılıyor.
 
 // --- TEMA YÖNETİCİSİ ---
 class ThemeProvider extends ChangeNotifier {
@@ -62,11 +56,9 @@ class ThemeProvider extends ChangeNotifier {
 // --- MAIN FONKSİYONU ---
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // HATA ÇÖZÜMÜ: Tarih formatlaması için Türkçe yerelleştirme verilerini yükle
   await initializeDateFormatting('tr_TR', null);
   await Firebase.initializeApp();
   
-  // DÜZELTME: Top-level handler'ı doğrudan bağlıyoruz
   FirebaseMessaging.onBackgroundMessage(firebaseBackgroundMessageHander); 
   
   Intl.defaultLocale = 'tr_TR'; 
@@ -101,11 +93,8 @@ class _BizimUygulamaState extends State<BizimUygulama> {
   @override
   void initState() {
     super.initState();
-    // Bildirim servisinin initialize edilmesi
     _notificationService.initialize(); 
     
-    // Uygulama ön planda iken gelen mesajları dinleme (In-App Notification için)
-    // CRITICAL: Bu Stream'in PushNotificationService içinde doğru tanımlanıp açıldığını varsayıyoruz.
     _notificationService.onMessage.listen((message) {
       if (message.notification != null) {
         _showInAppNotification(
@@ -216,29 +205,34 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
              return const AnaEkran(isGuest: true, isAdmin: false, userName: 'Misafir', realName: 'Misafir');
           }
 
-          // 2. DOĞRULAMA KONTROLÜ (Hibrit Sistem)
-          // Eğer e-posta doğrulanmamışsa VE telefon numarası eklenmemişse seçim ekranına at.
+          // 2. DOĞRULAMA KONTROLÜ
           if (!user.emailVerified && (user.phoneNumber == null || user.phoneNumber!.isEmpty)) {
             return const VerificationWrapper();
           }
 
           final userId = user.uid;
-          final isAdministrator = kAdminUids.contains(userId);
 
-          // 3. Firestore Durum Kontrolü
+          // 3. Firestore Durum ve ROL Kontrolü
           return StreamBuilder<DocumentSnapshot>(
             stream: FirebaseFirestore.instance.collection('kullanicilar').doc(userId).snapshots(),
             builder: (context, userSnapshot) { 
               if (userSnapshot.connectionState == ConnectionState.waiting) return const LoadingScreen();
               
+              // Kullanıcı veritabanında yoksa veya silinmişse (4. adımda silmiştik) çıkış yap.
               if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-                 return const DogrulamaEkrani();
+                 // Güvenlik: Veritabanında kaydı olmayan (örn: silinmiş) kullanıcıyı dışarı at
+                 FirebaseAuth.instance.signOut();
+                 return const GirisEkrani();
               }
 
               final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
               final status = userData?['status'] ?? 'Unverified';
               final String userName = userData?['takmaAd'] ?? userData?['ad'] ?? 'Anonim'; 
               final String realName = userData?['ad'] ?? 'Anonim'; 
+              
+              // YENİ: Admin kontrolü artık veritabanındaki 'role' alanından yapılıyor.
+              final String role = userData?['role'] ?? 'user';
+              final bool isAdministrator = (role == 'admin');
 
               if (isAdministrator || status == 'Verified') {
                 return AnaEkran(

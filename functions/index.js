@@ -4,8 +4,8 @@ const admin = require("firebase-admin");
 admin.initializeApp();
 const db = admin.firestore();
 
+
 // --- AYARLAR ---
-const ADMIN_UIDS = ["oZ2RIhV1JdYVIr0xyqCwhX9fJYq1", "VD8MeJIhhRVtbT9iiUdMEaCe3MO2"];
 const REGION = "europe-west1";
 
 const checkAuth = (context) => {
@@ -17,7 +17,6 @@ const checkAuth = (context) => {
 /**
  * =================================================================================
  * 1. BİLDİRİM GÖNDERİCİ (FCM TRIGGER)
- * GÜNCELLEME: Firebase Admin SDK v13+ uyumlu "sendEachForMulticast" kullanıldı.
  * =================================================================================
  */
 exports.sendPushNotification = functions.region(REGION).firestore
@@ -39,14 +38,12 @@ exports.sendPushNotification = functions.region(REGION).firestore
 
       if (tokens.length === 0) return null;
 
-      // YENİ API YAPISI (Multicast)
       const message = {
         tokens: tokens,
         notification: {
           title: "Kampüs Forum",
           body: notificationData.message || "Yeni bir bildiriminiz var.",
         },
-        // Android ve iOS için ses ayarları ve data payload
         android: {
           notification: {
             sound: "default",
@@ -67,12 +64,9 @@ exports.sendPushNotification = functions.region(REGION).firestore
         },
       };
 
-      // Eski sendToDevice yerine sendEachForMulticast kullanıyoruz
       const response = await admin.messaging().sendEachForMulticast(message);
 
       const tokensToRemove = [];
-      
-      // Yanıt yapısı da değişti: response.results yerine response.responses
       response.responses.forEach((result, index) => {
         const error = result.error;
         if (error) {
@@ -91,7 +85,6 @@ exports.sendPushNotification = functions.region(REGION).firestore
         console.log(`${tokensToRemove.length} geçersiz token silindi.`);
       }
 
-      console.log(`Bildirim başarıyla gönderildi: ${userId}, Başarılı: ${response.successCount}, Başarısız: ${response.failureCount}`);
       return {success: true};
     } catch (error) {
       console.error("Bildirim gönderme hatası:", error);
@@ -99,8 +92,11 @@ exports.sendPushNotification = functions.region(REGION).firestore
     }
   });
 
-// --- DİĞER MEVCUT FONKSİYONLAR ---
-
+/**
+ * =================================================================================
+ * 2. USER AVATAR GÜNCELLEME (TRIGGER)
+ * =================================================================================
+ */
 exports.onUserAvatarUpdate = functions.region(REGION).firestore
   .document("kullanicilar/{userId}")
   .onUpdate(async (change, context) => {
@@ -123,12 +119,23 @@ exports.onUserAvatarUpdate = functions.region(REGION).firestore
     return batch.commit();
   });
 
+/**
+ * =================================================================================
+ * 3. GÖNDERİ SİLME (CALLABLE - GÜNCELLENDİ)
+ * Artık veritabanındaki 'role' alanını kontrol ediyor.
+ * =================================================================================
+ */
 exports.deletePost = functions.region(REGION).https.onCall(async (data, context) => {
   checkAuth(context);
   const postId = data.postId;
   const requesterUid = context.auth.uid;
 
   if (!postId) throw new functions.https.HttpsError("invalid-argument", "Post ID eksik.");
+
+  // İstek yapan kullanıcının verilerini çek (Admin mi?)
+  const requesterDoc = await db.collection("kullanicilar").doc(requesterUid).get();
+  const requesterData = requesterDoc.data() || {};
+  const isAdmin = requesterData.role === "admin";
 
   const postRef = db.collection("gonderiler").doc(postId);
   const postDoc = await postRef.get();
@@ -137,8 +144,8 @@ exports.deletePost = functions.region(REGION).https.onCall(async (data, context)
 
   const postData = postDoc.data();
   const authorId = postData.userId;
-  const isAdmin = ADMIN_UIDS.includes(requesterUid);
 
+  // Sadece sahibi veya Admin silebilir
   if (authorId !== requesterUid && !isAdmin) {
     throw new functions.https.HttpsError("permission-denied", "Yetkisiz işlem.");
   }
@@ -161,42 +168,93 @@ exports.deletePost = functions.region(REGION).https.onCall(async (data, context)
   return {success: true};
 });
 
+/**
+ * =================================================================================
+ * 4. HESAP SİLME (ANONİMLEŞTİRME / SOFT DELETE)
+ * Kullanıcının verilerini silmek yerine ismini "Silinmiş Üye" yapar.
+ * Forum bütünlüğü korunur, kişisel veriler (resim, isim) yok edilir.
+ * =================================================================================
+ */
 exports.deleteUserAccount = functions.region(REGION).https.onCall(async (data, context) => {
-  const targetUserId = data.userId || context.auth.uid;
-  if (targetUserId !== context.auth.uid && !ADMIN_UIDS.includes(context.auth.uid)) {
-    throw new functions.https.HttpsError("permission-denied", "Yetkiniz yok.");
+  const requesterUid = context.auth.uid;
+  // Hedef kullanıcı ID'si gelmezse, isteği yapan kişi kendi hesabını siliyordur.
+  const targetUserId = data.userId || requesterUid;
+
+  // Yetki Kontrolü
+  if (targetUserId !== requesterUid) {
+    const requesterDoc = await db.collection("kullanicilar").doc(requesterUid).get();
+    const requesterData = requesterDoc.data() || {};
+    if (requesterData.role !== "admin") {
+      throw new functions.https.HttpsError("permission-denied", "Yetkiniz yok.");
+    }
   }
 
-  const batch = db.batch();
+  // YARDIMCI FONKSİYON: Batch ile toplu güncelleme (Chunking)
+  async function anonymizeQueryBatch(query, resolve) {
+    const snapshot = await query.get();
+    const batchSize = snapshot.size;
+    if (batchSize === 0) {
+      resolve();
+      return;
+    }
 
-  const postsQuery = await db.collection("gonderiler").where("userId", "==", targetUserId).get();
-  postsQuery.docs.forEach((doc) => batch.delete(doc.ref));
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => {
+      // Belgeyi silmiyoruz, anonimleştiriyoruz
+      batch.update(doc.ref, {
+        userId: 'deleted_user',      // Artık bu gönderi kimseye ait değil
+        takmaAd: 'Silinmiş Üye',     // İsim gizlendi
+        userAvatar: null,            // (Yorumlar için) Avatar kaldırıldı
+        avatarUrl: null              // (Gönderiler için) Avatar kaldırıldı
+      });
+    });
+    await batch.commit();
 
-  const commentsQuery = await db.collectionGroup("yorumlar").where("userId", "==", targetUserId).get();
-  commentsQuery.docs.forEach((doc) => batch.delete(doc.ref));
+    process.nextTick(() => {
+      anonymizeQueryBatch(query, resolve);
+    });
+  }
 
-  const userRef = db.collection("kullanicilar").doc(targetUserId);
-  batch.delete(userRef);
+  // 1. Gönderileri Anonimleştir
+  const postsQuery = db.collection("gonderiler").where("userId", "==", targetUserId).limit(500);
+  await new Promise((resolve, reject) => anonymizeQueryBatch(postsQuery, resolve).catch(reject));
 
-  await batch.commit();
+  // 2. Yorumları Anonimleştir
+  const commentsQuery = db.collectionGroup("yorumlar").where("userId", "==", targetUserId).limit(500);
+  await new Promise((resolve, reject) => anonymizeQueryBatch(commentsQuery, resolve).catch(reject));
 
+  // 3. Profil Resmini Storage'dan SİL (Bu kişisel veridir, kesin silinmeli)
   try {
     const bucket = admin.storage().bucket();
-    // Dosya yoksa hata vermemesi için try-catch içinde
     await bucket.file(`profil_resimleri/${targetUserId}.jpg`).delete().catch(() => {});
   } catch (e) {
     console.log("Storage silme hatası (önemsiz):", e);
   }
 
+  // 4. Sohbetlerdeki Durum (Opsiyonel ama önerilir)
+  // Sohbet geçmişi kalsın ama katılımcı listesinden çıksın veya ismi değişsin istenebilir.
+  // Şimdilik sohbetlere dokunmuyoruz, kullanıcı Auth'dan silinince zaten giriş yapamaz.
+
+  // 5. Kullanıcı Dokümanını Tamamen SİL
+  // Artık giriş yapamayacağı için profil verisine gerek yok.
+  await db.collection("kullanicilar").doc(targetUserId).delete();
+
+  // 6. Auth Kaydını Sil
   try {
     await admin.auth().deleteUser(targetUserId);
-    return {success: true};
+    return {success: true, message: "Hesap anonimleştirilerek silindi."};
   } catch (error) {
     console.error("Auth silme hatası:", error);
-    return {success: true, message: "Veriler silindi, Auth silinemedi veya kullanıcı yok."};
+    return {success: true, message: "Veriler anonimleştirildi, Auth silinemedi."};
   }
 });
 
+/**
+ * =================================================================================
+ * 5. KULLANICI OLUŞTURULDUĞUNDA (TRIGGER - GÜNCELLENDİ)
+ * Otomatik olarak 'role: user' ekliyoruz.
+ * =================================================================================
+ */
 exports.onUserCreated = functions.region(REGION).firestore
   .document("kullanicilar/{userId}")
   .onCreate((snap, context) => {
@@ -204,6 +262,141 @@ exports.onUserCreated = functions.region(REGION).firestore
       postCount: 0, commentCount: 0, likeCount: 0, followerCount: 0, followingCount: 0,
       earnedBadges: [], followers: [], following: [], savedPosts: [],
       isOnline: false, status: "Unverified",
+      role: "user", // VARSAYILAN ROL
       kayit_tarihi: admin.firestore.FieldValue.serverTimestamp(),
     }, {merge: true});
+    
+
+  });
+  
+  /**
+ * =================================================================================
+ * 6. SAYAÇ YÖNETİMİ: BİLDİRİMLER (YENİ)
+ * Bildirim eklenince, silinince veya okununca sayacı günceller.
+ * =================================================================================
+ */
+exports.onNotificationWrite = functions.region(REGION).firestore
+  .document("bildirimler/{notificationId}")
+  .onWrite(async (change, context) => {
+    const beforeData = change.before.exists ? change.before.data() : null;
+    const afterData = change.after.exists ? change.after.data() : null;
+
+    // İşlem yapılan kullanıcı ID'si (Silindiyse eskiden al, eklendiyse yeniden al)
+    const userId = beforeData ? beforeData.userId : afterData.userId;
+    if (!userId) return null;
+
+    let incrementValue = 0;
+
+    // 1. Yeni Bildirim Eklendi (Okunmamışsa artır)
+    if (!beforeData && afterData) {
+      if (!afterData.isRead) incrementValue = 1;
+    }
+    // 2. Bildirim Silindi (Okunmamışsa azalt)
+    else if (beforeData && !afterData) {
+      if (!beforeData.isRead) incrementValue = -1;
+    }
+    // 3. Bildirim Güncellendi (Okundu durumu değiştiyse)
+    else if (beforeData && afterData) {
+      const wasRead = beforeData.isRead || false;
+      const isRead = afterData.isRead || false;
+
+      if (!wasRead && isRead) incrementValue = -1; // Okundu işaretlendi -> Azalt
+      if (wasRead && !isRead) incrementValue = 1;  // Okunmadı işaretlendi -> Artır
+    }
+
+    if (incrementValue === 0) return null;
+
+    return db.collection("kullanicilar").doc(userId).update({
+      unreadNotifications: admin.firestore.FieldValue.increment(incrementValue)
+    }).catch(err => console.log("Sayaç güncelleme hatası (önemsiz):", err));
+  });
+  /**
+ * =================================================================================
+ * 7. SAYAÇ YÖNETİMİ: MESAJLAR (YENİ)
+ * Sohbetlerdeki 'unreadCount' haritası değiştiğinde toplam sayıyı günceller.
+ * =================================================================================
+ */
+exports.onChatWrite = functions.region(REGION).firestore
+  .document("sohbetler/{chatId}")
+  .onWrite(async (change, context) => {
+    const beforeData = change.before.exists ? change.before.data() : {};
+    const afterData = change.after.exists ? change.after.data() : {};
+
+    const beforeCounts = beforeData.unreadCount || {};
+    const afterCounts = afterData.unreadCount || {};
+
+    // Sohbetin tüm katılımcılarını bul (Hem eski hem yeni listeyi birleştir)
+    const allUserIds = new Set([
+      ...Object.keys(beforeCounts),
+      ...Object.keys(afterCounts)
+    ]);
+
+    const batch = db.batch();
+    let batchHasOps = false;
+
+    allUserIds.forEach(userId => {
+      const oldVal = beforeCounts[userId] || 0;
+      const newVal = afterCounts[userId] || 0;
+      const diff = newVal - oldVal;
+
+      if (diff !== 0) {
+        const userRef = db.collection("kullanicilar").doc(userId);
+        // Toplam sayıyı güncelle
+        batch.update(userRef, {
+          totalUnreadMessages: admin.firestore.FieldValue.increment(diff)
+        });
+        batchHasOps = true;
+      }
+    });
+
+    if (batchHasOps) {
+      return batch.commit().catch(err => console.error("Mesaj sayacı hatası:", err));
+    }
+    return null;
+  });
+
+  /**
+ * =================================================================================
+ * 8. BAKIM MODU: SAYAÇLARI SIFIRDAN HESAPLA (YENİ - CALLABLE)
+ * Mevcut kullanıcıların sayaçları yanlışsa veya null ise bunu çalıştırıp düzeltebilirsin.
+ * =================================================================================
+ */
+
+  exports.recalculateUserCounters = functions.region(REGION).https.onCall(async (data, context) => {
+  checkAuth(context);
+  const targetUserId = context.auth.uid; // Sadece kendi sayacını düzeltebilir
+
+  // 1. Okunmamış Bildirimleri Say
+  const notifSnap = await db.collection("bildirimler")
+    .where("userId", "==", targetUserId)
+    .where("isRead", "==", false)
+    .count()
+    .get();
+  
+  const unreadNotifCount = notifSnap.data().count;
+
+  // 2. Okunmamış Mesajları Say (Burası biraz daha maliyetli ama tek seferlik)
+  // Not: count() fonksiyonu map içindeki değerleri toplayamaz, mecburen dökümanları çekeceğiz.
+  let totalUnreadMsg = 0;
+  const chatsSnap = await db.collection("sohbetler")
+    .where("participants", "array-contains", targetUserId)
+    .get();
+  
+  chatsSnap.forEach(doc => {
+    const d = doc.data();
+    if (d.unreadCount && d.unreadCount[targetUserId]) {
+      totalUnreadMsg += d.unreadCount[targetUserId];
+    }
+  });
+
+  // 3. Kullanıcıyı Güncelle
+  await db.collection("kullanicilar").doc(targetUserId).update({
+    unreadNotifications: unreadNotifCount,
+    totalUnreadMessages: totalUnreadMsg
+  });
+
+  return { 
+    success: true, 
+    message: `Sayaçlar güncellendi. Bildirim: ${unreadNotifCount}, Mesaj: ${totalUnreadMsg}` 
+  };
   });

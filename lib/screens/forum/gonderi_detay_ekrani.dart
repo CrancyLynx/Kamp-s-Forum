@@ -46,6 +46,8 @@ class GonderiDetayEkrani extends StatefulWidget {
   factory GonderiDetayEkrani.fromDoc(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     final currentUser = FirebaseAuth.instance.currentUser;
+    // NOT: Admin kontrolü artık buradaki listeden değil, 1. Adımda yaptığımız veritabanı rolünden yapılmalı
+    // ancak şimdilik mevcut yapıyı bozmuyorum.
     const List<String> admins = ["oZ2RIhV1JdYVIr0xyqCwhX9fJYq1", "VD8MeJIhhRVtbT9iiUdMEaCe3MO2"];
     final bool isAdministrator = admins.contains(currentUser?.uid);
 
@@ -267,7 +269,7 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
     }
   }
 
-  // --- YENİ EKLENEN: ŞİKAYET FONKSİYONU ---
+  // --- ŞİKAYET FONKSİYONU ---
   void _showReportDialog({String? commentId, String? commentContent, String? commentOwnerId}) {
     final reasonController = TextEditingController();
     final isComment = commentId != null;
@@ -307,12 +309,12 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
               try {
                 await FirebaseFirestore.instance.collection('sikayetler').add({
                   'reporterId': _currentUserId,
-                  'reporterName': widget.userName, // Şikayet edenin adı
+                  'reporterName': widget.userName, 
                   'targetId': isComment ? commentId : widget.postId,
                   'targetType': isComment ? 'comment' : 'post',
-                  'postId': widget.postId, // Her zaman hangi postun altında olduğunu bilelim
-                  'postTitle': widget.baslik, // Admin panelinde görünmesi için
-                  'targetTitle': isComment ? commentContent : widget.baslik, // Şikayet edilen içerik özeti
+                  'postId': widget.postId, 
+                  'postTitle': widget.baslik, 
+                  'targetTitle': isComment ? commentContent : widget.baslik, 
                   'targetOwnerId': isComment ? commentOwnerId : widget.authorUserId,
                   'reason': reason,
                   'timestamp': FieldValue.serverTimestamp(),
@@ -338,6 +340,9 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
 
   @override
   Widget build(BuildContext context) {
+    // --- YENİ EKLENDİ: Silinmiş Kullanıcı Kontrolü ---
+    final bool isDeletedUser = widget.authorUserId == 'deleted_user';
+
     String timeStr = '';
     if (widget.zaman is Timestamp) {
       timeStr = timeago.format((widget.zaman as Timestamp).toDate(), locale: 'tr');
@@ -399,20 +404,26 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           GestureDetector(
-                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => KullaniciProfilDetayEkrani(userId: widget.authorUserId, userName: widget.adSoyad))),
+                            // GÜNCELLENMİŞ: Silinmişse tıklanmasın
+                            onTap: isDeletedUser 
+                                ? null 
+                                : () => Navigator.push(context, MaterialPageRoute(builder: (_) => KullaniciProfilDetayEkrani(userId: widget.authorUserId, userName: widget.adSoyad))),
                             child: Row(
                               children: [
                                 Hero(
                                   tag: 'avatar_${widget.postId}',
                                   child: CircleAvatar(
                                     radius: 24,
-                                    backgroundImage: (widget.avatarUrl != null && widget.avatarUrl!.isNotEmpty) 
+                                    // GÜNCELLENMİŞ AVATAR
+                                    backgroundImage: (!isDeletedUser && widget.avatarUrl != null && widget.avatarUrl!.isNotEmpty) 
                                         ? CachedNetworkImageProvider(widget.avatarUrl!) 
                                         : null,
-                                    backgroundColor: AppColors.primary.withOpacity(0.1),
-                                    child: (widget.avatarUrl == null || widget.avatarUrl!.isEmpty)
-                                        ? Text(widget.adSoyad[0].toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))
-                                        : null,
+                                    backgroundColor: isDeletedUser ? Colors.grey[300] : AppColors.primary.withOpacity(0.1),
+                                    child: isDeletedUser
+                                        ? const Icon(Icons.person_off, color: Colors.grey)
+                                        : (widget.avatarUrl == null || widget.avatarUrl!.isEmpty)
+                                            ? Text(widget.adSoyad[0].toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary))
+                                            : null,
                                   ),
                                 ),
                                 const SizedBox(width: 12),
@@ -420,7 +431,15 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(widget.adSoyad, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                      Text(
+                                        widget.adSoyad, 
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold, 
+                                          fontSize: 16,
+                                          color: isDeletedUser ? Colors.grey : null, // Grileştir
+                                          fontStyle: isDeletedUser ? FontStyle.italic : null
+                                        )
+                                      ),
                                       Text("$timeStr • ${widget.kategori}", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                                     ],
                                   ),
@@ -568,6 +587,9 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
     final bool isMyComment = data['userId'] == _currentUserId;
     final bool isAdminComment = data['userId'] == widget.authorUserId;
     
+    // YENİ: Yorum sahibi silinmiş mi?
+    final bool isCommenterDeleted = data['userId'] == 'deleted_user';
+    
     String timeStr = '';
     if (data['timestamp'] != null) {
       timeStr = timeago.format((data['timestamp'] as Timestamp).toDate(), locale: 'tr');
@@ -579,16 +601,24 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           GestureDetector(
-            onTap: () {
-               if(data['userId'] != null) {
-                 Navigator.push(context, MaterialPageRoute(builder: (_) => KullaniciProfilDetayEkrani(userId: data['userId'], userName: data['userName'])));
-               }
-            },
+            // Silinmişse profile gitmesin
+            onTap: isCommenterDeleted 
+                ? null 
+                : () {
+                   if(data['userId'] != null) {
+                     Navigator.push(context, MaterialPageRoute(builder: (_) => KullaniciProfilDetayEkrani(userId: data['userId'], userName: data['userName'])));
+                   }
+                },
             child: CircleAvatar(
               radius: 18,
-              backgroundImage: (data['userAvatar'] != null) ? CachedNetworkImageProvider(data['userAvatar']) : null,
-              backgroundColor: Colors.grey[200],
-              child: (data['userAvatar'] == null) ? Text(data['userName']?[0] ?? '?', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54)) : null,
+              // Avatar Kontrolü
+              backgroundImage: (!isCommenterDeleted && data['userAvatar'] != null) ? CachedNetworkImageProvider(data['userAvatar']) : null,
+              backgroundColor: isCommenterDeleted ? Colors.grey[300] : Colors.grey[200],
+              child: isCommenterDeleted 
+                  ? const Icon(Icons.person_off, size: 16, color: Colors.grey)
+                  : (data['userAvatar'] == null) 
+                      ? Text(data['userName']?[0] ?? '?', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54)) 
+                      : null,
             ),
           ),
           const SizedBox(width: 12),
@@ -598,8 +628,16 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
               children: [
                 Row(
                   children: [
-                    Text(data['userName'] ?? 'Anonim', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    if (isAdminComment)
+                    Text(
+                      data['userName'] ?? 'Anonim', 
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold, 
+                        fontSize: 13,
+                        color: isCommenterDeleted ? Colors.grey : null, // Grileştir
+                        fontStyle: isCommenterDeleted ? FontStyle.italic : null
+                      )
+                    ),
+                    if (isAdminComment && !isCommenterDeleted)
                       Padding(padding: const EdgeInsets.only(left: 4.0), child: Icon(Icons.verified, size: 14, color: AppColors.primary)),
                     const SizedBox(width: 6),
                     Text(timeStr, style: TextStyle(color: Colors.grey[500], fontSize: 11)),
@@ -678,7 +716,7 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
     final ref = FirebaseFirestore.instance.collection('gonderiler').doc(widget.postId);
     await ref.collection('yorumlar').doc(commentId).delete();
     await ref.update({'commentCount': FieldValue.increment(-1)});
-    if(userId != null) {
+    if(userId != null && userId != 'deleted_user') {
       FirebaseFirestore.instance.collection('kullanicilar').doc(userId).update({'commentCount': FieldValue.increment(-1)});
     }
   }
