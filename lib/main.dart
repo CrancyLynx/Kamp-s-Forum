@@ -21,7 +21,7 @@ import 'screens/auth/dogrulama_ekrani.dart';
 import 'screens/home/ana_ekran.dart'; 
 import 'screens/auth/giris_ekrani.dart'; 
 import 'screens/auth/verification_wrapper.dart'; 
-// YENİ: Onboarding importu
+// Onboarding importu
 import 'screens/auth/onboarding_screen.dart';
 
 @pragma('vm:entry-point')
@@ -56,7 +56,6 @@ Future<void> main() async {
   
   final prefs = await SharedPreferences.getInstance();
   
-  // Tema ayarını oku
   ThemeMode initialThemeMode = ThemeMode.system; 
   try {
     final themeValue = prefs.get('themeMode');
@@ -65,7 +64,6 @@ Future<void> main() async {
     }
   } catch (_) {}
 
-  // YENİ: İlk açılış kontrolü
   bool isFirstTime = prefs.getBool('isFirstTime') ?? true;
 
   runApp( 
@@ -162,8 +160,7 @@ class _BizimUygulamaState extends State<BizimUygulama> {
         scaffoldBackgroundColor: const Color(0xFF121212),
         useMaterial3: true,
       ),
-      // YENİ: Başlangıç ekranı mantığı
-      home: widget.isFirstTime ? const OnboardingScreen() : const AnaKontrolcu(),
+     home: const AnaKontrolcu(),
     );
   }
 }
@@ -192,10 +189,12 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, authSnapshot) { 
+        // 1. Auth Durumu Bekleniyor
         if (authSnapshot.connectionState == ConnectionState.waiting) {
           return const LoadingScreen();
         }
         
+        // 2. Kullanıcı Giriş Yapmışsa
         if (authSnapshot.hasData) {
           final user = authSnapshot.data!;
           
@@ -209,18 +208,57 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
 
           final userId = user.uid;
 
+          // 3. Firestore Verisi
           return StreamBuilder<DocumentSnapshot>(
             stream: FirebaseFirestore.instance.collection('kullanicilar').doc(userId).snapshots(),
             builder: (context, userSnapshot) { 
+              // HATA YÖNETİMİ EKLENDİ: Hata varsa otomatik çıkış yapma, hata göster
+              if (userSnapshot.hasError) {
+                return Scaffold(
+                  body: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, color: Colors.red, size: 50),
+                        const SizedBox(height: 16),
+                        const Text("Veri yüklenirken hata oluştu."),
+                        Text("Hata: ${userSnapshot.error}", textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                        const SizedBox(height: 20),
+                        ElevatedButton(
+                          onPressed: () => FirebaseAuth.instance.signOut(),
+                          child: const Text("Çıkış Yap ve Tekrar Dene"),
+                        )
+                      ],
+                    ),
+                  ),
+                );
+              }
+
               if (userSnapshot.connectionState == ConnectionState.waiting) {
                 return const LoadingScreen();
               }
               
+              // DÜZELTME: Veri hemen gelmezse Loading göster, direkt çıkış yapma!
+              // Eğer bağlantı aktifse ve veri YOKSA (null veya !exists), o zaman profil yok demektir.
               if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                   FirebaseAuth.instance.signOut();
-                 });
-                 return const GirisEkrani();
+                 return Scaffold(
+                   body: Center(
+                     child: Column(
+                       mainAxisAlignment: MainAxisAlignment.center,
+                       children: [
+                         const CircularProgressIndicator(),
+                         const SizedBox(height: 20),
+                         const Text("Profil hazırlanıyor..."),
+                         const SizedBox(height: 20),
+                         // Uzun sürerse çıkış butonu
+                         TextButton(
+                           onPressed: () => FirebaseAuth.instance.signOut(), 
+                           child: const Text("İptal Et ve Çıkış Yap")
+                         )
+                       ],
+                     ),
+                   ),
+                 );
               }
 
               final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
@@ -244,6 +282,7 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
           ); 
         } 
 
+        // 4. Kullanıcı Yoksa (Giriş Ekranı)
         return const GirisEkrani(); 
       }, 
     );

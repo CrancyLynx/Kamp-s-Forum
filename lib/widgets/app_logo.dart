@@ -38,7 +38,7 @@ class AppLogo extends StatelessWidget {
           ),
           child: ClipOval(
             child: Image.asset(
-              'assets/images/app_icon.jpg',
+              'assets/images/app_logo3.png',
               fit: BoxFit.cover, // Resmi daireye tam doldur
               errorBuilder: (context, error, stackTrace) {
                 return Center(

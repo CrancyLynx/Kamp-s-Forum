@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart'; 
+import 'package:shared_preferences/shared_preferences.dart'; // EKLENDİ: Hafıza kontrolü için
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart'; // EKLENDİ: Tanıtım paketi
+
 import '../forum/forum_sayfasi.dart';
 import 'kesfet_sayfasi.dart';
 import '../market/pazar_sayfasi.dart'; 
 import '../chat/sohbet_listesi_ekrani.dart'; 
 import '../notification/bildirim_ekrani.dart'; 
-import '../profile/profil_ekrani.dart'; // EKLENDİ: Profil ekranı importu
+import '../profile/profil_ekrani.dart'; 
 import '../../utils/app_colors.dart';
 
 class AnaEkran extends StatefulWidget {
@@ -33,6 +36,13 @@ class _AnaEkranState extends State<AnaEkran> {
   late final PageController _pageController;
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
+  // --- TANITIM İÇİN KEY'LER (KONUM BELİRLEYİCİLER) ---
+  final GlobalKey keyKesfet = GlobalKey();
+  final GlobalKey keyPazar = GlobalKey();
+  final GlobalKey keyForum = GlobalKey();
+  final GlobalKey keyProfil = GlobalKey();
+  // ----------------------------------------------------
+
   @override
   void initState() {
     super.initState();
@@ -41,6 +51,161 @@ class _AnaEkranState extends State<AnaEkran> {
     if (!_currentUserId.isEmpty && !widget.isGuest) {
       _verifyCounters();
     }
+
+    // EKLENDİ: Sayfa açıldıktan hemen sonra tanıtımı kontrol et
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndShowTutorial();
+    });
+  }
+
+  // EKLENDİ: Tanıtımı Gösterme Mantığı
+  Future<void> _checkAndShowTutorial() async {
+    final prefs = await SharedPreferences.getInstance();
+    // 'isTutorialShown' false ise veya null ise tanıtımı göster
+    bool isShown = prefs.getBool('isTutorialShown') ?? false;
+
+    if (!isShown) {
+      // Biraz bekle ki ekran tam yüklensin
+      await Future.delayed(const Duration(seconds: 1));
+      if (!mounted) return;
+      _createTutorial();
+      // Gösterildi olarak işaretle
+      await prefs.setBool('isTutorialShown', true);
+    }
+  }
+
+  void _createTutorial() {
+    TutorialCoachMark(
+      targets: _createTargets(),
+      colorShadow: Colors.black, // Arka plan kararma rengi
+      textSkip: "ATLA",
+      paddingFocus: 10,
+      opacityShadow: 0.8,
+      onFinish: () {
+        debugPrint("Tanıtım bitti");
+      },
+      onClickTarget: (target) {
+        debugPrint("Hedefe tıklandı: $target");
+      },
+      onSkip: () {
+        debugPrint("Tanıtım geçildi");
+        return true; 
+      },
+    ).show(context: context);
+  }
+
+  List<TargetFocus> _createTargets() {
+    List<TargetFocus> targets = [];
+
+    // 1. HEDEF: PAZAR ALANI
+    targets.add(
+      TargetFocus(
+        identify: "Pazar",
+        keyTarget: keyPazar,
+        alignSkip: Alignment.topRight,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (context, controller) {
+              return const Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Icon(Icons.shopping_bag, color: Colors.white, size: 50),
+                  SizedBox(height: 10),
+                  Text(
+                    "Kampüs Pazarı",
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.only(top: 10.0),
+                    child: Text(
+                      "Buradan ders notlarını satabilir veya ikinci el eşyalar bulabilirsin.",
+                      style: TextStyle(color: Colors.white),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+
+    // 2. HEDEF: FORUM ALANI
+    targets.add(
+      TargetFocus(
+        identify: "Forum",
+        keyTarget: keyForum,
+        alignSkip: Alignment.topRight,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (context, controller) {
+              return const Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Icon(Icons.forum, color: Colors.white, size: 50),
+                  SizedBox(height: 10),
+                  Text(
+                    "Forum & İtiraflar",
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.only(top: 10.0),
+                    child: Text(
+                      "Kampüs gündemini buradan takip et. İstersen anonim itiraflarda bulun.",
+                      style: TextStyle(color: Colors.white),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+
+    // 3. HEDEF: PROFIL
+    targets.add(
+      TargetFocus(
+        identify: "Profil",
+        keyTarget: keyProfil,
+        alignSkip: Alignment.topRight,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (context, controller) {
+              return const Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Icon(Icons.person, color: Colors.white, size: 50),
+                  SizedBox(height: 10),
+                  Text(
+                    "Profilin",
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.only(top: 10.0),
+                    child: Text(
+                      "Rozetlerini görmek, ayarlarını yapmak ve çıkış yapmak için burayı kullan.",
+                      style: TextStyle(color: Colors.white),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+
+    return targets;
   }
   
   Future<void> _verifyCounters() async {
@@ -94,7 +259,6 @@ class _AnaEkranState extends State<AnaEkran> {
             userName: widget.userName,
             realName: widget.realName,
           ),
-          // EKLENDİ: Profil Ekranı 4. sayfa olarak
           const ProfilEkrani(),
         ],
       ),
@@ -104,23 +268,23 @@ class _AnaEkranState extends State<AnaEkran> {
         selectedItemColor: AppColors.primary,
         unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
-        items: const [
+        items: [
+          // EKLENDİ: Key'ler Icon'lara verildi
           BottomNavigationBarItem(
-              icon: Icon(Icons.explore_outlined),
-              activeIcon: Icon(Icons.explore),
+              icon: Icon(Icons.explore_outlined, key: keyKesfet),
+              activeIcon: const Icon(Icons.explore),
               label: 'Keşfet'),
           BottomNavigationBarItem(
-              icon: Icon(Icons.shopping_bag_outlined),
-              activeIcon: Icon(Icons.shopping_bag),
+              icon: Icon(Icons.shopping_bag_outlined, key: keyPazar),
+              activeIcon: const Icon(Icons.shopping_bag),
               label: 'Pazar'),
           BottomNavigationBarItem(
-              icon: Icon(Icons.forum_outlined),
-              activeIcon: Icon(Icons.forum),
+              icon: Icon(Icons.forum_outlined, key: keyForum),
+              activeIcon: const Icon(Icons.forum),
               label: 'Forum'),
-          // EKLENDİ: Profil Butonu
           BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline),
-              activeIcon: Icon(Icons.person),
+              icon: Icon(Icons.person_outline, key: keyProfil),
+              activeIcon: const Icon(Icons.person),
               label: 'Profil'),
         ],
       ),
@@ -133,7 +297,7 @@ class _AnaEkranState extends State<AnaEkran> {
       elevation: 0,
       title: Row(
         children: [
-          Icon(Icons.school, color: AppColors.primary, size: 24),
+          const Icon(Icons.school, color: AppColors.primary, size: 24),
           const SizedBox(width: 8),
           Text(
             "Kampüs", 
