@@ -53,7 +53,7 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
     super.dispose();
   }
   
-  // Resim Seçme İşlemi
+  // Resim Seçme İşlemi (Image Quality 70 korundu)
   Future<void> _pickImage() async {
     if (_isPickingImage) return;
 
@@ -64,10 +64,9 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
       final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
 
       if (pickedFile != null) {
-        if(mounted) { // mounted kontrolü eklendi
+        if(mounted) {
           setState(() {
             _selectedImage = File(pickedFile.path);
-            // Not: Artık URL controller'ı yok, sadece dosya/url tutuyoruz.
           });
         }
       }
@@ -80,7 +79,6 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
 
   // Resim Yükleme İşlemi (Firebase Storage)
   Future<String?> _uploadImage() async {
-    // 1. Yeni resim seçilmişse yükle
     if (_selectedImage != null) {
       try {
         final String fileName = 'events/${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -96,11 +94,10 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
         return null;
       }
     }
-    // 2. Yeni resim yoksa, mevcut URL'yi döndür
     return _currentImageUrl;
   }
   
-  // HATA DÜZELTME: Seçim sonrası çökme için mounted kontrolü eklendi
+  // Tarih ve Saat Seçimi (Saat seçimi eklendi)
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -115,19 +112,27 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
               onPrimary: Colors.white, 
               onSurface: AppColors.black87,
             ),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(foregroundColor: AppColors.primary),
-            ),
           ),
           child: child!,
         );
       },
     );
-    if (picked != null && picked != _selectedDate) {
-      if(mounted) { // mounted kontrolü eklendi
-        setState(() {
-          _selectedDate = picked;
-        });
+    if (picked != null) {
+      // Saat Seçici
+      if(mounted) {
+        final TimeOfDay? time = await showTimePicker(
+            context: context, 
+            initialTime: TimeOfDay.now(),
+            builder: (context, child) {
+                return Theme(data: Theme.of(context).copyWith(colorScheme: const ColorScheme.light(primary: AppColors.primary)), child: child!);
+            }
+        );
+        
+        if (time != null && mounted) {
+           setState(() {
+             _selectedDate = DateTime(picked.year, picked.month, picked.day, time.hour, time.minute);
+           });
+        }
       }
     }
   }
@@ -152,14 +157,13 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
       return; 
     }
 
-    // YENİ: registrationLink kaldırıldı
+    // Katılımcı Listesini Koruma Mantığı (Aynen Korundu)
     final eventData = {
       'title': _titleController.text.trim(),
       'location': _locationController.text.trim(),
       'description': _descriptionController.text.trim(), 
       'date': Timestamp.fromDate(_selectedDate!),
       'imageUrl': finalImageUrl ?? '', 
-      // attendees listesi ilk oluşturmada boş başlatılır, düzenlemede korunur.
       'attendees': _isEditing ? (widget.event!.data() as Map<String, dynamic>)['attendees'] ?? [] : [], 
     };
 
@@ -197,7 +201,7 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
         foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(24.0),
         child: Form(
           key: _formKey,
           child: Column(
@@ -225,11 +229,9 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
                 icon: Icons.location_on_outlined
               ),
               
-              // Kayıt Linki Kaldırıldı.
-              
               const SizedBox(height: 24),
               
-              const Text("Etkinlik Tarihi", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text("Etkinlik Tarihi ve Saati", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 8),
               GestureDetector(
                 onTap: () => _selectDate(context),
@@ -239,17 +241,19 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
                     color: Theme.of(context).cardColor,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)]
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.calendar_today_outlined, color: AppColors.primary),
+                      const Icon(Icons.calendar_month, color: AppColors.primary),
                       const SizedBox(width: 12),
                       Text(
                         _selectedDate == null 
-                          ? "Bir tarih seçin" 
-                          : DateFormat('dd MMMM yyyy, EEEE').format(_selectedDate!),
+                          ? "Tarih ve Saat Seçiniz" 
+                          : DateFormat('dd MMMM yyyy, HH:mm').format(_selectedDate!),
                         style: TextStyle(
                           fontSize: 16,
+                          fontWeight: FontWeight.w500,
                           color: _selectedDate == null ? Colors.grey : Theme.of(context).textTheme.bodyLarge?.color,
                         ),
                       ),
@@ -261,17 +265,20 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
               const SizedBox(height: 40),
 
               Center(
-                child: ElevatedButton.icon(
-                  onPressed: _isLoading ? null : _saveEvent,
-                  icon: _isLoading 
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : Icon(_isEditing ? Icons.save : Icons.add, color: Colors.white),
-                  label: Text(_isLoading ? "Kaydediliyor..." : "Etkinliği Kaydet", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.success,
-                    padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                    elevation: 5,
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 55,
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoading ? null : _saveEvent,
+                    icon: _isLoading 
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : Icon(_isEditing ? Icons.save : Icons.add, color: Colors.white),
+                    label: Text(_isLoading ? "Kaydediliyor..." : "Etkinliği Kaydet", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.success,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 5,
+                    ),
                   ),
                 ),
               ),
@@ -282,7 +289,6 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
     );
   }
   
-  // Resim seçici widget'ı (Önceki adımdan taşındı/güncellendi)
   Widget _buildImageSelector() {
     final bool hasImage = _selectedImage != null || (_currentImageUrl != null && _currentImageUrl!.isNotEmpty);
     final String? displayUrl = _selectedImage != null ? null : _currentImageUrl;
@@ -292,14 +298,14 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
         children: [
           Container(
             width: double.infinity,
-            height: 200,
+            height: 220,
             decoration: BoxDecoration(
-              color: AppColors.primaryLight,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.primary, width: 2),
+              color: AppColors.primaryLight.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.primary.withOpacity(0.5), width: 1),
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(18),
               child: hasImage
                   ? (_selectedImage != null
                       ? Image.file(_selectedImage!, fit: BoxFit.cover)
@@ -313,9 +319,9 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.image, size: 50, color: AppColors.primary),
+                          Icon(Icons.add_photo_alternate, size: 60, color: AppColors.primary.withOpacity(0.6)),
                           const SizedBox(height: 8),
-                          Text("Etkinlik Afişi", style: TextStyle(color: AppColors.primary.withOpacity(0.8))),
+                          Text("Etkinlik Afişi Yükle", style: TextStyle(color: AppColors.primary.withOpacity(0.8), fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -327,19 +333,20 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
             children: [
               ElevatedButton.icon(
                 onPressed: _pickImage,
-                icon: const Icon(Icons.photo_library),
-                label: const Text("Galeriden Seç"),
+                icon: const Icon(Icons.photo_library, size: 18),
+                label: const Text("Galeri"),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
               if (_selectedImage != null || _currentImageUrl != null)
                 Padding(
-                  padding: const EdgeInsets.only(left: 8.0),
+                  padding: const EdgeInsets.only(left: 12.0),
                   child: IconButton(
-                    icon: const Icon(Icons.delete_forever, color: AppColors.error),
+                    style: IconButton.styleFrom(backgroundColor: AppColors.error.withOpacity(0.1)),
+                    icon: const Icon(Icons.delete_outline, color: AppColors.error),
                     onPressed: () {
                       setState(() {
                         _selectedImage = null;
@@ -355,11 +362,10 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
     );
   }
 
-
   Widget _buildModernInput({required TextEditingController controller, required String label, required IconData icon, bool isOptional = false, int maxLines = 1, bool enabled = true}) {
     return Container(
       decoration: BoxDecoration(
-        color: enabled ? Theme.of(context).cardColor : Colors.grey.shade200,
+        color: enabled ? Colors.white : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
       ),
@@ -372,7 +378,6 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
           prefixIcon: Icon(icon, color: AppColors.primary),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.all(16),
-          disabledBorder: InputBorder.none,
         ),
         validator: (v) {
           if (v!.trim().isEmpty && !isOptional) {

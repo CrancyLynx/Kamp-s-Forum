@@ -15,7 +15,7 @@ class EtkinlikListesiEkrani extends StatefulWidget {
 }
 
 class _EtkinlikListesiEkraniState extends State<EtkinlikListesiEkrani> {
-  // En yeni etkinlikleri en üstte göster
+  // En yeni etkinlikleri en üstte göster (Orijinal sıralama korundu)
   final Stream<QuerySnapshot> _eventsStream = FirebaseFirestore.instance
       .collection('etkinlikler')
       .orderBy('date', descending: true)
@@ -58,7 +58,7 @@ class _EtkinlikListesiEkraniState extends State<EtkinlikListesiEkrani> {
     }
   }
   
-  // Katılımcı Listesini Gösteren Fonksiyon
+  // Katılımcı Listesini Gösteren Fonksiyon (Orijinal Veri Tipi Cast işlemi korundu)
   void _showAttendees(String title, List<dynamic> attendees) {
     if (attendees.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bu etkinlikte henüz katılımcı yok."), backgroundColor: AppColors.info));
@@ -70,7 +70,7 @@ class _EtkinlikListesiEkraniState extends State<EtkinlikListesiEkrani> {
       MaterialPageRoute(
         builder: (context) => KullaniciListesiEkrani(
           title: "$title Katılımcıları (${attendees.length})", 
-          userIds: attendees.cast<String>(), // Katılımcı ID'leri string olmalı
+          userIds: attendees.cast<String>(), // Katılımcı ID'leri string listesine çevrildi
           hideAppBar: false, // Yeni sayfada AppBar göster
         )
       )
@@ -79,8 +79,8 @@ class _EtkinlikListesiEkraniState extends State<EtkinlikListesiEkrani> {
 
   @override
   Widget build(BuildContext context) {
-    // Scaffold, AdminPanelEkrani'nda sekme içinde kullanılmak üzere ayarlandı.
     return Scaffold(
+      backgroundColor: Colors.transparent, // Arka plan NestedScrollView'dan gelir
       body: StreamBuilder<QuerySnapshot>(
         stream: _eventsStream,
         builder: (BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
@@ -98,15 +98,12 @@ class _EtkinlikListesiEkraniState extends State<EtkinlikListesiEkrani> {
             );
           }
 
-          return ListView(
-            padding: const EdgeInsets.all(10.0),
-            children: snapshot.data!.docs.map((DocumentSnapshot document) {
-              Map<String, dynamic> data = document.data()! as Map<String, dynamic>;
-              final DateTime eventDate = (data['date'] as Timestamp).toDate();
-              final List<dynamic> attendees = data['attendees'] ?? []; 
-
-              return _buildEventCard(document, eventDate, attendees);
-            }).toList(),
+          return ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 80), // FAB boşluğu
+            itemCount: snapshot.data!.docs.length,
+            itemBuilder: (context, index) {
+               return _buildEventCard(snapshot.data!.docs[index]);
+            },
           );
         },
       ),
@@ -124,104 +121,113 @@ class _EtkinlikListesiEkraniState extends State<EtkinlikListesiEkrani> {
     );
   }
 
-  Widget _buildEventCard(DocumentSnapshot eventDoc, DateTime eventDate, List<dynamic> attendees) {
+  Widget _buildEventCard(DocumentSnapshot eventDoc) {
     final data = eventDoc.data() as Map<String, dynamic>;
-    final String title = data['title'] ?? 'Başlıksız Etkinlik';
-    final String location = data['location'] ?? 'Konum Belirtilmemiş';
-    final String? imageUrl = data['imageUrl'];
+    final DateTime eventDate = (data['date'] as Timestamp).toDate();
+    final List<dynamic> attendees = data['attendees'] ?? []; 
     final bool isPast = eventDate.isBefore(DateTime.now());
 
     return Card(
-      elevation: 3,
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: isPast ? Colors.grey[100] : Theme.of(context).cardColor,
+      elevation: 4,
+      margin: const EdgeInsets.only(bottom: 20),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         onTap: () {
           // Etkinlik Detay Ekranına Yönlendirme
           Navigator.push(context, MaterialPageRoute(builder: (_) => EtkinlikDetayEkrani(eventDoc: eventDoc)));
         },
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Column(
-            children: [
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: (imageUrl != null && imageUrl.isNotEmpty)
-                      ? CachedNetworkImage(
-                          imageUrl: imageUrl,
-                          width: 60,
-                          height: 60,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(width: 60, height: 60, color: Colors.grey[300], child: const Icon(Icons.event, color: Colors.grey)),
-                          errorWidget: (context, url, error) => Container(width: 60, height: 60, color: AppColors.primaryLight, child: const Icon(Icons.event_note, color: AppColors.primary)),
-                        )
-                      : Container(width: 60, height: 60, color: AppColors.primaryLight, child: const Icon(Icons.event_note, color: AppColors.primary)),
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          children: [
+            // Resim Alanı
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: (data['imageUrl'] != null && data['imageUrl'].isNotEmpty)
+                        ? CachedNetworkImage(
+                            imageUrl: data['imageUrl'],
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => Container(color: Colors.grey[200]),
+                            errorWidget: (context, url, error) => Container(color: Colors.grey[200], child: const Icon(Icons.broken_image, color: Colors.grey)),
+                          )
+                        : Container(color: AppColors.primaryLight, child: const Icon(Icons.event_note, size: 50, color: AppColors.primary)),
+                  ),
                 ),
-                title: Text(
-                  title, 
-                  style: TextStyle(fontWeight: FontWeight.bold, color: isPast ? Colors.grey[600] : AppColors.black87)
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      DateFormat('dd MMMM yyyy - HH:mm', 'tr_TR').format(eventDate),
-                      style: TextStyle(color: isPast ? Colors.grey : AppColors.primary, fontSize: 13, fontWeight: isPast ? FontWeight.normal : FontWeight.w600),
+                if(isPast)
+                  Positioned(
+                    top: 10, right: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
+                      child: const Text("TAMAMLANDI", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
-                    Text(
-                      location,
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                    ),
-                    if (isPast) 
-                      const Padding(
-                        padding: EdgeInsets.only(top: 4.0),
-                        child: Text("Sona Erdi", style: TextStyle(color: AppColors.error, fontSize: 12, fontWeight: FontWeight.bold)),
-                      ),
-                  ],
-                ),
+                  )
+              ],
+            ),
+            
+            // Bilgi Alanı
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                   Row(
+                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                     children: [
+                       Expanded(child: Text(data['title'] ?? 'Başlıksız Etkinlik', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
+                       if(isPast) const Icon(Icons.history, color: Colors.grey),
+                     ],
+                   ),
+                   const SizedBox(height: 8),
+                   Row(
+                     children: [
+                       const Icon(Icons.calendar_today, size: 16, color: AppColors.primary),
+                       const SizedBox(width: 8),
+                       Text(DateFormat('dd MMMM yyyy - HH:mm', 'tr_TR').format(eventDate), style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500)),
+                     ],
+                   ),
+                   const SizedBox(height: 4),
+                   Row(
+                     children: [
+                       const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                       const SizedBox(width: 8),
+                       Text(data['location'] ?? 'Konum Belirtilmemiş', style: const TextStyle(color: Colors.grey)),
+                     ],
+                   ),
+                   const Divider(height: 24),
+                   Row(
+                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                     children: [
+                       TextButton.icon(
+                         onPressed: () => _showAttendees(data['title'] ?? '', attendees),
+                         icon: const Icon(Icons.people_alt, color: AppColors.success),
+                         label: Text("${attendees.length} Katılımcı", style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.bold)),
+                       ),
+                       Row(
+                         children: [
+                           IconButton(
+                             icon: const Icon(Icons.edit, color: AppColors.info),
+                             onPressed: () {
+                               Navigator.push(context, MaterialPageRoute(builder: (context) => EtkinlikEklemeEkrani(event: eventDoc)));
+                             },
+                             tooltip: 'Düzenle',
+                           ),
+                           IconButton(
+                             icon: const Icon(Icons.delete_forever, color: AppColors.error),
+                             onPressed: () => _deleteEvent(eventDoc.id),
+                             tooltip: 'Sil',
+                           ),
+                         ],
+                       ),
+                     ],
+                   )
+                ],
               ),
-              
-              // YENİ: Katılımcı Bilgileri ve Aksiyonlar
-              Padding(
-                padding: const EdgeInsets.only(left: 10, right: 10, bottom: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Katılımcı Sayısı Butonu
-                    TextButton.icon(
-                      onPressed: () => _showAttendees(title, attendees),
-                      icon: const Icon(Icons.people_alt, color: AppColors.success),
-                      label: Text(
-                        "${attendees.length} Katılımcı", 
-                        style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.bold)
-                      ),
-                    ),
-                    // Düzenle/Sil Butonları
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit, color: AppColors.info),
-                          onPressed: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (context) => EtkinlikEklemeEkrani(event: eventDoc)));
-                          },
-                          tooltip: 'Düzenle',
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_forever, color: AppColors.error),
-                          onPressed: () => _deleteEvent(eventDoc.id),
-                          tooltip: 'Sil',
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

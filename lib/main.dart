@@ -20,20 +20,18 @@ import 'widgets/in_app_notification.dart';
 import 'screens/auth/dogrulama_ekrani.dart';
 import 'screens/home/ana_ekran.dart'; 
 import 'screens/auth/giris_ekrani.dart'; 
-import 'screens/auth/splash_screen.dart';
 import 'screens/auth/verification_wrapper.dart'; 
+// YENİ: Onboarding importu
+import 'screens/auth/onboarding_screen.dart';
 
-// --- BACKGROUND HANDLER ---
 @pragma('vm:entry-point')
 Future<void> firebaseBackgroundMessageHander(RemoteMessage message) async {
   await Firebase.initializeApp(); 
   print("Arka planda bir mesaj işleniyor: ${message.messageId}");
 }
 
-// --- GLOBAL DEĞİŞKENLER ---
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-// --- TEMA YÖNETİCİSİ ---
 class ThemeProvider extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system; 
   ThemeProvider(this._themeMode);
@@ -47,7 +45,6 @@ class ThemeProvider extends ChangeNotifier {
   }
 }
 
-// --- MAIN FONKSİYONU ---
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('tr_TR', null);
@@ -58,6 +55,8 @@ Future<void> main() async {
   Intl.defaultLocale = 'tr_TR'; 
   
   final prefs = await SharedPreferences.getInstance();
+  
+  // Tema ayarını oku
   ThemeMode initialThemeMode = ThemeMode.system; 
   try {
     final themeValue = prefs.get('themeMode');
@@ -66,16 +65,20 @@ Future<void> main() async {
     }
   } catch (_) {}
 
+  // YENİ: İlk açılış kontrolü
+  bool isFirstTime = prefs.getBool('isFirstTime') ?? true;
+
   runApp( 
     ChangeNotifierProvider(
       create: (context) => ThemeProvider(initialThemeMode),
-      child: const BizimUygulama(),
+      child: BizimUygulama(isFirstTime: isFirstTime),
     ),
   );
 }
 
 class BizimUygulama extends StatefulWidget {
-  const BizimUygulama({super.key});
+  final bool isFirstTime;
+  const BizimUygulama({super.key, required this.isFirstTime});
   @override
   State<BizimUygulama> createState() => _BizimUygulamaState();
 }
@@ -106,7 +109,6 @@ class _BizimUygulamaState extends State<BizimUygulama> {
     if (context == null) return;
 
     final overlayState = Overlay.of(context);
-    // Güvenlik: OverlayState null olabilir
     _overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
         top: 0, left: 0, right: 0,
@@ -160,12 +162,12 @@ class _BizimUygulamaState extends State<BizimUygulama> {
         scaffoldBackgroundColor: const Color(0xFF121212),
         useMaterial3: true,
       ),
-      home: const AnaKontrolcu(), // SplashScreen yerine AnaKontrolcu ile başla
+      // YENİ: Başlangıç ekranı mantığı
+      home: widget.isFirstTime ? const OnboardingScreen() : const AnaKontrolcu(),
     );
   }
 }
 
-// --- ANA KONTROLCÜ ---
 class AnaKontrolcu extends StatefulWidget {
   const AnaKontrolcu({super.key});
   @override
@@ -190,40 +192,31 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, authSnapshot) { 
-        // 1. Auth Durumu Bekleniyor
         if (authSnapshot.connectionState == ConnectionState.waiting) {
           return const LoadingScreen();
         }
         
-        // 2. Kullanıcı Giriş Yapmışsa
         if (authSnapshot.hasData) {
           final user = authSnapshot.data!;
           
-          // Misafir Kontrolü
           if (user.isAnonymous) {
              return const AnaEkran(isGuest: true, isAdmin: false, userName: 'Misafir', realName: 'Misafir');
           }
 
-          // Email Doğrulama Kontrolü
           if (!user.emailVerified && (user.phoneNumber == null || user.phoneNumber!.isEmpty)) {
             return const VerificationWrapper();
           }
 
           final userId = user.uid;
 
-          // 3. Firestore Verisi
           return StreamBuilder<DocumentSnapshot>(
             stream: FirebaseFirestore.instance.collection('kullanicilar').doc(userId).snapshots(),
             builder: (context, userSnapshot) { 
-              // DÜZELTME: Veri yüklenirken Loading göster, direkt çıkış yapma!
               if (userSnapshot.connectionState == ConnectionState.waiting) {
                 return const LoadingScreen();
               }
               
-              // Veri geldi ama doküman yoksa?
               if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-                 // Sadece bağlantı bittiği halde (done/active) veri yoksa çıkış yap.
-                 // Bu durum, kullanıcı Auth'da var ama Firestore'da silinmişse olur.
                  WidgetsBinding.instance.addPostFrameCallback((_) {
                    FirebaseAuth.instance.signOut();
                  });
@@ -251,7 +244,6 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
           ); 
         } 
 
-        // 4. Kullanıcı Yoksa
         return const GirisEkrani(); 
       }, 
     );

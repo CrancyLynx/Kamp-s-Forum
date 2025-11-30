@@ -35,16 +35,15 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
 
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
   
-  // GÜVENLİK GÜNCELLEMESİ: Hardcoded liste kaldırıldı.
-  // Yetki durumu state içinde yönetilecek.
   bool _isLoadingAuth = true;
   bool _isAdmin = false;
 
   @override
   void initState() {
     super.initState();
-    _checkAdminAccess(); // Sayfa açılırken yetki kontrolü yap
+    _checkAdminAccess(); // Yetki kontrolü
 
+    // 5 Sekme: Onay, Talepler, Kullanıcılar, Şikayetler, Etkinlikler
     _tabController = TabController(length: 5, vsync: this); 
     
     _pendingSearchController.addListener(() {
@@ -65,10 +64,10 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     _reportsStream = FirebaseFirestore.instance.collection('sikayetler').orderBy('timestamp', descending: true).snapshots();
   }
 
-  // YENİ: Veritabanından gerçek rolü kontrol et
+  // --- Orijinal Mantık Korundu: Admin Yetki Kontrolü ---
   Future<void> _checkAdminAccess() async {
     if (_currentUserId.isEmpty) {
-      setState(() { _isAdmin = false; _isLoadingAuth = false; });
+      if (mounted) setState(() { _isAdmin = false; _isLoadingAuth = false; });
       return;
     }
 
@@ -100,6 +99,32 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     super.dispose();
   }
 
+  // --- Yardımcı UI Fonksiyonu ---
+  void _showSnack(String msg, Color color) {
+    if(!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg, style: const TextStyle(fontWeight: FontWeight.bold)), 
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      )
+    );
+  }
+
+  void _sendSystemNotification(String userId, String type, String message) {
+    FirebaseFirestore.instance.collection('bildirimler').add({
+      'userId': userId,
+      'senderName': 'Sistem',
+      'type': type,
+      'message': message,
+      'isRead': false,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // --- Orijinal Fonksiyonlar (Aynen Korundu) ---
+
   void _onayla(String userId) async {
     try {
       await FirebaseFirestore.instance.collection('kullanicilar').doc(userId).update({
@@ -119,9 +144,18 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Reddetme Sebebi"),
-        content: TextField(controller: reasonController, decoration: const InputDecoration(hintText: "Sebep giriniz...")),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: TextField(
+          controller: reasonController, 
+          decoration: InputDecoration(
+            hintText: "Sebep giriniz...",
+            filled: true,
+            fillColor: Colors.grey[100],
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)
+          )
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("İptal")),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("İptal", style: TextStyle(color: Colors.grey))),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
@@ -173,16 +207,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     }
   }
 
-  void _sendSystemNotification(String userId, String type, String message) {
-    FirebaseFirestore.instance.collection('bildirimler').add({
-      'userId': userId,
-      'senderName': 'Sistem',
-      'type': type,
-      'message': message,
-      'isRead': false,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
-  }
+  // --- Silme İşlemleri (Orijinal Kod Yapısı Korundu) ---
 
   void _deletePost(String postId) async {
     try {
@@ -225,9 +250,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     }
   }
 
-  void _showSnack(String msg, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
-  }
+  // --- İstatistikler ---
 
   Future<int> _getUserCount(String status) async {
     final snapshot = await FirebaseFirestore.instance.collection('kullanicilar').where('status', isEqualTo: status).count().get();
@@ -240,38 +263,30 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
   }
 
   Future<int> _getTotalCommentCount() async {
-    // Performans için bu özellik şimdilik devre dışı veya Cloud Function ile hesaplanmalı
-    return 0; 
+    return 0; // Orijinal kodda da 0 dönüyordu.
   }
+
+  // --- Arayüz (Build) ---
 
   @override
   Widget build(BuildContext context) {
-    // Yükleniyor durumu
     if (_isLoadingAuth) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // GÜVENLİK KONTROLÜ
     if (!_isAdmin) {
-      return const Scaffold(
+      return Scaffold(
         body: Center(
           child: Padding(
-            padding: EdgeInsets.all(30.0),
+            padding: const EdgeInsets.all(30.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.security_update_warning, size: 60, color: AppColors.error),
-                SizedBox(height: 20),
-                Text(
-                  "Erişim Reddedildi",
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: 10),
-                Text(
-                  "Bu sayfayı görüntülemek için yönetici yetkisine sahip olmalısınız.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, color: AppColors.greyText),
-                ),
+                const Icon(Icons.security_update_warning, size: 80, color: AppColors.error),
+                const SizedBox(height: 20),
+                const Text("Erişim Reddedildi", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                const Text("Bu sayfayı görüntülemek için yönetici yetkisine sahip olmalısınız.", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, color: AppColors.greyText)),
               ],
             ),
           ),
@@ -280,7 +295,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     }
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: const Color(0xFFF5F7FA), // Modern açık gri arka plan
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) => [
           SliverAppBar(
@@ -289,9 +304,11 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
             centerTitle: true,
             pinned: true,
             floating: true,
+            elevation: 0,
             bottom: TabBar(
               controller: _tabController,
-              indicatorColor: Colors.white,
+              indicatorColor: AppColors.primaryAccent,
+              indicatorWeight: 4,
               labelColor: Colors.white,
               unselectedLabelColor: Colors.white60,
               isScrollable: true,
@@ -319,23 +336,15 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     );
   }
 
-  // --- SEKMELERİN İÇERİKLERİ ---
+  // --- Sekme Tasarımları (Modernize Edilmiş) ---
   
   Widget _buildPendingTab() {
     return Column(
       children: [
         _buildStatsDashboard(),
         Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: TextField(
-            controller: _pendingSearchController,
-            decoration: InputDecoration(
-              labelText: 'Onay Bekleyenlerde Ara',
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              suffixIcon: _pendingSearchQuery.isNotEmpty ? IconButton(icon: const Icon(Icons.clear), onPressed: () => _pendingSearchController.clear()) : null,
-            ),
-          ),
+          padding: const EdgeInsets.all(12.0),
+          child: _buildModernSearchBar(_pendingSearchController, 'Onay Bekleyenlerde Ara'),
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
@@ -357,19 +366,24 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                   final data = docs[index].data() as Map<String, dynamic>;
                   final sub = data['submissionData'] as Map<String, dynamic>? ?? {};
                   return Card(
-                    elevation: 2,
+                    elevation: 3,
                     margin: const EdgeInsets.only(bottom: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     child: ListTile(
-                      leading: const CircleAvatar(backgroundColor: AppColors.warning, child: Icon(Icons.priority_high, color: Colors.white)),
+                      contentPadding: const EdgeInsets.all(12),
+                      leading: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(color: AppColors.warning.withOpacity(0.1), shape: BoxShape.circle),
+                        child: const Icon(Icons.priority_high, color: AppColors.warning),
+                      ),
                       title: Text(sub['name'] ?? data['ad'] ?? 'İsimsiz', style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text("${sub['university']}\n${sub['department']}"),
                       isThreeLine: true,
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          IconButton(icon: const Icon(Icons.check, color: AppColors.success), onPressed: () => _onayla(docs[index].id), tooltip: 'Onayla'),
-                          IconButton(icon: const Icon(Icons.close, color: AppColors.error), onPressed: () => _reddet(docs[index].id), tooltip: 'Reddet'),
+                          IconButton(icon: const Icon(Icons.check_circle, color: AppColors.success, size: 30), onPressed: () => _onayla(docs[index].id), tooltip: 'Onayla'),
+                          IconButton(icon: const Icon(Icons.cancel, color: AppColors.error, size: 30), onPressed: () => _reddet(docs[index].id), tooltip: 'Reddet'),
                         ],
                       ),
                       onTap: () => _showDetailAndRejectDialog(data, docs[index].id),
@@ -400,9 +414,9 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
             final data = doc.data() as Map<String, dynamic>;
             
             return Card(
-              elevation: 2,
+              elevation: 3,
               margin: const EdgeInsets.only(bottom: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -410,7 +424,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.edit_note, color: AppColors.primary, size: 20),
+                        const Icon(Icons.edit_note, color: AppColors.primary, size: 24),
                         const SizedBox(width: 8),
                         Text(data['userName'] ?? 'Kullanıcı', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         const Spacer(),
@@ -426,20 +440,22 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text("ESKİ BİLGİ", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
-                              Text(data['oldUniversity'] ?? '-', style: const TextStyle(fontSize: 13)),
-                              Text(data['oldDepartment'] ?? '-', style: const TextStyle(fontSize: 13)),
+                              const Text("ESKİ BİLGİ", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                              const SizedBox(height: 4),
+                              Text(data['oldUniversity'] ?? '-', style: const TextStyle(fontSize: 14)),
+                              Text(data['oldDepartment'] ?? '-', style: const TextStyle(fontSize: 14)),
                             ],
                           ),
                         ),
-                        const Icon(Icons.arrow_forward, color: Colors.grey),
+                        const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              const Text("YENİ BİLGİ", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.success)),
-                              Text(data['newUniversity'] ?? '-', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                              Text(data['newDepartment'] ?? '-', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                              const Text("YENİ BİLGİ", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.success)),
+                              const SizedBox(height: 4),
+                              Text(data['newUniversity'] ?? '-', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), textAlign: TextAlign.end),
+                              Text(data['newDepartment'] ?? '-', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), textAlign: TextAlign.end),
                             ],
                           ),
                         ),
@@ -451,7 +467,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                       children: [
                         OutlinedButton(
                           onPressed: () => _rejectChangeRequest(doc),
-                          style: OutlinedButton.styleFrom(foregroundColor: AppColors.error),
+                          style: OutlinedButton.styleFrom(foregroundColor: AppColors.error, side: const BorderSide(color: AppColors.error)),
                           child: const Text("Reddet"),
                         ),
                         const SizedBox(width: 12),
@@ -477,17 +493,8 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
       children: [
         _buildContentStatsDashboard(),
         Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: TextField(
-            controller: _allUsersSearchController,
-            onChanged: (val) => setState(() => _allUsersSearchQuery = val.toLowerCase()),
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search),
-              hintText: "Kullanıcı Ara (Ad/Takma Ad)...",
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              suffixIcon: _allUsersSearchQuery.isNotEmpty ? IconButton(icon: const Icon(Icons.clear), onPressed: () => _allUsersSearchController.clear()) : null,
-            ),
-          ),
+          padding: const EdgeInsets.all(12.0),
+          child: _buildModernSearchBar(_allUsersSearchController, "Kullanıcı Ara (Ad/Takma Ad)..."),
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
@@ -516,12 +523,14 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
                     elevation: 2,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       leading: CircleAvatar(
+                        radius: 24,
                         backgroundImage: data['avatarUrl'] != null ? CachedNetworkImageProvider(data['avatarUrl']) : null,
-                        child: data['avatarUrl'] == null ? const Icon(Icons.person) : null,
                         backgroundColor: AppColors.primaryLight,
+                        child: data['avatarUrl'] == null ? const Icon(Icons.person, color: AppColors.primary) : null,
                       ),
                       title: Text(data['takmaAd'] ?? 'İsimsiz', style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text(data['email'] ?? ''),
@@ -560,17 +569,8 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: TextField(
-            controller: _reportsSearchController,
-            onChanged: (val) => setState(() => _reportsSearchQuery = val.toLowerCase()),
-            decoration: InputDecoration(
-              labelText: 'Şikayet İçeriği Ara (Başlık/Sebep)',
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              suffixIcon: _reportsSearchQuery.isNotEmpty ? IconButton(icon: const Icon(Icons.clear), onPressed: () => _reportsSearchController.clear()) : null,
-            ),
-          ),
+          padding: const EdgeInsets.all(12.0),
+          child: _buildModernSearchBar(_reportsSearchController, 'Şikayet İçeriği Ara (Başlık/Sebep)'),
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
@@ -610,13 +610,14 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                   if(type == 'product') { typeLabel = 'Ürün'; typeIcon = Icons.shopping_bag; }
 
                   return Card(
-                    color: Colors.red.withOpacity(0.05),
+                    color: Colors.red.withOpacity(0.03),
                     elevation: 2,
                     margin: const EdgeInsets.only(bottom: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: AppColors.error.withOpacity(0.1))),
                     child: ListTile(
+                      contentPadding: const EdgeInsets.all(12),
                       leading: CircleAvatar(backgroundColor: Colors.white, child: Icon(typeIcon, color: AppColors.error)),
-                      title: Text(reason, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.error, fontSize: 14)),
+                      title: Text(reason, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.error, fontSize: 15)),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -624,7 +625,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                           Text("Türü: $typeLabel | Şikayet Eden: $reporter"),
                           Text("İçerik: $targetTitle", maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
                           if(timestamp != null)
-                             Text(timeago.format((timestamp as Timestamp).toDate(), locale: 'tr'), style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                             Text(timeago.format((timestamp as Timestamp).toDate(), locale: 'tr'), style: TextStyle(fontSize: 11, color: Colors.grey[600])),
                         ],
                       ),
                       trailing: Row(
@@ -633,8 +634,8 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                           IconButton(
                             icon: const Icon(Icons.visibility, color: AppColors.primary),
                             onPressed: () async {
+                              // İçeriği Görüntüle Mantığı
                               final targetId = data['targetId'] ?? data['postId'];
-                              
                               if (type == 'post' || type == 'comment') {
                                   final postId = data['postId'] ?? targetId;
                                   final postDoc = await FirebaseFirestore.instance.collection('gonderiler').doc(postId).get();
@@ -657,6 +658,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                           IconButton(
                             icon: const Icon(Icons.delete, color: AppColors.error),
                             onPressed: () {
+                              // Silme Mantığı
                               final targetId = data['targetId'] ?? data['postId'];
                               final postId = data['postId'];
 
@@ -667,6 +669,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                               } else if (type == 'product') {
                                   _deleteProduct(targetId);
                               }
+                              // Şikayet kaydını da sil
                               doc.reference.delete();
                             },
                             tooltip: 'Şikayeti Sil (Çözüldü)',
@@ -684,61 +687,81 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     );
   }
 
+  // --- İstatistik Kartları (Tasarım Güncellendi) ---
+
   Widget _buildStatsDashboard() {
-    return Card(
-      margin: const EdgeInsets.all(8.0),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildStatItem('Onaylı', Icons.check_circle, AppColors.success, _getUserCount('Verified')),
-            _buildStatItem('Bekleyen', Icons.hourglass_top, AppColors.warning, _getUserCount('Pending')),
-            _buildStatItem('Reddedildi', Icons.cancel, AppColors.error, _getUserCount('Rejected')),
-          ],
-        ),
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildDashboardCard('Onaylı', Icons.check_circle, AppColors.success, _getUserCount('Verified')),
+          _buildDashboardCard('Bekleyen', Icons.hourglass_top, AppColors.warning, _getUserCount('Pending')),
+          _buildDashboardCard('Reddedildi', Icons.cancel, AppColors.error, _getUserCount('Rejected')),
+        ],
       ),
     );
   }
 
   Widget _buildContentStatsDashboard() {
-    return Card(
-      margin: const EdgeInsets.all(8.0), 
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildStatItem('Toplam Gönderi', Icons.article, AppColors.info, _getPostCount()),
-            _buildStatItem('Toplam Yorum', Icons.comment, AppColors.badgeNewUser, _getTotalCommentCount()),
-          ],
-        ),
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildDashboardCard('Toplam Gönderi', Icons.article, AppColors.info, _getPostCount()),
+          _buildDashboardCard('Toplam Yorum', Icons.comment, AppColors.badgeNewUser, _getTotalCommentCount()),
+        ],
       ),
     );
   }
 
-  Widget _buildStatItem(String title, IconData icon, Color color, Future<int> futureCount) {
+  Widget _buildDashboardCard(String title, IconData icon, Color color, Future<int> futureCount) {
     return FutureBuilder<int>(
       future: futureCount,
       builder: (context, snapshot) {
         final count = snapshot.data ?? 0;
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 28),
-            const SizedBox(height: 4),
-            Text(
-              count.toString(),
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        return Expanded(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [BoxShadow(color: color.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))],
+              border: Border.all(color: color.withOpacity(0.1)),
             ),
-            Text(title, style: const TextStyle(fontSize: 12)),
-          ],
+            child: Column(
+              children: [
+                Icon(icon, color: color, size: 28),
+                const SizedBox(height: 8),
+                Text(count.toString(), style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+                Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey), textAlign: TextAlign.center),
+              ],
+            ),
+          ),
         );
       },
+    );
+  }
+
+  Widget _buildModernSearchBar(TextEditingController controller, String hint) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)],
+      ),
+      child: TextField(
+        controller: controller,
+        decoration: InputDecoration(
+          hintText: hint,
+          prefixIcon: const Icon(Icons.search, color: Colors.grey),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          suffixIcon: controller.text.isNotEmpty ? IconButton(icon: const Icon(Icons.clear, color: Colors.grey), onPressed: () => controller.clear()) : null,
+        ),
+      ),
     );
   }
 
@@ -818,16 +841,17 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
       context: context,
       builder: (ctx) => SimpleDialog(
         title: Text(userData['takmaAd'] ?? 'Kullanıcı'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         children: [
           SimpleDialogOption(
-            child: const Text("Profili Görüntüle"),
+            child: const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text("Profili Görüntüle")),
             onPressed: () {
               Navigator.pop(ctx);
               Navigator.push(context, MaterialPageRoute(builder: (_) => KullaniciProfilDetayEkrani(userId: userId, userName: userData['takmaAd'])));
             },
           ),
           SimpleDialogOption(
-            child: const Text("Kullanıcıyı Sil (Kalıcı)", style: TextStyle(color: Colors.red)),
+            child: const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text("Kullanıcıyı Sil (Kalıcı)", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))),
             onPressed: () {
               Navigator.pop(ctx);
               _confirmDeleteUser(userId);
