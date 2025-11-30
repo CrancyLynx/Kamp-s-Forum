@@ -1,3 +1,6 @@
+// (Importlar aynı kalacak, sadece FloatingActionButton kısmını değiştiriyoruz)
+// Kodun tamamını veriyorum ki kopyala yapıştır yaparken hata olmasın.
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -48,12 +51,13 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
 
   final ScrollController _scrollController = ScrollController();
   List<DocumentSnapshot> _posts = [];
-  List<DocumentSnapshot> _pinnedPosts = []; // Sabitlenmiş gönderiler için ayrı liste
+  List<DocumentSnapshot> _pinnedPosts = []; 
   bool _isLoading = false;
   bool _hasMore = true;
   DocumentSnapshot? _lastDocument;
   String? _errorMessage;
 
+  // ... (Diyalog fonksiyonları aynı)
   void _showLoginRequiredDialog() {
     showDialog(
       context: context,
@@ -172,7 +176,6 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
     }
 
     try {
-      // 1. Sabitlenmiş gönderileri çek
       if (isInitial) {
         final pinnedQuerySnapshot = await FirebaseFirestore.instance
             .collection('gonderiler')
@@ -185,7 +188,6 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
         }
       }
 
-      // 2. Normal gönderileri çek
       Query query = FirebaseFirestore.instance.collection('gonderiler');
 
       if (_selectedFilter != 'Tümü') {
@@ -204,10 +206,6 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
           break;
       }
 
-      // DÜZELTME: 'isPinned' filtresini buradan kaldırdık.
-      // Sabitlenmişleri bellek tarafında süzeceğiz.
-      // query = query.where('isPinned', isNotEqualTo: true);
-
       if (_lastDocument != null && !isInitial) {
         query = query.startAfterDocument(_lastDocument!);
       }
@@ -218,8 +216,6 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
         _lastDocument = querySnapshot.docs.last;
         if (mounted) {
           setState(() {
-            // İstemci tarafında filtreleme (Deduplication)
-            // Eğer gelen gönderi zaten _pinnedPosts içinde varsa, ana listeye ekleme.
             final newPosts = querySnapshot.docs.where((doc) {
               return !_pinnedPosts.any((pinned) => pinned.id == doc.id);
             }).toList();
@@ -344,6 +340,7 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
 
       body: Column(
         children: [
+          // Filtreler (Kodun kalanı aynı)
           Container(
             padding: const EdgeInsets.symmetric(vertical: 8.0),
             decoration: BoxDecoration(
@@ -521,7 +518,9 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
         ],
       ),
 
+      // DÜZELTME: heroTag eklendi
       floatingActionButton: widget.isGuest ? null : FloatingActionButton.extended(
+        heroTag: 'forum_create_fab', // BENZERSİZ TAG
         onPressed: () => _showCreateOptions(context),
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add, color: Colors.white),
@@ -531,6 +530,7 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
     );
   }
 
+  // ... (Geri kalan yardımcı widgetlar - _buildSortChip, _buildSkeletonLoader vs aynı kalıyor)
   Widget _buildSortChip(String label, SortType sortType, IconData icon) {
     final isSelected = _currentSort == sortType;
     return GestureDetector(
@@ -615,6 +615,9 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
   }
 }
 
+// ... (GonderiKarti ve GonderiKartiSkeleton sınıfları dosyanın sonunda olduğu gibi kalacak)
+// Sadece GonderiKartiSkeleton ve GonderiKarti'yi buraya tekrar yazarak kodu tamamlarsınız.
+// Yukarıdaki kodun orijinalindeki GonderiKarti sınıfını aynen koruyun.
 class GonderiKartiSkeleton extends StatelessWidget {
   const GonderiKartiSkeleton({super.key});
 
@@ -752,6 +755,7 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
       'timestamp': FieldValue.serverTimestamp(),
     });
   }
+
 
   Future<void> _removeLikeNotification(String senderId, String receiverId, String postId) async {
     if (senderId == receiverId) return;

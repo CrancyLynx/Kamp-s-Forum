@@ -6,6 +6,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart'; 
 import 'forum_sayfasi.dart'; 
 import '../../utils/app_colors.dart';
+// YENİ: Servis importu
+import '../../services/image_compression_service.dart';
 
 class GonderiEklemeEkrani extends StatefulWidget {
   final String userName;
@@ -39,16 +41,20 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
     setState(() => _isPickingImage = true);
 
     try {
-      final List<XFile> pickedFiles = await _picker.pickMultiImage(imageQuality: 70);
+      final List<XFile> pickedFiles = await _picker.pickMultiImage(imageQuality: 80); // Quality burada da 80 kalsın
 
       if (pickedFiles.isNotEmpty) {
-        setState(() {
-          for (var xfile in pickedFiles) {
-            if (_selectedImages.length < 2) {
-              _selectedImages.add(File(xfile.path));
-            }
+        for (var xfile in pickedFiles) {
+          if (_selectedImages.length < 2) {
+            File originalFile = File(xfile.path);
+            // YENİ: Sıkıştırma işlemi
+            File? compressedFile = await ImageCompressionService.compressImage(originalFile);
+            
+            setState(() {
+              _selectedImages.add(compressedFile ?? originalFile);
+            });
           }
-        });
+        }
         
         if (pickedFiles.length > 2) {
            if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Sadece ilk 2 resim seçildi.")));
@@ -112,7 +118,7 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
         'baslik': _baslikController.text.trim(),
         'mesaj': _mesajController.text.trim(),
         'ad': displayName,
-        'realUsername': widget.userName, // YENİ: Admin için gerçek isim
+        'realUsername': widget.userName,
         'userId': userId,
         'zaman': FieldValue.serverTimestamp(),
         'lastCommentTimestamp': FieldValue.serverTimestamp(),

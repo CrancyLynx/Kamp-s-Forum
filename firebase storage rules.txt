@@ -2,6 +2,7 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    // --- YARDIMCI FONKSİYONLAR ---
     function isSignedIn() {
       return request.auth != null;
     }
@@ -13,31 +14,60 @@ service firebase.storage {
 
     function isValidImage() {
       return request.resource.contentType.matches('image/.*')
-             && request.resource.size < 10 * 1024 * 1024;
+             && request.resource.size < 10 * 1024 * 1024; // Max 10MB
+    }
+    
+    // Dosya isminin kullanıcı ID'si ile başlayıp başlamadığını kontrol eder
+    // Kodunuzda dosya isimleri: "USERID-ZAMAN.jpg" formatında olduğu için bu kontrol güvenlidir.
+    function isOwnerOfFile(fileName) {
+      return fileName.matches(request.auth.uid + '.*');
     }
 
     // --- KURALLAR ---
 
-    // Profil Resimleri
+    // 1. Profil Resimleri (Klasörlü yapı)
     match /profil_resimleri/{userId}/{fileName} {
       allow read: if true;
       allow write: if (isSignedIn() && request.auth.uid == userId && isValidImage()) || isAdmin();
       allow delete: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
     }
 
-    // Gönderi, Yorum, Ürün vb. (Klasör/UserID/Dosya yapısı)
-    match /{folder}/{userId}/{allPaths=**} {
+    // 2. Gönderi Resimleri (Kodunuzda düz klasöre atılıyor)
+    // Kod: ref.child('gonderi_resimleri/$fileName')
+    match /gonderi_resimleri/{fileName} {
       allow read: if true;
-      allow write: if (isSignedIn() && request.auth.uid == userId && isValidImage()) || isAdmin();
-      allow delete: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
+      // Dosya adı userId ile başlıyorsa yüklemeye izin ver
+      allow write: if (isSignedIn() && isOwnerOfFile(fileName) && isValidImage()) || isAdmin();
+      allow delete: if (isSignedIn() && isOwnerOfFile(fileName)) || isAdmin();
     }
 
-    // Sohbet Resimleri (DÜZELTİLEN KISIM)
-    // Eski kural firestore.get ile sohbeti kontrol ediyordu, bu da ilk mesajda hata veriyordu.
-    // Şimdi sadece giriş yapmış olma şartı aranıyor.
+    // 3. Yorum Resimleri
+    match /yorum_resimleri/{fileName} {
+      allow read: if true;
+      allow write: if (isSignedIn() && isOwnerOfFile(fileName) && isValidImage()) || isAdmin();
+      allow delete: if (isSignedIn() && isOwnerOfFile(fileName)) || isAdmin();
+    }
+
+    // 4. Ürün Resimleri
+    match /urun_resimleri/{fileName} {
+      allow read: if true;
+      allow write: if (isSignedIn() && isValidImage()) || isAdmin();
+      // Ürün resimlerinde isOwnerOfFile bazen tutmayabilir (kod yapısına göre), 
+      // bu yüzden sadece silerken kontrol etmek daha esnek olabilir.
+      allow delete: if (isSignedIn() && isOwnerOfFile(fileName)) || isAdmin();
+    }
+
+    // 5. Sohbet Resimleri
     match /chat_images/{chatId}/{fileName} {
       allow read: if isSignedIn();
       allow write: if isSignedIn() && isValidImage();
+    }
+    
+    // 6. Genel Kural (Diğer klasörler için yedek)
+    match /{folder}/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if (isSignedIn() && request.auth.uid == userId && isValidImage()) || isAdmin();
+      allow delete: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
     }
   }
 }

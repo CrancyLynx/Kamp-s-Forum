@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+// YENİ: Masonry Grid Paketi
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'urun_ekleme_ekrani.dart';
 import 'urun_detay_ekrani.dart';
 import '../../widgets/animated_list_item.dart';
 import '../../utils/app_colors.dart';
+ 
 
 class PazarSayfasi extends StatefulWidget {
   const PazarSayfasi({super.key});
@@ -19,29 +22,6 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = "";
 
-  // Performans için Query oluşturucu
-  Query _buildQuery() {
-    Query query = FirebaseFirestore.instance.collection('urunler');
-
-    // 1. Kategori Filtresi (Server-Side)
-    if (_selectedCategory != 'Tümü') {
-      query = query.where('category', isEqualTo: _selectedCategory);
-    }
-
-    // 2. Sıralama (En yeniden eskiye)
-    // Not: Kategori ile birlikte orderBy kullanmak için Firestore'da Index oluşturmanız gerekebilir.
-    // Console'da hata alırsanız linke tıklayıp index'i oluşturun.
-    query = query.orderBy('timestamp', descending: true);
-
-    return query;
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -49,7 +29,7 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
       body: SafeArea(
         child: Column(
           children: [
-            // ÜST BAR & ARAMA
+            // 1. ÜST BAR & ARAMA
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -66,14 +46,15 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
                       Text("Kampüs Pazarı", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.bodyLarge?.color)),
                       const Spacer(),
                       IconButton(
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const UrunEklemeEkrani())),
+                        onPressed: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const UrunEklemeEkrani()));
+                        },
                         icon: const Icon(Icons.add_circle, color: AppColors.primary, size: 30),
                         tooltip: "İlan Ver",
                       )
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // Arama Çubuğu
                   Container(
                     decoration: BoxDecoration(
                       color: Theme.of(context).scaffoldBackgroundColor,
@@ -81,10 +62,9 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
                     ),
                     child: TextField(
                       controller: _searchController,
-                      // Arama metni değiştiğinde setState ile UI'ı yenile
                       onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
                       decoration: const InputDecoration(
-                        hintText: "Ürün ara...",
+                        hintText: "Ders kitabı, not, eşya ara...",
                         prefixIcon: Icon(Icons.search, color: Colors.grey),
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.symmetric(vertical: 12),
@@ -95,7 +75,7 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
               ),
             ),
 
-            // KATEGORİLER
+            // 2. KATEGORİLER
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -107,12 +87,7 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
                     child: ChoiceChip(
                       label: Text(category),
                       selected: isSelected,
-                      onSelected: (selected) {
-                        setState(() {
-                          _selectedCategory = category;
-                          // Kategori değişince aramayı temizlemiyoruz, kullanıcı deneyimi için kalabilir.
-                        });
-                      },
+                      onSelected: (selected) => setState(() => _selectedCategory = category),
                       selectedColor: AppColors.primary,
                       backgroundColor: Theme.of(context).cardColor,
                       labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.grey[700], fontWeight: FontWeight.bold),
@@ -122,56 +97,37 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
               ),
             ),
 
-            // ÜRÜN LİSTESİ
+            // 3. ÜRÜN LİSTESİ (MASONRY GRID)
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: _buildQuery().snapshots(),
+                stream: FirebaseFirestore.instance.collection('urunler').orderBy('timestamp', descending: true).snapshots(),
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snapshot.hasError) {
-                    return Center(child: Text("Hata: ${snapshot.error}"));
-                  }
-                  
-                  // Firebase'den gelen ham liste
-                  var docs = snapshot.data?.docs ?? [];
-
-                  // Arama Filtresi (Client-Side)
-                  // Not: Firestore tam metin aramayı (full-text search) desteklemez.
-                  // Başlık araması için client-side filtreleme şu anlık en iyi yöntemdir.
-                  if (_searchQuery.isNotEmpty) {
-                    docs = docs.where((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      final title = (data['title'] ?? '').toString().toLowerCase();
-                      return title.contains(_searchQuery);
-                    }).toList();
+                  if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.sell_outlined, size: 60, color: Colors.grey[300]), const SizedBox(height: 10), const Text("Henüz ilan yok.", style: TextStyle(color: Colors.grey))]));
                   }
 
-                  if (docs.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.sell_outlined, size: 60, color: Colors.grey[300]),
-                          const SizedBox(height: 10),
-                          const Text("Bu kategoride ürün bulunamadı.", style: TextStyle(color: Colors.grey))
-                        ],
-                      ),
-                    );
-                  }
+                  final docs = snapshot.data!.docs.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final title = (data['title'] ?? '').toString().toLowerCase();
+                    final category = data['category'] ?? 'Diğer';
+                    
+                    final matchesSearch = title.contains(_searchQuery);
+                    final matchesCategory = _selectedCategory == 'Tümü' || category == _selectedCategory;
+                    
+                    return matchesSearch && matchesCategory;
+                  }).toList();
 
-                  return GridView.builder(
+                  // YENİ: Masonry Grid View Kullanımı
+                  return MasonryGridView.count(
                     padding: const EdgeInsets.all(12),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      childAspectRatio: 0.70, // Kartları biraz daha uzun yaptım
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                    ),
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
                     itemCount: docs.length,
                     itemBuilder: (context, index) {
-                      return AnimatedListItem(index: index, child: _buildProductCard(docs[index]));
+                      final doc = docs[index];
+                      return AnimatedListItem(index: index, child: _buildProductCard(doc));
                     },
                   );
                 },
@@ -179,6 +135,15 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
             ),
           ],
         ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'pazar_ilan_fab',
+        onPressed: () {
+          Navigator.push(context, MaterialPageRoute(builder: (context) => const UrunEklemeEkrani()));
+        },
+        backgroundColor: AppColors.primary,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text("İlan Ver", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
     );
   }
@@ -199,55 +164,50 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Stack(
-                children: [
-                  Hero( // Resim geçiş efekti
-                    tag: 'product_${doc.id}',
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: CachedNetworkImage(
-                          imageUrl: data['imageUrl'] ?? '',
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(color: Colors.grey[200]),
-                          errorWidget: (context, url, error) => const Icon(Icons.image_not_supported, color: Colors.grey),
-                        ),
-                      ),
-                    ),
+            // Resim Alanı
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  child: CachedNetworkImage(
+                    imageUrl: data['imageUrl'] ?? '',
+                    fit: BoxFit.cover,
+                    // YENİ: Yükseklik kısıtlamasını kaldırıyoruz ki masonry etkisi olsun
+                    placeholder: (context, url) => Container(height: 150, color: Colors.grey[200]),
+                    errorWidget: (context, url, error) => Container(height: 150, child: const Icon(Icons.image_not_supported, color: Colors.grey)),
                   ),
-                  if (isSold)
-                    Positioned(
-                      top: 8, right: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)),
-                        child: const Text("SATILDI", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                      ),
-                    ),
+                ),
+                if (isSold)
                   Positioned(
-                    bottom: 8, left: 8,
+                    top: 8, right: 8,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(8)),
-                      child: Text("${price}₺", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)),
+                      child: const Text("SATILDI", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
                   ),
-                ],
-              ),
+                Positioned(
+                  bottom: 8, left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(8)),
+                    child: Text("${price}₺", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
             ),
+            // Bilgi Alanı
             Padding(
               padding: const EdgeInsets.all(10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(data['title'] ?? 'Ürün', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text(data['title'] ?? 'Ürün', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      Icon(Icons.person, size: 12, color: Colors.grey[500]),
-                      const SizedBox(width: 4),
+                      Icon(Icons.location_on, size: 12, color: Colors.grey[500]),
+                      const SizedBox(width: 2),
                       Expanded(child: Text(data['sellerName'] ?? 'Satıcı', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: Colors.grey[600]))),
                     ],
                   ),

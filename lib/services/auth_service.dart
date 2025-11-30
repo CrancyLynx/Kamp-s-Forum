@@ -20,7 +20,7 @@ class AuthService {
         case 'network-request-failed': return 'İnternet bağlantınızı kontrol edin.';
         case 'requires-recent-login': return 'Güvenlik gereği bu işlem için tekrar giriş yapmalısınız.';
         case 'credential-already-in-use': return 'Bu hesap bilgileri zaten kullanımda.';
-        case 'permission-denied': return 'Veritabanı erişim izni reddedildi.';
+        case 'permission-denied': return 'Erişim reddedildi. Yetkiniz yok.';
         default: return 'Bir hata oluştu: ${e.message}';
       }
     }
@@ -31,7 +31,6 @@ class AuthService {
   Future<String?> sendPasswordReset(String email) async {
     try {
       if (!email.contains('@')) return "Geçerli bir e-posta adresi girin.";
-      // Not: Kullanıcı sorgusu permission hatası verebilir, bu yüzden doğrudan gönderiyoruz.
       await _auth.sendPasswordResetEmail(email: email);
       return null;
     } catch (e) {
@@ -78,7 +77,6 @@ class AuthService {
         return "Sadece üniversite e-postası (.edu veya .edu.tr) ile kayıt olabilirsiniz.";
       }
 
-      // Takma ad kontrolü
       final checkNick = await _firestore.collection('kullanicilar').where('takmaAd', isEqualTo: takmaAd).limit(1).get();
       if (checkNick.docs.isNotEmpty) return "Bu takma ad zaten alınmış.";
 
@@ -94,7 +92,7 @@ class AuthService {
     }
   }
 
-  // --- KULLANICI DOC OLUŞTURUCU (YARDIMCI) ---
+  // --- KULLANICI DOC OLUŞTURUCU ---
   Future<void> _createUserDocument(User user, String adSoyad, String takmaAd, String phone, String email) async {
     final adSoyadParts = adSoyad.split(' ');
     final sadeceAd = adSoyadParts.isNotEmpty ? adSoyadParts.first : '';
@@ -117,7 +115,7 @@ class AuthService {
       'followers': [],
       'following': [],
       'savedPosts': []
-    }, SetOptions(merge: true)); // Varsa üzerine yazmaz, birleştirir
+    }, SetOptions(merge: true)); 
   }
 
   // --- 4. YENİDEN KİMLİK DOĞRULAMA ---
@@ -143,10 +141,8 @@ class AuthService {
       phoneNumber: phoneNumber,
       timeout: const Duration(seconds: 60),
       verificationCompleted: (PhoneAuthCredential credential) async {
-        // Android Otomatik Doğrulama
         final user = _auth.currentUser;
         if (user != null) {
-           // Zaten giriş yapmışsa (MFA), tekrar bağlamaya çalışır
            try {
              await user.linkWithCredential(credential);
            } catch (_) {
@@ -173,20 +169,21 @@ class AuthService {
   // --- 6. TELEFON + ŞİFRE KONTROLÜ (GÜVENLİ) ---
   Future<String?> validatePhonePassword(String phone, String password) async {
     try {
-      // DİKKAT: Bu sorgu giriş yapmadan çalıştırılırsa "Permission Denied" hatası verebilir.
+      // DİKKAT: Firestore Rules'da "allow read: if true;" yoksa bu sorgu hata verir.
+      // Güvenli çözüm için Cloud Function önerilir.
       final query = await _firestore.collection('kullanicilar').where('phoneNumber', isEqualTo: phone).limit(1).get();
       
       if (query.docs.isEmpty) return "Bu numara ile kayıtlı hesap bulunamadı.";
       
       final email = query.docs.first['email'];
-      // Şifreyi doğrulamak için arka planda giriş yapmayı dene
+      // Şifreyi doğrulamak için giriş yap
       await _auth.signInWithEmailAndPassword(email: email, password: password);
       
-      return null; 
+      return null; // Başarılı
     } on FirebaseException catch (e) {
       if (e.code == 'permission-denied') {
-        // ÖNEMLİ: Yetki hatası alınırsa, UI tarafında şifre kontrolünü atlamak için özel kod dönüyoruz.
-        return "permission_error"; 
+        // Kullanıcıya özel hata mesajı
+        return "Sistem Hatası: Veritabanı okuma izni yok. (Lütfen geliştirici ile iletişime geçin: Rule Permission)"; 
       }
       return _handleError(e);
     } catch (e) {
@@ -194,7 +191,7 @@ class AuthService {
     }
   }
 
-  // --- 8. IKI ADIMLI DOĞRULAMA (2FA) AÇ/KAPAT ---
+  // --- 7. DİĞER YARDIMCILAR ---
   Future<String?> toggleMFA(bool enable) async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -204,13 +201,12 @@ class AuthService {
       await _firestore.collection('kullanicilar').doc(user.uid).update({
         'isTwoFactorEnabled': enable,
       });
-      return null; // Başarılı
+      return null;
     } catch (e) {
       return _handleError(e);
     }
   }
 
-  // --- 7. DİĞER YARDIMCILAR ---
   Future<String?> signInGuest() async {
     try {
       await _auth.signInAnonymously();

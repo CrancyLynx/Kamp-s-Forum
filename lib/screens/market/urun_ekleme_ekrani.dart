@@ -4,8 +4,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-// Üst klasördeki utils'e erişim
 import '../../utils/app_colors.dart';
+// YENİ: Servis importu
+import '../../services/image_compression_service.dart';
 
 class UrunEklemeEkrani extends StatefulWidget {
   const UrunEklemeEkrani({super.key});
@@ -36,10 +37,13 @@ class _UrunEklemeEkraniState extends State<UrunEklemeEkrani> {
     try {
       final XFile? pickedFile = await _picker.pickImage(
         source: ImageSource.gallery, 
-        imageQuality: 70
+        imageQuality: 80 
       );
       if (pickedFile != null) {
-        setState(() => _imageFile = File(pickedFile.path));
+        File original = File(pickedFile.path);
+        // YENİ: Sıkıştırma işlemi
+        File? compressed = await ImageCompressionService.compressImage(original);
+        setState(() => _imageFile = compressed ?? original);
       }
     } catch (e) {
       debugPrint("Resim seçme hatası: $e");

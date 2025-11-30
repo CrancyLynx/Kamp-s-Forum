@@ -1,3 +1,4 @@
+// (Importlar aynı)
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -8,10 +9,8 @@ import 'package:timeago/timeago.dart' as timeago;
 import 'package:image_picker/image_picker.dart'; 
 import 'package:firebase_storage/firebase_storage.dart'; 
 import 'dart:io';
-// Düzeltilmiş Importlar
 import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart';
- 
 import 'gonderi_duzenleme_ekrani.dart';
 import '../../widgets/animated_list_item.dart';
 
@@ -23,7 +22,6 @@ class GonderiDetayEkrani extends StatefulWidget {
   final String mesaj;
   final dynamic zaman; 
   final String kategori;
-  // Bu parametre artık sayfa içinde kontrol edilen durumla güncellenebilir
   final bool isAdmin;
   final String userName; 
   final String? avatarUrl;
@@ -47,9 +45,6 @@ class GonderiDetayEkrani extends StatefulWidget {
   factory GonderiDetayEkrani.fromDoc(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     final currentUser = FirebaseAuth.instance.currentUser;
-    
-    // GÜVENLİK GÜNCELLEMESİ: Hardcoded admin listesi kaldırıldı.
-    // Varsayılan olarak false. initState içinde kontrol edilecek.
     final bool isAdministrator = false;
 
     return GonderiDetayEkrani(
@@ -84,7 +79,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
   int _likeCount = 0;
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
   
-  // YENİ: Yerel Admin Kontrolü
   bool _isCurrentUserAdmin = false;
 
   late AnimationController _likeAnimController;
@@ -99,8 +93,8 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
   @override
   void initState() {
     super.initState();
-    _isCurrentUserAdmin = widget.isAdmin; // Başlangıç değeri
-    _checkAdminStatus(); // Dinamik kontrol
+    _isCurrentUserAdmin = widget.isAdmin;
+    _checkAdminStatus();
     
     _postStream = FirebaseFirestore.instance.collection('gonderiler').doc(widget.postId).snapshots();
     
@@ -175,8 +169,10 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
   Future<void> _pickCommentImage() async {
     final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
     if (pickedFile != null) {
+      File original = File(pickedFile.path);
+      // Burada da sıkıştırma kullanabiliriz ama basitlik için direkt atıyoruz, istenirse service kullanılabilir
       setState(() {
-        _commentImage = File(pickedFile.path);
+        _commentImage = original;
       });
     }
   }
@@ -281,7 +277,16 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gönderi silindi."), backgroundColor: Colors.red));
       }
     } catch (e) {
-      if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Hata: $e")));
+      // Cloud Function yoksa manuel silmeyi dene (Fallback)
+      try {
+         await FirebaseFirestore.instance.collection('gonderiler').doc(widget.postId).delete();
+         if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gönderi silindi."), backgroundColor: Colors.red));
+         }
+      } catch (e2) {
+         if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Hata: $e2")));
+      }
     }
   }
 
@@ -353,6 +358,38 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
     );
   }
 
+  // YENİ: KULLANICI ENGELLEME
+  Future<void> _blockUser() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("${widget.adSoyad} engellensin mi?"),
+        content: const Text("Bu kullanıcının gönderilerini bir daha görmeyeceksiniz."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("İptal")),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true), 
+            child: const Text("ENGELLE", style: TextStyle(color: Colors.red))
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await FirebaseFirestore.instance.collection('kullanicilar').doc(_currentUserId).update({
+        'blockedUsers': FieldValue.arrayUnion([widget.authorUserId])
+      });
+      if(mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Kullanıcı engellendi."), backgroundColor: Colors.red));
+        Navigator.pop(context); // Ekrandan çık
+      }
+    } catch(e) {
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Hata oluştu.")));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isDeletedUser = widget.authorUserId == 'deleted_user';
@@ -408,6 +445,7 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
                     ],
                   ),
 
+                  // (Kodun devamı öncekiyle aynı...)
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -551,6 +589,33 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
     );
   }
 
+  // (Widget fonksiyonları: _buildCommentsList, _buildCommentItem, _buildModernInputArea, _buildShimmerLoading vs. önceki kodla aynı kalacak)
+  // Sadece _buildMoreButton'u güncelliyoruz:
+
+  Widget _buildMoreButton(bool hasPermission) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_horiz_rounded),
+      onSelected: (val) {
+        if (val == 'delete') _deletePost();
+        if (val == 'edit') Navigator.push(context, MaterialPageRoute(builder: (_) => GonderiDuzenlemeEkrani(postId: widget.postId, initialTitle: widget.baslik, initialMessage: widget.mesaj)));
+        if (val == 'report') _showReportDialog();
+        if (val == 'block') _blockUser(); // YENİ
+      },
+      itemBuilder: (ctx) => [
+        if (hasPermission) ...[
+          const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text("Düzenle")])),
+          const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red, size: 18), SizedBox(width: 8), Text("Sil", style: TextStyle(color: Colors.red))])),
+        ] else ...[
+           const PopupMenuItem(value: 'report', child: Row(children: [Icon(Icons.flag, size: 18), SizedBox(width: 8), Text("Şikayet Et")])),
+           // YENİ: Engelle Butonu
+           const PopupMenuItem(value: 'block', child: Row(children: [Icon(Icons.block, color: Colors.red, size: 18), SizedBox(width: 8), Text("Kullanıcıyı Engelle", style: TextStyle(color: Colors.red))])),
+        ]
+      ],
+    );
+  }
+  
+  // Eksik kalan fonksiyonlar (List, Input Area vs) buraya eklenecek, önceki kodun aynısıdır.
+  // Kısalık olması için sadece değişiklikleri vurguladım, tam dosya isterseniz önceki kodun tamamına _blockUser ve _buildMoreButton güncellemelerini eklemeniz yeterli.
   Widget _buildCommentsList() {
     return StreamBuilder<QuerySnapshot>(
       stream: _commentsStream,
@@ -593,6 +658,8 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
   }
 
   Widget _buildCommentItem(String commentId, Map<String, dynamic> data) {
+    // (Önceki kodun aynısı)
+    // ...
     final bool isMyComment = data['userId'] == _currentUserId;
     final bool isAdminComment = data['userId'] == widget.authorUserId;
     final bool isCommenterDeleted = data['userId'] == 'deleted_user';
@@ -607,6 +674,7 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // (Avatar vb aynı)
           GestureDetector(
             onTap: isCommenterDeleted 
                 ? null 
@@ -838,25 +906,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
           ],
         ),
       ),
-    );
-  }
-
-  // GÜNCELLEME: Admin kontrolü ile silme/düzenleme yetkisi
-  Widget _buildMoreButton(bool hasPermission) {
-    return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_horiz_rounded),
-      onSelected: (val) {
-        if (val == 'delete') _deletePost();
-        if (val == 'edit') Navigator.push(context, MaterialPageRoute(builder: (_) => GonderiDuzenlemeEkrani(postId: widget.postId, initialTitle: widget.baslik, initialMessage: widget.mesaj)));
-        if (val == 'report') _showReportDialog();
-      },
-      itemBuilder: (ctx) => [
-        if (hasPermission) ...[
-          const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text("Düzenle")])),
-          const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red, size: 18), SizedBox(width: 8), Text("Sil", style: TextStyle(color: Colors.red))])),
-        ] else
-          const PopupMenuItem(value: 'report', child: Row(children: [Icon(Icons.flag, size: 18), SizedBox(width: 8), Text("Şikayet Et")])),
-      ],
     );
   }
 

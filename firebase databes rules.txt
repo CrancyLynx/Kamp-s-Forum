@@ -12,12 +12,20 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
     
-    // Admin kontrolü: Firestore'daki role alanını okur.
     function isAdmin() {
       return isSignedIn() && 
              get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.role == 'admin';
     }
     
+    // Değiştirilmek istenen alanları kontrol eder (Güvenlik için)
+    function checkRestrictedFields(fields) {
+      // Kullanıcının değiştiremeyeceği alanlar: Rol, Onay Durumu, Rozetler, Doğrulanmış Hesap
+      return !('role' in fields) && 
+             !('status' in fields) && 
+             !('earnedBadges' in fields) && 
+             !('verified' in fields);
+    }
+
     // -----------------------------------------------------------
     // 1. KULLANICILAR KOLEKSİYONU
     // -----------------------------------------------------------
@@ -25,11 +33,12 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isOwner(userId);
       
-      // Admin her şeyi değiştirebilir, kullanıcı sadece kısıtlı alanları (takipçi vs) veya kendi profilini (role hariç)
       allow update: if 
         isAdmin() ||
-        (isOwner(userId) && !('role' in request.resource.data.diff(resource.data).affectedKeys()) && !('status' in request.resource.data.diff(resource.data).affectedKeys())) ||
-        (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followers', 'followerCount']));
+        // 1. Sahibi güncelliyorsa: Yasaklı alanlara (rozet, rol vs.) dokunmamalı
+        (isOwner(userId) && checkRestrictedFields(request.resource.data.diff(resource.data).affectedKeys())) ||
+        // 2. Başkası güncelliyorsa: Sadece sayaçları (takipçi, beğeni, yorum sayısı) değiştirebilir
+        (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followers', 'followerCount', 'likeCount', 'commentCount', 'postCount']));
         
       allow delete: if isOwner(userId) || isAdmin();
     }
@@ -41,16 +50,17 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       
-      // Admin veya Sahibi güncelleyebilir. Beğeni (likes) ve Yorum Sayısı (commentCount) herkese açık.
       allow update: if 
-        isAdmin() || isOwner(resource.data.userId) || 
+        isAdmin() ||
+        isOwner(resource.data.userId) || 
+        // Başkaları sadece beğeni ve yorum sayısını güncelleyebilir, sabitlenme durumunu (isPinned) değiştiremez
         (isSignedIn() && (
-           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']) ||
-           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount'])
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'commentCount', 'lastCommentTimestamp', 'recentCommenterAvatars'])
         ));
         
       allow delete: if isOwner(resource.data.userId) || isAdmin();
       
+      // Yorumlar Alt Koleksiyonu
       match /yorumlar/{commentId} {
         allow read: if true;
         allow create: if isSignedIn();
@@ -59,36 +69,36 @@ service cloud.firestore {
     }
     
     // -----------------------------------------------------------
-    // 3. SOHBETLER (DÜZELTİLEN KISIM)
+    // 3. SOHBETLER
     // -----------------------------------------------------------
     match /sohbetler/{chatId} {
-        // HATA ÇÖZÜMÜ: resource == null kontrolü eklendi.
-        // Böylece sohbet dokümanı henüz oluşmamışsa (yeni sohbet) hata vermez.
-        allow read: if resource == null || request.auth.uid in resource.data.participants;
-        
-        allow create: if isSignedIn();
-        allow update: if request.auth.uid in resource.data.participants;
-        allow delete: if isAdmin();
-        
-        match /mesajlar/{messageId} {
-            // Sohbet yeni başlıyorsa (doc yoksa) veya katılımcıysan oku
-            allow read: if !exists(/databases/$(database)/documents/sohbetler/$(chatId)) || 
-                           request.auth.uid in get(/databases/$(database)/documents/sohbetler/$(chatId)).data.participants;
-                           
-            allow create: if isSignedIn();
-            allow update, delete: if isAdmin();
-        }
+      // Sohbet yoksa (yeni) veya katılımcıysan oku
+      allow read: if resource == null || request.auth.uid in resource.data.participants;
+      allow create: if isSignedIn();
+      allow update: if request.auth.uid in resource.data.participants;
+      allow delete: if isAdmin();
+      
+      match /mesajlar/{messageId} {
+         allow read: if !exists(/databases/$(database)/documents/sohbetler/$(chatId)) ||
+                        request.auth.uid in get(/databases/$(database)/documents/sohbetler/$(chatId)).data.participants;
+         allow create: if isSignedIn();
+         allow update, delete: if isAdmin();
+      }
     }
 
     // -----------------------------------------------------------
     // 4. DİĞER KOLEKSİYONLAR
     // -----------------------------------------------------------
+    // Ürünler
     match /urunler/{productId} { 
       allow read: if true;
       allow create: if isSignedIn(); 
-      allow update, delete: if isOwner(resource.data.sellerId) || isAdmin();
+      // Satıcı, Admin veya satın alma durumunda (isSold) güncelleme yapılabilir
+      allow update: if isOwner(resource.data.sellerId) || isAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isSold']));
+      allow delete: if isOwner(resource.data.sellerId) || isAdmin();
     }
     
+    // Etkinlikler, Bildirimler, Şikayetler vb.
     match /locations/{locationId} {
       allow read: if true;
       allow create, delete: if isAdmin();
@@ -97,15 +107,14 @@ service cloud.firestore {
     
     match /etkinlikler/{eventId} { 
       allow read: if true;
-      // Etkinliklere katılım (attendees) herkes tarafından güncellenebilir
       allow update: if isAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['attendees']));
       allow create, delete: if isAdmin();
     }
     
     match /bildirimler/{notificationId} { 
-      allow read, update: if isOwner(resource.data.userId) || isAdmin(); 
-      allow create: if isSignedIn(); 
-      allow delete: if isOwner(resource.data.userId) || isAdmin(); 
+      allow read: if isOwner(resource.data.userId) || isAdmin(); 
+      allow create: if isSignedIn(); // Herkes bildirim gönderebilir (like/yorum yapınca)
+      allow update, delete: if isOwner(resource.data.userId) || isAdmin();
     }
     
     match /sikayetler/{reportId} { 

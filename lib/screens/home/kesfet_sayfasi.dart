@@ -173,13 +173,12 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
           color: AppColors.primary,
           child: CustomScrollView(
             slivers: [
-              // ARAMA BARI (GÜNCELLENDİ: EVRENSEL ARAMA)
+              // ARAMA BARI
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: GestureDetector(
                     onTap: () {
-                       // Hem harita hem kullanıcı/konu arayan hibrit arama
                        showSearch(
                          context: context, 
                          delegate: KampusSearchDelegate()
@@ -209,7 +208,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                 ),
               ),
 
-              // HIZLI MENÜ
+              // HIZLI MENÜ (GÜNCELLENDİ: HARİTA EN BAŞA ALINDI)
               SliverToBoxAdapter(
                 child: SizedBox(
                   height: 90,
@@ -217,10 +216,11 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     children: [
+                      // HARİTA EN BAŞA GELDİ
+                      _buildQuickAction(Icons.map, "Harita", Colors.green),
                       _buildQuickAction(Icons.restaurant, "Yemek", Colors.orange),
                       _buildQuickAction(Icons.directions_bus, "Durak", Colors.blue),
                       _buildQuickAction(Icons.local_library, "Kütüphane", Colors.brown),
-                      _buildQuickAction(Icons.map, "Harita", Colors.green),
                     ],
                   ),
                 ),
@@ -547,12 +547,47 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
     );
   }
 
+  // GÜNCELLENDİ: ARTIK RENKLİ ROZET DÖNDÜRÜYOR
   Widget _buildRankBadge(int rank) {
-    return Container(width: 40, height: 40, decoration: const BoxDecoration(color: Colors.transparent), child: Center(child: Text("#$rank", style: const TextStyle(fontWeight: FontWeight.bold))));
+    Color bgColor;
+    Color textColor;
+
+    if (rank == 1) {
+      bgColor = const Color(0xFFF7941D); // Altın
+      textColor = Colors.white;
+    } else if (rank == 2) {
+      bgColor = const Color(0xFFC0C0C0); // Gümüş
+      textColor = Colors.white;
+    } else if (rank == 3) {
+      bgColor = const Color(0xFFCD7F32); // Bronz
+      textColor = Colors.white;
+    } else {
+      bgColor = Colors.grey.shade200; // Varsayılan
+      textColor = Colors.grey.shade700;
+    }
+
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: bgColor,
+        shape: BoxShape.circle,
+        boxShadow: rank <= 3 ? [BoxShadow(color: bgColor.withOpacity(0.4), blurRadius: 4, offset: const Offset(0, 2))] : null,
+      ),
+      child: Center(
+        child: Text(
+          "#$rank",
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: textColor,
+            fontSize: 13
+          ),
+        )
+      )
+    );
   }
 }
 
-// --- YENİLENEN EVRENSEL ARAMA DELEGATE SINIFI ---
 class KampusSearchDelegate extends SearchDelegate {
   final MapDataService _mapService = MapDataService();
 
@@ -600,21 +635,15 @@ class KampusSearchDelegate extends SearchDelegate {
       );
     }
 
-    // 3 FARKLI KAYNAKTAN PARALEL ARAMA (Google Maps + Firebase Kullanıcı + Firebase Forum)
     return FutureBuilder(
       future: Future.wait([
-        // 1. Harita Tahminleri
         _mapService.getPlacePredictions(query, null), 
-        
-        // 2. Kullanıcı Araması (Case-sensitive olduğu için basit prefix arama)
         FirebaseFirestore.instance
             .collection('kullanicilar')
             .where('takmaAd', isGreaterThanOrEqualTo: query)
             .where('takmaAd', isLessThan: '$query\uf8ff')
             .limit(3)
             .get(),
-            
-        // 3. Konu Araması
         FirebaseFirestore.instance
             .collection('gonderiler')
             .where('baslik', isGreaterThanOrEqualTo: query)
@@ -627,7 +656,6 @@ class KampusSearchDelegate extends SearchDelegate {
           return const Center(child: CircularProgressIndicator());
         }
         
-        // Verileri Ayrıştır
         final placeResults = snapshot.data != null ? snapshot.data![0] as List<Map<String, dynamic>> : <Map<String, dynamic>>[];
         final userResults = snapshot.data != null ? (snapshot.data![1] as QuerySnapshot).docs : <DocumentSnapshot>[];
         final topicResults = snapshot.data != null ? (snapshot.data![2] as QuerySnapshot).docs : <DocumentSnapshot>[];
@@ -639,7 +667,6 @@ class KampusSearchDelegate extends SearchDelegate {
         return ListView(
           padding: const EdgeInsets.all(8),
           children: [
-            // --- MEKANLAR ---
             if (placeResults.isNotEmpty) ...[
               _buildSectionHeader("MEKANLAR & HARİTA"),
               ...placeResults.map((item) {
@@ -663,7 +690,6 @@ class KampusSearchDelegate extends SearchDelegate {
               const Divider(),
             ],
 
-            // --- KULLANICILAR ---
             if (userResults.isNotEmpty) ...[
               _buildSectionHeader("KULLANICILAR"),
               ...userResults.map((doc) {
@@ -682,7 +708,6 @@ class KampusSearchDelegate extends SearchDelegate {
               const Divider(),
             ],
 
-            // --- KONULAR ---
             if (topicResults.isNotEmpty) ...[
               _buildSectionHeader("FORUM KONULARI"),
               ...topicResults.map((doc) {

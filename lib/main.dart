@@ -15,7 +15,6 @@ import 'services/presence_service.dart';
 
 // Widgetlar
 import 'widgets/in_app_notification.dart'; 
-// import 'widgets/app_logo.dart'; // Eğer kullanılıyorsa açın, ama aşağıda kullanılmadığı için kapattım.
 
 // Sayfalar
 import 'screens/auth/dogrulama_ekrani.dart';
@@ -23,8 +22,6 @@ import 'screens/home/ana_ekran.dart';
 import 'screens/auth/giris_ekrani.dart'; 
 import 'screens/auth/splash_screen.dart';
 import 'screens/auth/verification_wrapper.dart'; 
-// import 'utils/app_colors.dart'; // Gerekirse açın
-
 
 // --- BACKGROUND HANDLER ---
 @pragma('vm:entry-point')
@@ -35,9 +32,6 @@ Future<void> firebaseBackgroundMessageHander(RemoteMessage message) async {
 
 // --- GLOBAL DEĞİŞKENLER ---
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-
-// DİKKAT: Eski 'kAdminUids' listesi buradan KALDIRILDI. 
-// Artık yetki kontrolü tamamen veritabanı üzerinden (role: 'admin') yapılıyor.
 
 // --- TEMA YÖNETİCİSİ ---
 class ThemeProvider extends ChangeNotifier {
@@ -112,6 +106,7 @@ class _BizimUygulamaState extends State<BizimUygulama> {
     if (context == null) return;
 
     final overlayState = Overlay.of(context);
+    // Güvenlik: OverlayState null olabilir
     _overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
         top: 0, left: 0, right: 0,
@@ -139,8 +134,10 @@ class _BizimUygulamaState extends State<BizimUygulama> {
 
     overlayState.insert(_overlayEntry!);
     Future.delayed(const Duration(seconds: 4), () {
-      _overlayEntry?.remove();
-      _overlayEntry = null;
+      if (_overlayEntry != null && _overlayEntry!.mounted) {
+        _overlayEntry?.remove();
+        _overlayEntry = null;
+      }
     });
   }
 
@@ -163,7 +160,7 @@ class _BizimUygulamaState extends State<BizimUygulama> {
         scaffoldBackgroundColor: const Color(0xFF121212),
         useMaterial3: true,
       ),
-      home: const SplashScreen(),
+      home: const AnaKontrolcu(), // SplashScreen yerine AnaKontrolcu ile başla
     );
   }
 }
@@ -193,35 +190,43 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, authSnapshot) { 
+        // 1. Auth Durumu Bekleniyor
         if (authSnapshot.connectionState == ConnectionState.waiting) {
           return const LoadingScreen();
         }
         
+        // 2. Kullanıcı Giriş Yapmışsa
         if (authSnapshot.hasData) {
           final user = authSnapshot.data!;
           
-          // 1. Misafir Kontrolü
+          // Misafir Kontrolü
           if (user.isAnonymous) {
              return const AnaEkran(isGuest: true, isAdmin: false, userName: 'Misafir', realName: 'Misafir');
           }
 
-          // 2. DOĞRULAMA KONTROLÜ
+          // Email Doğrulama Kontrolü
           if (!user.emailVerified && (user.phoneNumber == null || user.phoneNumber!.isEmpty)) {
             return const VerificationWrapper();
           }
 
           final userId = user.uid;
 
-          // 3. Firestore Durum ve ROL Kontrolü
+          // 3. Firestore Verisi
           return StreamBuilder<DocumentSnapshot>(
             stream: FirebaseFirestore.instance.collection('kullanicilar').doc(userId).snapshots(),
             builder: (context, userSnapshot) { 
-              if (userSnapshot.connectionState == ConnectionState.waiting) return const LoadingScreen();
+              // DÜZELTME: Veri yüklenirken Loading göster, direkt çıkış yapma!
+              if (userSnapshot.connectionState == ConnectionState.waiting) {
+                return const LoadingScreen();
+              }
               
-              // Kullanıcı veritabanında yoksa veya silinmişse (4. adımda silmiştik) çıkış yap.
+              // Veri geldi ama doküman yoksa?
               if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-                 // Güvenlik: Veritabanında kaydı olmayan (örn: silinmiş) kullanıcıyı dışarı at
-                 FirebaseAuth.instance.signOut();
+                 // Sadece bağlantı bittiği halde (done/active) veri yoksa çıkış yap.
+                 // Bu durum, kullanıcı Auth'da var ama Firestore'da silinmişse olur.
+                 WidgetsBinding.instance.addPostFrameCallback((_) {
+                   FirebaseAuth.instance.signOut();
+                 });
                  return const GirisEkrani();
               }
 
@@ -229,8 +234,6 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
               final status = userData?['status'] ?? 'Unverified';
               final String userName = userData?['takmaAd'] ?? userData?['ad'] ?? 'Anonim'; 
               final String realName = userData?['ad'] ?? 'Anonim'; 
-              
-              // YENİ: Admin kontrolü artık veritabanındaki 'role' alanından yapılıyor.
               final String role = userData?['role'] ?? 'user';
               final bool isAdministrator = (role == 'admin');
 
@@ -248,6 +251,7 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
           ); 
         } 
 
+        // 4. Kullanıcı Yoksa
         return const GirisEkrani(); 
       }, 
     );
