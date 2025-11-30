@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-// Düzeltilmiş Importlar
 import '../../utils/app_colors.dart';
 
 class AppLogo extends StatelessWidget {
@@ -10,7 +9,7 @@ class AppLogo extends StatelessWidget {
   const AppLogo({
     super.key,
     this.size = 120,
-    this.isLightMode = true,
+    this.isLightMode = true, // Varsayılan true
   });
 
   @override
@@ -22,25 +21,25 @@ class AppLogo extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // 1. LOGO KISMI (Çerçevesiz ve Şık)
+        // 1. LOGO RESMİ (app_logo3.png)
         Container(
           width: size,
           height: size,
           decoration: BoxDecoration(
-            // Beyaz arka plan yerine transparan veya hafif bir parlama efekti
             color: Colors.transparent, 
             shape: BoxShape.circle,
-            // Sadece hafif bir çerçeve (isteğe bağlı)
+            // İsteğe bağlı hafif çerçeve
             border: Border.all(
-              color: textColor.withOpacity(0.2), 
-              width: 2
+              color: textColor.withOpacity(0.1), 
+              width: 1
             ),
           ),
           child: ClipOval(
             child: Image.asset(
-              'assets/images/app_logo3.png',
-              fit: BoxFit.cover, // Resmi daireye tam doldur
+              'assets/images/app_logo3.png', // Kesinlikle bu dosya kullanılacak
+              fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) {
+                // Eğer resim yüklenemezse yedek ikon göster
                 return Center(
                   child: Icon(
                     FontAwesomeIcons.graduationCap,
@@ -53,20 +52,20 @@ class AppLogo extends StatelessWidget {
           ),
         ),
         
-        SizedBox(height: size * 0.15), // Boşluk
+        SizedBox(height: size * 0.1), // Resim ile yazı arası boşluk
 
-        // 2. METİN KISMI (MODERN FONT)
+        // 2. LOGO YAZISI
         Text(
           "KAMPÜS",
           style: TextStyle(
-            fontSize: size * 0.28,
-            fontWeight: FontWeight.w900, // Kalın
+            fontSize: size * 0.24,
+            fontWeight: FontWeight.w900,
             color: textColor,
-            letterSpacing: 4, // Harf aralığı
+            letterSpacing: 2,
             shadows: [
               Shadow(
-                color: textColor.withOpacity(0.3),
-                blurRadius: 15,
+                color: textColor.withOpacity(0.2),
+                blurRadius: 10,
                 offset: const Offset(0, 2),
               )
             ],
@@ -75,10 +74,10 @@ class AppLogo extends StatelessWidget {
         Text(
           "FORUM",
           style: TextStyle(
-            fontSize: size * 0.16,
-            fontWeight: FontWeight.w300, // İnce
+            fontSize: size * 0.14,
+            fontWeight: FontWeight.w300,
             color: secondaryColor,
-            letterSpacing: 8,
+            letterSpacing: 6,
           ),
         ),
       ],

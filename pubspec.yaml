@@ -40,6 +40,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  # İkon paketi
   flutter_launcher_icons: ^0.13.1
 
 flutter:
@@ -47,8 +48,8 @@ flutter:
   assets:
     - assets/images/
 
-# --- İKON AYARLARI ---
-# Bu kısım sayfanın en soluna dayalı olmalı, girinti yok!
+# --- İKON YAPILANDIRMASI ---
+# Bu ayar telefon menüsündeki ikon içindir (app_icon.png)
 flutter_launcher_icons:
   android: "ic_launcher"
   ios: true

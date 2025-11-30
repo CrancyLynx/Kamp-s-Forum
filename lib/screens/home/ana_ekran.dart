@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart'; 
-import 'package:shared_preferences/shared_preferences.dart'; // EKLENDİ: Hafıza kontrolü için
-import 'package:tutorial_coach_mark/tutorial_coach_mark.dart'; // EKLENDİ: Tanıtım paketi
+import 'package:shared_preferences/shared_preferences.dart'; // Hafıza kontrolü için
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart'; // Tanıtım paketi
 
 import '../forum/forum_sayfasi.dart';
 import 'kesfet_sayfasi.dart';
@@ -33,7 +33,7 @@ class AnaEkran extends StatefulWidget {
 
 class _AnaEkranState extends State<AnaEkran> {
   int _selectedIndex = 0;
-  late final PageController _pageController;
+  // PageController SİLİNDİ (IndexedStack kullanacağız)
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
   // --- TANITIM İÇİN KEY'LER (KONUM BELİRLEYİCİLER) ---
@@ -46,19 +46,19 @@ class _AnaEkranState extends State<AnaEkran> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: _selectedIndex);
+    // PageController init SİLİNDİ
     
     if (!_currentUserId.isEmpty && !widget.isGuest) {
       _verifyCounters();
     }
 
-    // EKLENDİ: Sayfa açıldıktan hemen sonra tanıtımı kontrol et
+    // Sayfa açıldıktan hemen sonra tanıtımı kontrol et
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndShowTutorial();
     });
   }
 
-  // EKLENDİ: Tanıtımı Gösterme Mantığı
+  // Tanıtımı Gösterme Mantığı
   Future<void> _checkAndShowTutorial() async {
     final prefs = await SharedPreferences.getInstance();
     // 'isTutorialShown' false ise veya null ise tanıtımı göster
@@ -227,41 +227,39 @@ class _AnaEkranState extends State<AnaEkran> {
 
   @override
   void dispose() {
-    _pageController.dispose();
+    // PageController dispose SİLİNDİ
     super.dispose();
   }
 
   void _onItemTapped(int index) {
-    _pageController.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-    );
+    // PageView olmadığı için animateToPage kullanmıyoruz, sadece index güncelliyoruz.
+    setState(() => _selectedIndex = index);
   }
 
   @override
   Widget build(BuildContext context) {
+    // Sayfaları burada liste olarak tanımlıyoruz
+    final List<Widget> pages = [
+      const KesfetSayfasi(),
+      const PazarSayfasi(), 
+      ForumSayfasi(
+        isGuest: widget.isGuest,
+        isAdmin: widget.isAdmin,
+        userName: widget.userName,
+        realName: widget.realName,
+      ),
+      const ProfilEkrani(),
+    ];
+
     return Scaffold(
       appBar: (_selectedIndex == 0) ? _buildKesfetAppBar() : null,
       
-      body: PageView(
-        controller: _pageController,
-        onPageChanged: (index) {
-          setState(() => _selectedIndex = index);
-        },
-        physics: const NeverScrollableScrollPhysics(),
-        children: [
-          const KesfetSayfasi(),
-          const PazarSayfasi(), 
-          ForumSayfasi(
-            isGuest: widget.isGuest,
-            isAdmin: widget.isAdmin,
-            userName: widget.userName,
-            realName: widget.realName,
-          ),
-          const ProfilEkrani(),
-        ],
+      // PERFORMANS DÜZELTMESİ: PageView yerine IndexedStack
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: pages,
       ),
+      
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
@@ -269,7 +267,6 @@ class _AnaEkranState extends State<AnaEkran> {
         unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
         items: [
-          // EKLENDİ: Key'ler Icon'lara verildi
           BottomNavigationBarItem(
               icon: Icon(Icons.explore_outlined, key: keyKesfet),
               activeIcon: const Icon(Icons.explore),
