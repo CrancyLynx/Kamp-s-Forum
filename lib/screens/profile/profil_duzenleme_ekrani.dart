@@ -274,10 +274,6 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
 
   // --- DİĞER (Telefon, 2FA, Silme) ---
   void _showPhoneUpdateDialog() {
-    // ... (Önceki kodun aynısı) ...
-    // Kısaltma için burayı aynen koruduğunu varsayıyorum, tam entegrasyon için 
-    // önceki kodundaki _showPhoneUpdateDialog bloğunu buraya kopyala.
-    // Fonksiyonellik değişmedi.
     final newPhoneController = TextEditingController();
     final smsCodeController = TextEditingController();
     String? verificationId;
@@ -331,7 +327,13 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                       final user = FirebaseAuth.instance.currentUser;
                       if (user != null) {
                         await user.updatePhoneNumber(credential);
-                        await _authService.updatePhoneNumberInFirestore(_userId, newPhoneController.text.trim());
+                        
+                        // --- HATA VEREN KISIM GÜNCELLENDİ (DOĞRUDAN FIRESTORE) ---
+                        await FirebaseFirestore.instance.collection('kullanicilar').doc(_userId).update({
+                          'phoneNumber': newPhoneController.text.trim(),
+                        });
+                        // -----------------------------------------------------------
+
                         setState(() => _phoneController.text = newPhoneController.text.trim());
                         if (mounted) { Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Güncellendi!"))); }
                       }

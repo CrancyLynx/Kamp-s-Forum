@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../utils/app_colors.dart';
-import '../../main.dart'; // AnaKontrolcu'ya erişim için
+import '../../main.dart'; 
 
 class VerificationWrapper extends StatefulWidget {
   const VerificationWrapper({super.key});
@@ -12,15 +12,11 @@ class VerificationWrapper extends StatefulWidget {
 }
 
 class _VerificationWrapperState extends State<VerificationWrapper> {
-  // 0: Seçim Ekranı, 1: Email Bekleme, 2: SMS Telefon Girişi, 3: SMS Kod Girişi
   int _currentStep = 0; 
-  
-  // Email Değişkenleri
   bool isEmailVerified = false;
   bool canResendEmail = false;
   Timer? emailTimer;
 
-  // SMS Değişkenleri
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _smsCodeController = TextEditingController();
   String? _verificationId;
@@ -45,17 +41,13 @@ class _VerificationWrapperState extends State<VerificationWrapper> {
     if (user == null) return;
 
     try {
-      // --- ÇÖKME DÜZELTMESİ ---
-      // reload() internet yoksa hata fırlatır, bunu yakalayıp yutuyoruz.
       await user.reload(); 
-      
       if (!mounted) return;
 
       setState(() {
         isEmailVerified = user.emailVerified;
       });
       
-      // Eğer herhangi biri doğrulanmışsa ana akışa gönder
       if (isEmailVerified || (user.phoneNumber != null && user.phoneNumber!.isNotEmpty)) {
         emailTimer?.cancel();
         Navigator.of(context).pushReplacement(
@@ -63,12 +55,10 @@ class _VerificationWrapperState extends State<VerificationWrapper> {
         );
       }
     } catch (e) {
-      // Hata olursa (internet yoksa) sessizce geç, çökme yapma.
       debugPrint("Bağlantı hatası (önemsiz): $e");
     }
   }
 
-  // --- EMAIL İŞLEMLERİ ---
   void startEmailVerification() async {
     setState(() => _currentStep = 1);
     try {
@@ -77,7 +67,6 @@ class _VerificationWrapperState extends State<VerificationWrapper> {
         await user.sendEmailVerification();
       }
       
-      // Periyodik kontrol başlat
       emailTimer = Timer.periodic(const Duration(seconds: 3), (_) => checkStatus());
       
       setState(() => canResendEmail = false);
@@ -88,16 +77,21 @@ class _VerificationWrapperState extends State<VerificationWrapper> {
     }
   }
 
-  // --- SMS İŞLEMLERİ ---
   void startPhoneVerification() {
     setState(() => _currentStep = 2);
   }
 
   Future<void> sendSmsCode() async {
-    final phone = _phoneController.text.trim();
+    var phone = _phoneController.text.trim();
     if (phone.isEmpty || phone.length < 10) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Geçerli bir telefon numarası girin (+90...)")));
       return;
+    }
+    
+    // Numara formatla
+    if (!phone.startsWith('+')) {
+       if (phone.startsWith('0')) phone = phone.substring(1);
+       phone = '+90$phone';
     }
 
     setState(() => _isLoading = true);
@@ -115,7 +109,7 @@ class _VerificationWrapperState extends State<VerificationWrapper> {
         codeSent: (String verificationId, int? resendToken) {
           setState(() {
             _verificationId = verificationId;
-            _currentStep = 3; // Kod girme ekranına geç
+            _currentStep = 3; 
             _isLoading = false;
           });
         },
@@ -156,9 +150,9 @@ class _VerificationWrapperState extends State<VerificationWrapper> {
     } on FirebaseAuthException catch (e) {
       setState(() => _isLoading = false);
       if (e.code == 'credential-already-in-use') {
-         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bu telefon numarası başka bir hesapta kayıtlı.")));
+         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bu numara zaten kayıtlı. Lütfen çıkış yapıp telefonla giriş yapın.")));
       } else {
-         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Bağlama Hatası: ${e.message}")));
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Hata: ${e.message}")));
       }
     }
   }
@@ -189,7 +183,7 @@ class _VerificationWrapperState extends State<VerificationWrapper> {
 
   Widget _buildBody() {
     switch (_currentStep) {
-      case 0: // Seçim Ekranı
+      case 0:
         return Column(
           children: [
             const Icon(Icons.verified_user_outlined, size: 80, color: AppColors.primary),
@@ -200,7 +194,7 @@ class _VerificationWrapperState extends State<VerificationWrapper> {
             ),
             const SizedBox(height: 10),
             const Text(
-              "Hesabınızı güvene almak için lütfen bir yöntem seçin. E-posta doğrulaması öğrenci statünüzü otomatik onaylar.",
+              "Hesabınızı güvene almak için lütfen bir yöntem seçin.",
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey),
             ),
@@ -223,7 +217,7 @@ class _VerificationWrapperState extends State<VerificationWrapper> {
           ],
         );
 
-      case 1: // Email Bekleme
+      case 1: 
         return Column(
           children: [
             const Icon(Icons.mark_email_unread_outlined, size: 80, color: AppColors.primary),
@@ -248,7 +242,7 @@ class _VerificationWrapperState extends State<VerificationWrapper> {
           ],
         );
 
-      case 2: // Telefon Girişi
+      case 2:
         return Column(
           children: [
             const Icon(Icons.sms_outlined, size: 80, color: Colors.orange),
@@ -259,7 +253,8 @@ class _VerificationWrapperState extends State<VerificationWrapper> {
               controller: _phoneController,
               keyboardType: TextInputType.phone,
               decoration: const InputDecoration(
-                labelText: "Telefon (Örn: +90555...)",
+                labelText: "Telefon (Örn: 555...)",
+                hintText: "5XXXXXXXXX",
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.phone),
               ),
@@ -277,7 +272,7 @@ class _VerificationWrapperState extends State<VerificationWrapper> {
           ],
         );
 
-      case 3: // Kod Girişi
+      case 3:
         return Column(
           children: [
             const Icon(Icons.lock_clock_outlined, size: 80, color: Colors.orange),

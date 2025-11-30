@@ -20,48 +20,41 @@ class AuthService {
         case 'network-request-failed': return 'İnternet bağlantınızı kontrol edin.';
         case 'requires-recent-login': return 'Güvenlik gereği bu işlem için tekrar giriş yapmalısınız.';
         case 'credential-already-in-use': return 'Bu hesap bilgileri zaten kullanımda.';
+        case 'permission-denied': return 'Veritabanı erişim izni reddedildi.';
         default: return 'Bir hata oluştu: ${e.message}';
       }
     }
     return msg;
   }
 
-  // --- 1. ŞİFRE SIFIRLAMA (GÜÇLENDİRİLMİŞ) ---
+  // --- 1. ŞİFRE SIFIRLAMA ---
   Future<String?> sendPasswordReset(String email) async {
     try {
       if (!email.contains('@')) return "Geçerli bir e-posta adresi girin.";
-      
-      // Kullanıcı veritabanında var mı kontrol et (Opsiyonel ama iyi bir UX için)
-      final userQuery = await _firestore.collection('kullanicilar').where('email', isEqualTo: email).get();
-      if (userQuery.docs.isEmpty) return "Bu e-posta adresi sistemimizde kayıtlı değil.";
-
+      // Not: Kullanıcı sorgusu permission hatası verebilir, bu yüzden doğrudan gönderiyoruz.
       await _auth.sendPasswordResetEmail(email: email);
-      return null; // Başarılı
+      return null;
     } catch (e) {
       return _handleError(e);
     }
   }
 
   // --- 2. GİRİŞ YAPMA (MFA KONTROLLÜ) ---
-  // Dönüş: "success", "mfa_required" veya Hata Mesajı
   Future<String> signInWithEmail(String email, String password, bool rememberMe) async {
     try {
-      // A. Şifre ile giriş dene
       UserCredential cred = await _auth.signInWithEmailAndPassword(email: email, password: password);
       
-      // B. Beni Hatırla
       if (rememberMe) {
         await _storage.write(key: 'saved_email', value: email);
       } else {
         await _storage.delete(key: 'saved_email');
       }
 
-      // C. MFA Kontrolü (Veritabanından ayarı çek)
+      // MFA Kontrolü
       final userDoc = await _firestore.collection('kullanicilar').doc(cred.user!.uid).get();
       final isTwoFactorEnabled = userDoc.data()?['isTwoFactorEnabled'] ?? false;
 
       if (isTwoFactorEnabled) {
-        // Eğer MFA açıksa, "mfa_required" döndür ki UI telefon kodu istesin
         return "mfa_required";
       }
 
@@ -85,6 +78,7 @@ class AuthService {
         return "Sadece üniversite e-postası (.edu veya .edu.tr) ile kayıt olabilirsiniz.";
       }
 
+      // Takma ad kontrolü
       final checkNick = await _firestore.collection('kullanicilar').where('takmaAd', isEqualTo: takmaAd).limit(1).get();
       if (checkNick.docs.isNotEmpty) return "Bu takma ad zaten alınmış.";
 
@@ -92,28 +86,7 @@ class AuthService {
       final user = cred.user;
 
       if (user != null) {
-        final adSoyadParts = adSoyad.split(' ');
-        final sadeceAd = adSoyadParts.isNotEmpty ? adSoyadParts.first : '';
-
-        await _firestore.collection('kullanicilar').doc(user.uid).set({
-          'email': email,
-          'phoneNumber': phone,
-          'takmaAd': takmaAd,
-          'ad': sadeceAd,
-          'fullName': adSoyad,
-          'kayit_tarihi': FieldValue.serverTimestamp(),
-          'verified': false,
-          'status': 'Unverified',
-          'role': 'user',
-          'isTwoFactorEnabled': false, // Varsayılan kapalı
-          'followerCount': 0,
-          'followingCount': 0,
-          'postCount': 0,
-          'earnedBadges': [],
-          'followers': [],
-          'following': [],
-          'savedPosts': []
-        });
+        await _createUserDocument(user, adSoyad, takmaAd, phone, email);
       }
       return null;
     } catch (e) {
@@ -121,46 +94,46 @@ class AuthService {
     }
   }
 
-  // --- 4. YENİDEN KİMLİK DOĞRULAMA (RE-AUTH) ---
-  // Kritik işlemlerden önce (MFA açma/kapama, hesap silme) şifre soracağız.
+  // --- KULLANICI DOC OLUŞTURUCU (YARDIMCI) ---
+  Future<void> _createUserDocument(User user, String adSoyad, String takmaAd, String phone, String email) async {
+    final adSoyadParts = adSoyad.split(' ');
+    final sadeceAd = adSoyadParts.isNotEmpty ? adSoyadParts.first : '';
+    
+    await _firestore.collection('kullanicilar').doc(user.uid).set({
+      'email': email,
+      'phoneNumber': phone,
+      'takmaAd': takmaAd,
+      'ad': sadeceAd,
+      'fullName': adSoyad,
+      'kayit_tarihi': FieldValue.serverTimestamp(),
+      'verified': false,
+      'status': 'Unverified',
+      'role': 'user',
+      'isTwoFactorEnabled': false,
+      'followerCount': 0,
+      'followingCount': 0,
+      'postCount': 0,
+      'earnedBadges': [],
+      'followers': [],
+      'following': [],
+      'savedPosts': []
+    }, SetOptions(merge: true)); // Varsa üzerine yazmaz, birleştirir
+  }
+
+  // --- 4. YENİDEN KİMLİK DOĞRULAMA ---
   Future<bool> reauthenticateUser(String password) async {
     User? user = _auth.currentUser;
     if (user == null || user.email == null) return false;
-
     try {
       AuthCredential credential = EmailAuthProvider.credential(email: user.email!, password: password);
       await user.reauthenticateWithCredential(credential);
-      return true; // Şifre doğru
+      return true;
     } catch (e) {
-      return false; // Şifre yanlış
+      return false;
     }
   }
 
-  // --- 5. MFA DURUMUNU DEĞİŞTİR (AÇ/KAPA) ---
-  Future<String?> toggleMFA(bool enable) async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) return "Kullanıcı bulunamadı";
-
-      // Eğer açılacaksa, önce telefon numarasının doğruluğundan emin olmalıyız (Basit kontrol)
-      if (enable) {
-        final doc = await _firestore.collection('kullanicilar').doc(user.uid).get();
-        final phone = doc.data()?['phoneNumber'];
-        if (phone == null || phone.toString().length < 10) {
-          return "MFA açmak için geçerli bir telefon numarası kayıtlı olmalıdır.";
-        }
-      }
-
-      await _firestore.collection('kullanicilar').doc(user.uid).update({
-        'isTwoFactorEnabled': enable
-      });
-      return null; // Başarılı
-    } catch (e) {
-      return _handleError(e);
-    }
-  }
-
-  // --- 6. TELEFON DOĞRULAMA (SMS) ---
+  // --- 5. TELEFON DOĞRULAMA (SMS) ---
   Future<void> verifyPhone({
     required String phoneNumber,
     required Function(String) onCodeSent,
@@ -168,23 +141,74 @@ class AuthService {
   }) async {
     await _auth.verifyPhoneNumber(
       phoneNumber: phoneNumber,
+      timeout: const Duration(seconds: 60),
       verificationCompleted: (PhoneAuthCredential credential) async {
-        // Android otomatik doğrulama
+        // Android Otomatik Doğrulama
         final user = _auth.currentUser;
         if (user != null) {
-           await user.linkWithCredential(credential);
+           // Zaten giriş yapmışsa (MFA), tekrar bağlamaya çalışır
+           try {
+             await user.linkWithCredential(credential);
+           } catch (_) {
+             await user.reauthenticateWithCredential(credential);
+           }
         } else {
            await _auth.signInWithCredential(credential);
         }
       },
       verificationFailed: (FirebaseAuthException e) {
-        onError(_handleError(e));
+        if (e.code == 'invalid-phone-number') {
+          onError('Geçersiz telefon numarası.');
+        } else {
+          onError(_handleError(e));
+        }
       },
       codeSent: (String verificationId, int? resendToken) {
         onCodeSent(verificationId);
       },
       codeAutoRetrievalTimeout: (String verificationId) {},
     );
+  }
+
+  // --- 6. TELEFON + ŞİFRE KONTROLÜ (GÜVENLİ) ---
+  Future<String?> validatePhonePassword(String phone, String password) async {
+    try {
+      // DİKKAT: Giriş yapmadan Firestore sorgusu atmak "Permission Denied" verir.
+      // Bu yüzden burayı try-catch içine alıyoruz.
+      final query = await _firestore.collection('kullanicilar').where('phoneNumber', isEqualTo: phone).limit(1).get();
+      
+      if (query.docs.isEmpty) return "Bu numara ile kayıtlı hesap bulunamadı.";
+      
+      final email = query.docs.first['email'];
+      // Şifreyi doğrulamak için arka planda giriş yapmayı dene
+      await _auth.signInWithEmailAndPassword(email: email, password: password);
+      
+      // Başarılı olursa null döner (Hata yok)
+      return null; 
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        return "permission_error"; // Özel hata kodu
+      }
+      return _handleError(e);
+    } catch (e) {
+      return _handleError(e);
+    }
+  }
+
+  // --- 8. IKI ADIMLI DOĞRULAMA (2FA) AÇ/KAPAT ---
+  Future<String?> toggleMFA(bool enable) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return "Bu işlem için giriş yapmış olmalısınız.";
+    }
+    try {
+      await _firestore.collection('kullanicilar').doc(user.uid).update({
+        'isTwoFactorEnabled': enable,
+      });
+      return null; // Başarılı
+    } catch (e) {
+      return _handleError(e);
+    }
   }
 
   // --- 7. DİĞER YARDIMCILAR ---
@@ -197,24 +221,5 @@ class AuthService {
 
   Future<String?> getSavedEmail() async {
     return await _storage.read(key: 'saved_email');
-  }
-  
-  // --- 8. PROFİL GÜNCELLEME YARDIMCISI ---
-  Future<void> updatePhoneNumberInFirestore(String uid, String phone) async {
-    await _firestore.collection('kullanicilar').doc(uid).update({
-      'phoneNumber': phone,
-    });
-  }
-  // YENİ: Telefonla Giriş İçin Sadece Şifre Kontrolü Yapan Metot
-  Future<String?> validatePhonePassword(String phone, String password) async {
-    try {
-      final query = await _firestore.collection('kullanicilar').where('phoneNumber', isEqualTo: phone).limit(1).get();
-      if (query.docs.isEmpty) return "Bu numara kayıtlı değil.";
-      final email = query.docs.first['email'];
-      // signInWithEmailAndPassword sadece şifre doğruluğunu kontrol eder,
-      // signInWithEmail gibi ek işlemler (MFA, Beni Hatırla) yapmaz.
-      await _auth.signInWithEmailAndPassword(email: email, password: password);
-      return null; 
-    } catch (e) { return _handleError(e); }
   }
 }
