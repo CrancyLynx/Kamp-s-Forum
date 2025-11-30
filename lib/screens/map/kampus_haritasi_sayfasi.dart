@@ -38,13 +38,13 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
 
   late Stream<List<LocationModel>> _firestoreStream;
   List<LocationModel> _googleApiLocations = [];
-  Set<Polyline> _polylines = {}; // YENİ: Rota Çizgisi
+  Set<Polyline> _polylines = {}; 
   
   String _currentFilter = 'all';
   bool _isLoadingLocation = true;
   bool _isFetchingApi = false;
   bool _permissionGranted = false;
-  bool _isRouting = false; // YENİ: Rota modunda mı?
+  bool _isRouting = false; 
 
   LatLng? _userLocation;
 
@@ -87,7 +87,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     });
   }
 
-  // ARAMA FONKSİYONLARI
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     
@@ -124,21 +123,20 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       controller.animateCamera(CameraUpdate.newLatLngZoom(location.position, 18));
       
       setState(() {
-        _googleApiLocations = [location]; // Aranan yeri listeye ekle
+        _googleApiLocations = [location]; 
       });
 
       _showLocationDetails(location);
     }
   }
 
-  // ROTA ÇİZME FONKSİYONLARI (YENİ)
   Future<void> _drawRoute(LatLng destination) async {
     if (_userLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Konumunuz alınamadı.")));
       return;
     }
 
-    Navigator.pop(context); // Detay panelini kapat
+    Navigator.pop(context); 
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Rota hesaplanıyor..."), duration: Duration(seconds: 1)));
 
     final coordinates = await _mapDataService.getRouteCoordinates(_userLocation!, destination);
@@ -160,7 +158,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
           _isRouting = true;
         });
 
-        // Kamerayı rotaya sığdır
         final controller = await _controller.future;
         LatLngBounds bounds = _boundsFromLatLngList(coordinates);
         controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
@@ -193,7 +190,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     return LatLngBounds(northeast: LatLng(x1!, y1!), southwest: LatLng(x0!, y0!));
   }
 
-  // MEVCUT FONKSİYONLAR
   Future<void> _fetchNearbyPlaces(LatLng center) async {
     if (_isFetchingApi) return;
     if (mounted) setState(() => _isFetchingApi = true);
@@ -388,7 +384,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Galeri
           Stack(
             children: [
               SizedBox(
@@ -412,7 +407,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
             ],
           ),
           
-          // İçerik
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 15),
@@ -424,7 +418,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                    Text(location.snippet, style: const TextStyle(color: Colors.grey)),
                    const SizedBox(height: 20),
 
-                   // Bilgi Kutuları
                    Row(
                     children: [
                       _buildQuickInfoBox(icon: Icons.alt_route, value: distanceText, label: "Mesafe", color: AppColors.primary),
@@ -436,7 +429,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                   ),
                   const SizedBox(height: 25),
 
-                  // Oylama
                   const Text("Şu an burası nasıl?", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 10),
                   Row(
@@ -450,7 +442,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                   ),
                   const SizedBox(height: 25),
                   
-                  // AKSİYON BUTONLARI (GÜNCELLENDİ)
                   Row(
                     children: [
                       Expanded(
@@ -468,7 +459,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                       Expanded(
                         flex: 2,
                         child: ElevatedButton.icon(
-                          onPressed: () => _drawRoute(location.position), // YENİ: Rota Çizimi
+                          onPressed: () => _drawRoute(location.position), 
                           icon: const Icon(Icons.directions, color: Colors.white),
                           label: const Text("Rota Çiz", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                           style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, padding: const EdgeInsets.symmetric(vertical: 12)),
@@ -546,7 +537,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     return Scaffold(
       body: Stack(
         children: [
-          // 1. HARİTA (En altta)
           StreamBuilder<List<LocationModel>>(
             stream: _firestoreStream,
             builder: (context, snapshot) {
@@ -555,7 +545,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                 mapType: MapType.normal,
                 initialCameraPosition: CameraPosition(target: initialTarget, zoom: widget.initialZoom),
                 markers: _buildCombinedMarkers(firestoreLocations),
-                polylines: _polylines, // YENİ: Rota Çizgisi
+                polylines: _polylines, 
                 myLocationEnabled: _permissionGranted,
                 myLocationButtonEnabled: false,
                 zoomControlsEnabled: false,
@@ -583,11 +573,9 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
               ),
             ),
 
-          // 2. ARAYÜZ KATMANI
           SafeArea(
             child: Column(
               children: [
-                // ARAMA ÇUBUĞU ve ROTA BUTONU
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Row(
@@ -603,7 +591,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: _isRouting 
-                        // Rota varsa "Temizle" butonu göster
                         ? GestureDetector(
                             onTap: _clearRoute,
                             child: Container(
@@ -619,7 +606,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                               ),
                             ),
                           )
-                        // Rota yoksa Arama Çubuğunu göster
                         : Container(
                             decoration: BoxDecoration(
                               color: Colors.white,
@@ -645,7 +631,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                   ),
                 ),
 
-                // ARAMA SONUÇLARI
                 if (_searchResults.isNotEmpty)
                   Container(
                     margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -670,7 +655,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                     ),
                   ),
 
-                // FİLTRELER (Arama ve Rota yoksa)
                 if (!_isSearching && _searchResults.isEmpty && !_isRouting)
                   Padding(
                     padding: const EdgeInsets.only(left: 16.0),
@@ -691,7 +675,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
             ),
           ),
 
-          // KONUM BUTONU
           Positioned(
             bottom: 30, right: 20,
             child: FloatingActionButton(

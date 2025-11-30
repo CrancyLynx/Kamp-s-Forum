@@ -112,9 +112,25 @@ class MapDataService {
       case 'yemek': return 'restaurant';
       case 'durak': return 'transit_station'; 
       case 'kutuphane': return 'library';
-      case 'universite': return 'university';
+      case 'universite': return 'university'; // School yerine University kullanarak daraltıyoruz
       default: return ''; 
     }
+  }
+
+  // YENİ: İsim bazlı sıkı filtreleme (İlkokul, Lise vb. engellemek için)
+  bool _isValidUniversity(String name) {
+    final lowerName = name.toLowerCase();
+    // Engellenecek kelimeler
+    final bannedWords = [
+      'ilkokul', 'ortaokul', 'lise', 'anaokul', 'kolej', 
+      'sürücü kursu', 'etüt', 'dershane', 'yurt', 'primary', 
+      'secondary', 'high school', 'driving'
+    ];
+    
+    for (var word in bannedWords) {
+      if (lowerName.contains(word)) return false;
+    }
+    return true;
   }
 
   // 1. Yakındaki Yerleri Getir
@@ -131,6 +147,7 @@ class MapDataService {
       }
     }
 
+    // Eğer filtre üniversite ise, sadece type=university kullanıyoruz
     final String url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?'
         'location=${center.latitude},${center.longitude}'
         '&radius=$radius'
@@ -147,7 +164,19 @@ class MapDataService {
         if (data['status'] == 'OK' || data['status'] == 'ZERO_RESULTS') {
           final List results = data['results'];
           
-          return results.map((place) {
+          return results.where((place) {
+            // EK FİLTRELEME: Eğer filtre üniversite ise veya genel arama ise, isminde lise/ilkokul geçenleri at
+            if (typeFilter == 'universite' || typeFilter == 'all') {
+               String name = place['name'];
+               String googleType = (place['types'] as List).isNotEmpty ? place['types'][0] : '';
+               
+               // Eğer tipi 'university' ise veya biz üniversite arıyorsak isim kontrolü yap
+               if (googleType == 'university' || typeFilter == 'universite') {
+                 return _isValidUniversity(name);
+               }
+            }
+            return true;
+          }).map((place) {
             List<String> photos = [];
             if (place['photos'] != null && (place['photos'] as List).isNotEmpty) {
               String ref = place['photos'][0]['photo_reference'];
@@ -193,7 +222,7 @@ class MapDataService {
 
     String locationParam = '';
     if (userLocation != null) {
-      locationParam = '&location=${userLocation.latitude},${userLocation.longitude}&radius=5000';
+      locationParam = '&location=${userLocation.latitude},${userLocation.longitude}&radius=10000'; // Yarıçapı artırdım
     }
 
     final String url = 'https://maps.googleapis.com/maps/api/place/autocomplete/json?'
@@ -265,12 +294,12 @@ class MapDataService {
     return null;
   }
 
-  // 4. Rota Çizimi (Directions API) - YENİ
+  // 4. Rota Çizimi (Directions API)
   Future<List<LatLng>> getRouteCoordinates(LatLng origin, LatLng destination) async {
     final String url = 'https://maps.googleapis.com/maps/api/directions/json?'
         'origin=${origin.latitude},${origin.longitude}'
         '&destination=${destination.latitude},${destination.longitude}'
-        '&mode=walking' // Yürüyüş rotası (driving, bicycling, transit de olabilir)
+        '&mode=walking'
         '&key=$googleMapsApiKey';
 
     try {
@@ -280,8 +309,6 @@ class MapDataService {
         if (data['status'] == 'OK' && (data['routes'] as List).isNotEmpty) {
           final String encodedPolyline = data['routes'][0]['overview_polyline']['points'];
           return _decodePolyline(encodedPolyline);
-        } else {
-           debugPrint("Directions API Hatası: ${data['status']}");
         }
       }
     } catch (e) {
@@ -290,7 +317,6 @@ class MapDataService {
     return [];
   }
 
-  // Polyline Kod Çözücü Algoritması
   List<LatLng> _decodePolyline(String encoded) {
     List<LatLng> poly = [];
     int index = 0, len = encoded.length;
@@ -358,6 +384,7 @@ class MapDataService {
   }
 
   Future<void> seedDatabaseIfEmpty() async {
+    // Sabit veri seeding işlemi
     final snapshot = await _firestore.collection('locations').limit(1).get();
     if (snapshot.docs.isEmpty) {
       final batch = _firestore.batch();
@@ -401,8 +428,9 @@ class MapDataService {
     return locations;
   }
 
+  // Sabit listeyi de sadece üniversiteler olacak şekilde temizledim
   final List<Map<String, dynamic>> _fixedLocations = [
-   {'id': 'vak_u25', 'title': 'İstanbul Galata Üniversitesi', 'lat': 41.0286, 'lng': 28.9744, 'type': 'universite'},
+    {'id': 'vak_u25', 'title': 'İstanbul Galata Üniversitesi', 'lat': 41.0286, 'lng': 28.9744, 'type': 'universite'},
     {'id': 'vak_u1', 'title': 'Koç Üniversitesi', 'lat': 41.2049, 'lng': 29.0718, 'type': 'universite'},
     {'id': 'vak_u2', 'title': 'Sabancı Üniversitesi', 'lat': 40.8912, 'lng': 29.3787, 'type': 'universite'},
     {'id': 'vak_u3', 'title': 'İstanbul Bilgi Üniversitesi (Santral)', 'lat': 41.0664, 'lng': 28.9458, 'type': 'universite'},
