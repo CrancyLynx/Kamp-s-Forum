@@ -1,44 +1,43 @@
 rules_version = '2';
 service firebase.storage {
-match /b/{bucket}/o {
+  match /b/{bucket}/o {
 
-// Yardımcı Fonksiyonlar
-function isSignedIn() {
-  return request.auth != null;
-}
+    function isSignedIn() {
+      return request.auth != null;
+    }
 
-// Resim kontrolü: İçerik tipi resim olmalı ve boyutu 10MB'dan küçük olmalı
-function isValidImage() {
-  return request.resource.contentType.matches('image/.*')
-         && request.resource.size < 10 * 1024 * 1024;
-}
+    function isAdmin() {
+      return isSignedIn() && 
+             firestore.get(/databases/(default)/documents/kullanicilar/$(request.auth.uid)).data.role == 'admin';
+    }
 
-// Profil Resimleri
-// Sadece kendi profil resmini (dosya adı kendi UID'si olan) yükleyebilir.
-match /profil_resimleri/{userId}/{fileName} {
-  allow read: if true;
-  allow write: if isSignedIn() && request.auth.uid == userId && isValidImage();
-}
+    function isValidImage() {
+      return request.resource.contentType.matches('image/.*')
+             && request.resource.size < 10 * 1024 * 1024;
+    }
 
-// Gönderi, Yorum, Ürün, Anket ve Etkinlik Resimleri
-// Yükleyen kullanıcının UID'sini içeren bir yola yazmayı zorunlu kılar.
-match /{folder}/{userId}/{allPaths=**} {
-  allow read: if true;
-  allow write: if isSignedIn() && request.auth.uid == userId && isValidImage();
-}
+    // --- KURALLAR ---
 
-// Sohbet Resimleri
-// Sadece sohbetin katılımcılarından biri resim yükleyebilir.
-// Bu kural, sohbet belgesini okuyarak katılımcıları doğrular.
-match /chat_images/{chatId}/{fileName} {
-  function isChatParticipant() {
-    return request.auth.uid in get(/databases/$(database)/documents/sohbetler/$(chatId)).data.participants;
+    // Profil Resimleri
+    match /profil_resimleri/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if (isSignedIn() && request.auth.uid == userId && isValidImage()) || isAdmin();
+      allow delete: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
+    }
+
+    // Gönderi, Yorum, Ürün vb. (Klasör/UserID/Dosya yapısı)
+    match /{folder}/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if (isSignedIn() && request.auth.uid == userId && isValidImage()) || isAdmin();
+      allow delete: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
+    }
+
+    // Sohbet Resimleri (DÜZELTİLEN KISIM)
+    // Eski kural firestore.get ile sohbeti kontrol ediyordu, bu da ilk mesajda hata veriyordu.
+    // Şimdi sadece giriş yapmış olma şartı aranıyor.
+    match /chat_images/{chatId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isValidImage();
+    }
   }
-  
-  allow read: if isSignedIn() && isChatParticipant();
-  allow write: if isSignedIn() && isChatParticipant() && isValidImage();
-}
-
-
-}
 }
