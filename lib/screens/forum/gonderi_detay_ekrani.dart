@@ -5,8 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart'; 
 import 'package:timeago/timeago.dart' as timeago;
-import 'package:image_picker/image_picker.dart'; // Resim seçici
-import 'package:firebase_storage/firebase_storage.dart'; // Storage
+import 'package:image_picker/image_picker.dart'; 
+import 'package:firebase_storage/firebase_storage.dart'; 
 import 'dart:io';
 // Düzeltilmiş Importlar
 import '../../utils/app_colors.dart';
@@ -23,6 +23,7 @@ class GonderiDetayEkrani extends StatefulWidget {
   final String mesaj;
   final dynamic zaman; 
   final String kategori;
+  // Bu parametre artık sayfa içinde kontrol edilen durumla güncellenebilir
   final bool isAdmin;
   final String userName; 
   final String? avatarUrl;
@@ -46,10 +47,10 @@ class GonderiDetayEkrani extends StatefulWidget {
   factory GonderiDetayEkrani.fromDoc(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     final currentUser = FirebaseAuth.instance.currentUser;
-    // NOT: Admin kontrolü artık buradaki listeden değil, 1. Adımda yaptığımız veritabanı rolünden yapılmalı
-    // ancak şimdilik mevcut yapıyı bozmuyorum.
-    const List<String> admins = ["oZ2RIhV1JdYVIr0xyqCwhX9fJYq1", "VD8MeJIhhRVtbT9iiUdMEaCe3MO2"];
-    final bool isAdministrator = admins.contains(currentUser?.uid);
+    
+    // GÜVENLİK GÜNCELLEMESİ: Hardcoded admin listesi kaldırıldı.
+    // Varsayılan olarak false. initState içinde kontrol edilecek.
+    final bool isAdministrator = false;
 
     return GonderiDetayEkrani(
       postId: doc.id,
@@ -82,6 +83,9 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
   bool _isLiked = false;
   int _likeCount = 0;
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+  
+  // YENİ: Yerel Admin Kontrolü
+  bool _isCurrentUserAdmin = false;
 
   late AnimationController _likeAnimController;
   late Animation<double> _likeScaleAnim;
@@ -95,6 +99,8 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
   @override
   void initState() {
     super.initState();
+    _isCurrentUserAdmin = widget.isAdmin; // Başlangıç değeri
+    _checkAdminStatus(); // Dinamik kontrol
     
     _postStream = FirebaseFirestore.instance.collection('gonderiler').doc(widget.postId).snapshots();
     
@@ -109,6 +115,16 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
     _likeScaleAnim = Tween<double>(begin: 1.0, end: 1.3).animate(
       CurvedAnimation(parent: _likeAnimController, curve: Curves.easeInOut),
     );
+  }
+
+  Future<void> _checkAdminStatus() async {
+    if (_currentUserId.isEmpty) return;
+    try {
+      final doc = await FirebaseFirestore.instance.collection('kullanicilar').doc(_currentUserId).get();
+      if (doc.exists && doc.data()?['role'] == 'admin') {
+        if (mounted) setState(() => _isCurrentUserAdmin = true);
+      }
+    } catch (_) {}
   }
 
   @override
@@ -269,7 +285,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
     }
   }
 
-  // --- ŞİKAYET FONKSİYONU ---
   void _showReportDialog({String? commentId, String? commentContent, String? commentOwnerId}) {
     final reasonController = TextEditingController();
     final isComment = commentId != null;
@@ -340,7 +355,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
 
   @override
   Widget build(BuildContext context) {
-    // --- YENİ EKLENDİ: Silinmiş Kullanıcı Kontrolü ---
     final bool isDeletedUser = widget.authorUserId == 'deleted_user';
 
     String timeStr = '';
@@ -389,11 +403,11 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
                     ),
                     centerTitle: true,
                     actions: [
-                      _buildMoreButton(widget.authorUserId == _currentUserId),
+                      // GÜVENLİK GÜNCELLEMESİ: _isCurrentUserAdmin kullanılıyor
+                      _buildMoreButton(widget.authorUserId == _currentUserId || _isCurrentUserAdmin),
                     ],
                   ),
 
-                  // GÖNDERİ İÇERİĞİ
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -401,7 +415,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           GestureDetector(
-                            // GÜNCELLENMİŞ: Silinmişse tıklanmasın
                             onTap: isDeletedUser 
                                 ? null 
                                 : () => Navigator.push(context, MaterialPageRoute(builder: (_) => KullaniciProfilDetayEkrani(userId: widget.authorUserId, userName: widget.adSoyad))),
@@ -411,7 +424,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
                                   tag: 'avatar_${widget.postId}',
                                   child: CircleAvatar(
                                     radius: 24,
-                                    // GÜNCELLENMİŞ AVATAR
                                     backgroundImage: (!isDeletedUser && widget.avatarUrl != null && widget.avatarUrl!.isNotEmpty) 
                                         ? CachedNetworkImageProvider(widget.avatarUrl!) 
                                         : null,
@@ -433,7 +445,7 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold, 
                                           fontSize: 16,
-                                          color: isDeletedUser ? Colors.grey : null, // Grileştir
+                                          color: isDeletedUser ? Colors.grey : null, 
                                           fontStyle: isDeletedUser ? FontStyle.italic : null
                                         )
                                       ),
@@ -583,8 +595,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
   Widget _buildCommentItem(String commentId, Map<String, dynamic> data) {
     final bool isMyComment = data['userId'] == _currentUserId;
     final bool isAdminComment = data['userId'] == widget.authorUserId;
-    
-    // YENİ: Yorum sahibi silinmiş mi?
     final bool isCommenterDeleted = data['userId'] == 'deleted_user';
     
     String timeStr = '';
@@ -598,7 +608,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           GestureDetector(
-            // Silinmişse profile gitmesin
             onTap: isCommenterDeleted 
                 ? null 
                 : () {
@@ -608,7 +617,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
                 },
             child: CircleAvatar(
               radius: 18,
-              // Avatar Kontrolü
               backgroundImage: (!isCommenterDeleted && data['userAvatar'] != null) ? CachedNetworkImageProvider(data['userAvatar']) : null,
               backgroundColor: isCommenterDeleted ? Colors.grey[300] : Colors.grey[200],
               child: isCommenterDeleted 
@@ -630,7 +638,7 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
                       style: TextStyle(
                         fontWeight: FontWeight.bold, 
                         fontSize: 13,
-                        color: isCommenterDeleted ? Colors.grey : null, // Grileştir
+                        color: isCommenterDeleted ? Colors.grey : null, 
                         fontStyle: isCommenterDeleted ? FontStyle.italic : null
                       )
                     ),
@@ -680,7 +688,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
                         child: Text("Yanıtla", style: TextStyle(color: Colors.grey[600], fontSize: 11, fontWeight: FontWeight.w600)),
                       ),
                       const SizedBox(width: 12),
-                      // YENİ: Yorum Şikayet Butonu
                       if (!isMyComment)
                          GestureDetector(
                           onTap: () => _showReportDialog(
@@ -691,7 +698,7 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
                           child: Text("Şikayet Et", style: TextStyle(color: Colors.grey[500], fontSize: 11, fontWeight: FontWeight.w500)),
                         ),
 
-                      if (widget.isAdmin || isMyComment) ...[
+                      if (_isCurrentUserAdmin || isMyComment) ...[
                         const SizedBox(width: 16),
                         GestureDetector(
                           onTap: () => _deleteComment(commentId, data['userId']),
@@ -834,17 +841,17 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
     );
   }
 
-  // GÜNCELLENEN: Menü Butonu
-  Widget _buildMoreButton(bool isAuthor) {
+  // GÜNCELLEME: Admin kontrolü ile silme/düzenleme yetkisi
+  Widget _buildMoreButton(bool hasPermission) {
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_horiz_rounded),
       onSelected: (val) {
         if (val == 'delete') _deletePost();
         if (val == 'edit') Navigator.push(context, MaterialPageRoute(builder: (_) => GonderiDuzenlemeEkrani(postId: widget.postId, initialTitle: widget.baslik, initialMessage: widget.mesaj)));
-        if (val == 'report') _showReportDialog(); // Şikayet dialogunu aç
+        if (val == 'report') _showReportDialog();
       },
       itemBuilder: (ctx) => [
-        if (isAuthor || widget.isAdmin) ...[
+        if (hasPermission) ...[
           const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text("Düzenle")])),
           const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red, size: 18), SizedBox(width: 8), Text("Sil", style: TextStyle(color: Colors.red))])),
         ] else

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:kampus_yardim_app/widgets/badge_widget.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../widgets/animated_list_item.dart';
@@ -9,13 +8,13 @@ import '../profile/kullanici_profil_detay_ekrani.dart';
 
 import '../admin/admin_panel_ekrani.dart';
 import 'gonderi_detay_ekrani.dart';
-import '../profile/profil_ekrani.dart';
 import '../../models/badge_model.dart';
 
 import '../notification/bildirim_ekrani.dart';
 import 'gonderi_ekleme_ekrani.dart';
 import 'anket_ekleme_ekrani.dart';
 import '../../widgets/anket_karti.dart';
+import '../../widgets/badge_widget.dart';
 import '../chat/sohbet_listesi_ekrani.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -49,7 +48,7 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
 
   final ScrollController _scrollController = ScrollController();
   List<DocumentSnapshot> _posts = [];
-  List<DocumentSnapshot> _pinnedPosts = []; // YENİ: Sabitlenmiş gönderiler için ayrı liste
+  List<DocumentSnapshot> _pinnedPosts = []; // Sabitlenmiş gönderiler için ayrı liste
   bool _isLoading = false;
   bool _hasMore = true;
   DocumentSnapshot? _lastDocument;
@@ -154,7 +153,7 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
     if (!mounted) return;
     setState(() {
       _posts = [];
-      _pinnedPosts = []; // YENİ: Sabitlenmişleri de sıfırla
+      _pinnedPosts = [];
       _lastDocument = null;
       _hasMore = true;
       _errorMessage = null;
@@ -173,9 +172,7 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
     }
 
     try {
-      Query query = FirebaseFirestore.instance.collection('gonderiler');
-
-      // YENİ: Başlangıçta sabitlenmiş gönderileri ayrı olarak çek
+      // 1. Sabitlenmiş gönderileri çek
       if (isInitial) {
         final pinnedQuerySnapshot = await FirebaseFirestore.instance
             .collection('gonderiler')
@@ -187,6 +184,9 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
           });
         }
       }
+
+      // 2. Normal gönderileri çek
+      Query query = FirebaseFirestore.instance.collection('gonderiler');
 
       if (_selectedFilter != 'Tümü') {
         query = query.where('kategori', isEqualTo: _selectedFilter);
@@ -204,8 +204,9 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
           break;
       }
 
-      // YENİ: Sadece sabitlenmemiş gönderileri getir
-      query = query.where('isPinned', isNotEqualTo: true);
+      // DÜZELTME: 'isPinned' filtresini buradan kaldırdık.
+      // Sabitlenmişleri bellek tarafında süzeceğiz.
+      // query = query.where('isPinned', isNotEqualTo: true);
 
       if (_lastDocument != null && !isInitial) {
         query = query.startAfterDocument(_lastDocument!);
@@ -217,7 +218,13 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
         _lastDocument = querySnapshot.docs.last;
         if (mounted) {
           setState(() {
-            _posts.addAll(querySnapshot.docs);
+            // İstemci tarafında filtreleme (Deduplication)
+            // Eğer gelen gönderi zaten _pinnedPosts içinde varsa, ana listeye ekleme.
+            final newPosts = querySnapshot.docs.where((doc) {
+              return !_pinnedPosts.any((pinned) => pinned.id == doc.id);
+            }).toList();
+            
+            _posts.addAll(newPosts);
           });
         }
       }
@@ -232,8 +239,10 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
           setState(() => _errorMessage = "İnternet bağlantısı yok. Lütfen bağlantınızı kontrol edin.");
         } else if (e.code == 'permission-denied') {
           setState(() => _errorMessage = "Verilere erişim izniniz yok. Lütfen yönetici ile iletişime geçin.");
+        } else if (e.code == 'failed-precondition') {
+          setState(() => _errorMessage = "Sorgu indeksi oluşturuluyor, lütfen biraz bekleyip tekrar deneyin.");
         } else {
-          setState(() => _errorMessage = "Gönderiler yüklenemedi. Lütfen tekrar deneyin.");
+          setState(() => _errorMessage = "Gönderiler yüklenemedi. Hata: ${e.message}");
         }
       }
     } finally {
@@ -329,9 +338,7 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
                 );
               },
             ),
-            // GÜNCELLEME: Profil ve Çıkış menüsü buradan kaldırıldı.
           ] 
-          // GÜNCELLEME: Misafir giriş butonu da profil sekmesine yönlendirileceği için kaldırıldı.
         ],
       ),
 
@@ -412,27 +419,27 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
                 return RefreshIndicator(
                   onRefresh: () async => _resetAndFetch(),
                   color: AppColors.primary,
-                  child: _isLoading && _posts.isEmpty
+                  child: _isLoading && _posts.isEmpty && _pinnedPosts.isEmpty
                       ? _buildSkeletonLoader()
-                      : _errorMessage != null && _posts.isEmpty
+                      : _errorMessage != null && _posts.isEmpty && _pinnedPosts.isEmpty
                       ? _buildErrorWidget(_errorMessage!)
-                      : _posts.isEmpty && _pinnedPosts.isEmpty // YENİ: İki liste de boşsa göster
+                      : _posts.isEmpty && _pinnedPosts.isEmpty
                       ? _buildEmptyListWidget()
                       : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.only(top: 8, bottom: 80),
-                    itemCount: _posts.length + (_hasMore ? 1 : 0),
+                    itemCount: _pinnedPosts.length + _posts.length + (_hasMore ? 1 : 0),
                     itemBuilder: (context, index) {
-                      if (index == _posts.length) {
+                      if (index == _pinnedPosts.length + _posts.length) {
                         return const Padding(
                           padding: EdgeInsets.symmetric(vertical: 32.0),
                           child: Center(child: CircularProgressIndicator()),
                         );
                       }
 
-                      // YENİ: Önce sabitlenmişleri, sonra normal gönderileri göster
                       final bool isPinnedSection = index < _pinnedPosts.length;
                       final DocumentSnapshot document;
+                      
                       if (isPinnedSection) {
                         document = _pinnedPosts[index];
                       } else {
@@ -442,7 +449,7 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
                       Map<String, dynamic> data = document.data()! as Map<String, dynamic>;
 
                       String type = data['type'] ?? 'gonderi';
-                      bool isPinned = data['isPinned'] ?? false; // YENİ: Sabitlenme durumu
+                      bool isPinned = isPinnedSection || (data['isPinned'] ?? false);
                       String realUsername = data['realUsername'] ?? data['takmaAd'] ?? '';
 
                       if (type == 'anket') {
@@ -500,7 +507,7 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
                           currentUserRealName: widget.isGuest ? 'Misafir' : widget.realName,
                           isSaved: savedPostIds.contains(document.id),
                           likes: (data['likes'] as List<dynamic>? ?? []),
-                          isPinned: isPinned, // YENİ: Sabitlenme durumunu karta ilet
+                          isPinned: isPinned,
                           commentCount: (data['commentCount'] as int? ?? 0),
                           authorBadges: List<String>.from(data['authorBadges'] ?? []),
                         ),
@@ -677,7 +684,7 @@ class GonderiKarti extends StatefulWidget {
   final List<dynamic> likes;
   final int commentCount;
   final List<String> authorBadges;
-  final bool isPinned; // YENİ
+  final bool isPinned;
 
   const GonderiKarti({
     super.key,
@@ -700,7 +707,7 @@ class GonderiKarti extends StatefulWidget {
     required this.likes,
     required this.commentCount,
     required this.authorBadges,
-    this.isPinned = false, // YENİ
+    this.isPinned = false,
   });
 
   @override
@@ -831,7 +838,7 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
     }
   }
 
-  // YENİ: Gönderiyi sabitleme/kaldırma fonksiyonu
+  // Gönderiyi sabitleme/kaldırma fonksiyonu
   void _togglePin() {
     if (!widget.isAdmin) return;
 
@@ -864,7 +871,6 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            // YENİ: Sabitlenmiş gönderi için farklı arkaplan rengi
             color: Theme.of(context).cardColor,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
@@ -874,7 +880,6 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                 offset: const Offset(0, 4),
               ),
             ],
-            // YENİ: Sabitlenmiş gönderi için kenarlık
             border: widget.isPinned
                 ? Border.all(color: AppColors.primary.withOpacity(0.5), width: 1.5)
                 : null,
@@ -896,7 +901,6 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                // YENİ: Sabitlenmiş gönderi ikonu
                 children: [
                   if (widget.isPinned)
                     Padding(
@@ -909,7 +913,6 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                         ],
                       ),
                     ),
-                  // Mevcut içerik (devamı)
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
@@ -1062,23 +1065,27 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                           ),
                         ],
                       ),
-                      IconButton(
-                        onPressed: () => _toggleSave(FirebaseAuth.instance.currentUser?.uid, widget.isSaved),
-                        icon: Icon(
-                          widget.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                          color: widget.isSaved ? AppColors.primary : Colors.grey,
-                        ),
-                        tooltip: "Kaydet",
-                      ),
-                      // YENİ: Admin için sabitleme butonu
-                      if (widget.isAdmin)
-                        IconButton(
-                          onPressed: _togglePin,
-                          icon: FaIcon(
-                            FontAwesomeIcons.thumbtack,
-                            color: widget.isPinned ? AppColors.primary : Colors.grey,
+                      Row(
+                        children: [
+                          IconButton(
+                            onPressed: () => _toggleSave(FirebaseAuth.instance.currentUser?.uid, widget.isSaved),
+                            icon: Icon(
+                              widget.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                              color: widget.isSaved ? AppColors.primary : Colors.grey,
+                            ),
+                            tooltip: "Kaydet",
                           ),
-                          tooltip: widget.isPinned ? "Sabitlemeyi Kaldır" : "Gönderiyi Sabitle",
+                          // Admin için sabitleme butonu
+                          if (widget.isAdmin)
+                            IconButton(
+                              onPressed: _togglePin,
+                              icon: FaIcon(
+                                FontAwesomeIcons.thumbtack,
+                                color: widget.isPinned ? AppColors.primary : Colors.grey,
+                              ),
+                              tooltip: widget.isPinned ? "Sabitlemeyi Kaldır" : "Gönderiyi Sabitle",
+                            ),
+                        ],
                       ),
                     ],
                   ),

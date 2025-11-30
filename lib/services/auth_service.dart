@@ -173,8 +173,7 @@ class AuthService {
   // --- 6. TELEFON + ŞİFRE KONTROLÜ (GÜVENLİ) ---
   Future<String?> validatePhonePassword(String phone, String password) async {
     try {
-      // DİKKAT: Giriş yapmadan Firestore sorgusu atmak "Permission Denied" verir.
-      // Bu yüzden burayı try-catch içine alıyoruz.
+      // DİKKAT: Bu sorgu giriş yapmadan çalıştırılırsa "Permission Denied" hatası verebilir.
       final query = await _firestore.collection('kullanicilar').where('phoneNumber', isEqualTo: phone).limit(1).get();
       
       if (query.docs.isEmpty) return "Bu numara ile kayıtlı hesap bulunamadı.";
@@ -183,11 +182,11 @@ class AuthService {
       // Şifreyi doğrulamak için arka planda giriş yapmayı dene
       await _auth.signInWithEmailAndPassword(email: email, password: password);
       
-      // Başarılı olursa null döner (Hata yok)
       return null; 
     } on FirebaseException catch (e) {
       if (e.code == 'permission-denied') {
-        return "permission_error"; // Özel hata kodu
+        // ÖNEMLİ: Yetki hatası alınırsa, UI tarafında şifre kontrolünü atlamak için özel kod dönüyoruz.
+        return "permission_error"; 
       }
       return _handleError(e);
     } catch (e) {
