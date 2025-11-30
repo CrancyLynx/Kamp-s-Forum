@@ -366,7 +366,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const SizedBox(height: 60),
-                    Hero(tag: 'app_logo', child: AppLogo(size: 120, isLightMode: !isDark)),
+                    Hero(tag: 'app_logo', child: AppLogo(size: 145, isLightMode: !isDark)),
                     const SizedBox(height: 30), 
                     
                     AnimatedContainer(

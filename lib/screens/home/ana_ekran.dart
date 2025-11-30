@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart'; 
-import 'package:shared_preferences/shared_preferences.dart'; // Hafıza kontrolü için
-import 'package:tutorial_coach_mark/tutorial_coach_mark.dart'; // Tanıtım paketi
+import 'package:shared_preferences/shared_preferences.dart'; 
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart'; 
 
 import '../forum/forum_sayfasi.dart';
 import 'kesfet_sayfasi.dart';
@@ -33,43 +33,36 @@ class AnaEkran extends StatefulWidget {
 
 class _AnaEkranState extends State<AnaEkran> {
   int _selectedIndex = 0;
-  // PageController SİLİNDİ (IndexedStack kullanacağız)
+  late final PageController _pageController;
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
-  // --- TANITIM İÇİN KEY'LER (KONUM BELİRLEYİCİLER) ---
   final GlobalKey keyKesfet = GlobalKey();
   final GlobalKey keyPazar = GlobalKey();
   final GlobalKey keyForum = GlobalKey();
   final GlobalKey keyProfil = GlobalKey();
-  // ----------------------------------------------------
 
   @override
   void initState() {
     super.initState();
-    // PageController init SİLİNDİ
+    _pageController = PageController(initialPage: _selectedIndex);
     
     if (!_currentUserId.isEmpty && !widget.isGuest) {
       _verifyCounters();
     }
 
-    // Sayfa açıldıktan hemen sonra tanıtımı kontrol et
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndShowTutorial();
     });
   }
-
-  // Tanıtımı Gösterme Mantığı
+  
   Future<void> _checkAndShowTutorial() async {
     final prefs = await SharedPreferences.getInstance();
-    // 'isTutorialShown' false ise veya null ise tanıtımı göster
     bool isShown = prefs.getBool('isTutorialShown') ?? false;
 
     if (!isShown) {
-      // Biraz bekle ki ekran tam yüklensin
       await Future.delayed(const Duration(seconds: 1));
       if (!mounted) return;
       _createTutorial();
-      // Gösterildi olarak işaretle
       await prefs.setBool('isTutorialShown', true);
     }
   }
@@ -77,16 +70,12 @@ class _AnaEkranState extends State<AnaEkran> {
   void _createTutorial() {
     TutorialCoachMark(
       targets: _createTargets(),
-      colorShadow: Colors.black, // Arka plan kararma rengi
+      colorShadow: Colors.black,
       textSkip: "ATLA",
       paddingFocus: 10,
-      opacityShadow: 0.8,
-      onFinish: () {
-        debugPrint("Tanıtım bitti");
-      },
-      onClickTarget: (target) {
-        debugPrint("Hedefe tıklandı: $target");
-      },
+      opacityShadow: 0.85,
+      onFinish: () => debugPrint("Tanıtım bitti"),
+      onClickTarget: (target) => debugPrint("Hedefe tıklandı: $target"),
       onSkip: () {
         debugPrint("Tanıtım geçildi");
         return true; 
@@ -97,32 +86,32 @@ class _AnaEkranState extends State<AnaEkran> {
   List<TargetFocus> _createTargets() {
     List<TargetFocus> targets = [];
 
-    // 1. HEDEF: PAZAR ALANI
+    // 1. PAZAR (Mutlu Bay)
     targets.add(
       TargetFocus(
         identify: "Pazar",
         keyTarget: keyPazar,
         alignSkip: Alignment.topRight,
+        shape: ShapeLightFocus.RRect,
+        radius: 15,
         contents: [
           TargetContent(
             align: ContentAlign.top,
             builder: (context, controller) {
-              return const Column(
+              return Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Icon(Icons.shopping_bag, color: Colors.white, size: 50),
-                  SizedBox(height: 10),
-                  Text(
-                    "Kampüs Pazarı",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.only(top: 10.0),
-                    child: Text(
-                      "Buradan ders notlarını satabilir veya ikinci el eşyalar bulabilirsin.",
-                      style: TextStyle(color: Colors.white),
-                      textAlign: TextAlign.center,
+                  Image.asset('assets/images/mutlu_bay.png', height: 160),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                    child: const Column(
+                      children: [
+                        Text("Kampüs Pazarı 🛍️", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primary)),
+                        SizedBox(height: 8),
+                        Text("Ders notlarını sat, ikinci el eşya bul. Burası senin ticaret merkezin!", style: TextStyle(color: Colors.black87), textAlign: TextAlign.center),
+                      ],
                     ),
                   ),
                 ],
@@ -133,7 +122,7 @@ class _AnaEkranState extends State<AnaEkran> {
       ),
     );
 
-    // 2. HEDEF: FORUM ALANI
+    // 2. FORUM (Duyuru Bay)
     targets.add(
       TargetFocus(
         identify: "Forum",
@@ -143,22 +132,20 @@ class _AnaEkranState extends State<AnaEkran> {
           TargetContent(
             align: ContentAlign.top,
             builder: (context, controller) {
-              return const Column(
+              return Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Icon(Icons.forum, color: Colors.white, size: 50),
-                  SizedBox(height: 10),
-                  Text(
-                    "Forum & İtiraflar",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.only(top: 10.0),
-                    child: Text(
-                      "Kampüs gündemini buradan takip et. İstersen anonim itiraflarda bulun.",
-                      style: TextStyle(color: Colors.white),
-                      textAlign: TextAlign.center,
+                  Image.asset('assets/images/duyuru_bay.png', height: 160),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                    child: const Column(
+                      children: [
+                        Text("Forum & İtiraflar 📢", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primary)),
+                        SizedBox(height: 8),
+                        Text("Kampüste neler oluyor? Tartışmalara katıl, istersen anonim içini dök.", style: TextStyle(color: Colors.black87), textAlign: TextAlign.center),
+                      ],
                     ),
                   ),
                 ],
@@ -169,7 +156,7 @@ class _AnaEkranState extends State<AnaEkran> {
       ),
     );
 
-    // 3. HEDEF: PROFIL
+    // 3. PROFIL (Mutlu Bay)
     targets.add(
       TargetFocus(
         identify: "Profil",
@@ -179,23 +166,15 @@ class _AnaEkranState extends State<AnaEkran> {
           TargetContent(
             align: ContentAlign.top,
             builder: (context, controller) {
-              return const Column(
+              return Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Icon(Icons.person, color: Colors.white, size: 50),
-                  SizedBox(height: 10),
-                  Text(
-                    "Profilin",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.only(top: 10.0),
-                    child: Text(
-                      "Rozetlerini görmek, ayarlarını yapmak ve çıkış yapmak için burayı kullan.",
-                      style: TextStyle(color: Colors.white),
-                      textAlign: TextAlign.center,
-                    ),
+                  Image.asset('assets/images/mutlu_bay.png', height: 160),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                    child: const Text("Burası senin alanın. Rozetlerini incele, ayarlarını yap. İyi eğlenceler!", style: TextStyle(color: Colors.black87), textAlign: TextAlign.center),
                   ),
                 ],
               );
@@ -217,7 +196,6 @@ class _AnaEkranState extends State<AnaEkran> {
           await FirebaseFunctions.instanceFor(region: 'europe-west1')
               .httpsCallable('recalculateUserCounters')
               .call();
-          debugPrint("Sayaçlar onarıldı.");
         }
       }
     } catch (e) {
@@ -227,39 +205,41 @@ class _AnaEkranState extends State<AnaEkran> {
 
   @override
   void dispose() {
-    // PageController dispose SİLİNDİ
+    _pageController.dispose();
     super.dispose();
   }
 
   void _onItemTapped(int index) {
-    // PageView olmadığı için animateToPage kullanmıyoruz, sadece index güncelliyoruz.
-    setState(() => _selectedIndex = index);
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Sayfaları burada liste olarak tanımlıyoruz
-    final List<Widget> pages = [
-      const KesfetSayfasi(),
-      const PazarSayfasi(), 
-      ForumSayfasi(
-        isGuest: widget.isGuest,
-        isAdmin: widget.isAdmin,
-        userName: widget.userName,
-        realName: widget.realName,
-      ),
-      const ProfilEkrani(),
-    ];
-
     return Scaffold(
       appBar: (_selectedIndex == 0) ? _buildKesfetAppBar() : null,
       
-      // PERFORMANS DÜZELTMESİ: PageView yerine IndexedStack
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: pages,
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) {
+          setState(() => _selectedIndex = index);
+        },
+        physics: const NeverScrollableScrollPhysics(),
+        children: [
+          const KesfetSayfasi(),
+          const PazarSayfasi(), 
+          ForumSayfasi(
+            isGuest: widget.isGuest,
+            isAdmin: widget.isAdmin,
+            userName: widget.userName,
+            realName: widget.realName,
+          ),
+          const ProfilEkrani(),
+        ],
       ),
-      
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
