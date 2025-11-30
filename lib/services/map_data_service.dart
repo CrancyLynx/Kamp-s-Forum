@@ -1,20 +1,23 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter/material.dart'; 
+import '../utils/api_keys.dart';
 
 class LocationModel {
   final String id;
   final String title;
   final String snippet;
-  final String type; // yemek, durak, kutuphane, universite
+  final String type; 
   final LatLng position;
   final BitmapDescriptor? icon;
   final String? openingHours; 
-  final String? liveStatus; // Sakin, Normal, Kalabalık
-  final List<String> photoUrls; // Çoklu fotoğraf desteği
-  final Map<String, dynamic>? votes; // Oylama sayıları
+  final String? liveStatus; 
+  final List<String> photoUrls; 
+  final Map<String, dynamic>? votes; 
 
   LocationModel({
     required this.id,
@@ -29,19 +32,17 @@ class LocationModel {
     this.votes,
   });
 
-  // Firestore dökümanından model oluşturma
   factory LocationModel.fromFirestore(DocumentSnapshot doc, BitmapDescriptor? icon) {
     final data = doc.data() as Map<String, dynamic>;
-    
-    // Fotoğrafları listeye çevir
     List<String> photos = [];
     if (data['photos'] != null) {
       photos = List<String>.from(data['photos']);
     } else if (data['image'] != null) {
       photos.add(data['image']);
-    } else {
-      // Varsayılan placeholder
-      photos.add("https://via.placeholder.com/800x600?text=Goruntu+Yok");
+    }
+    
+    if (photos.isEmpty) {
+      photos.add("https://placehold.co/600x400/png?text=Fotograf+Yok");
     }
 
     return LocationModel(
@@ -96,14 +97,237 @@ class MapDataService {
     }
   }
 
-  // CANLI VERİ AKIŞI (STREAM)
+  // --- GOOGLE PLACES & DIRECTIONS API ---
+  
+  String _mapGoogleTypeToAppType(String googleType) {
+    if (['restaurant', 'cafe', 'bakery', 'meal_takeaway', 'food'].contains(googleType)) return 'yemek';
+    if (['bus_station', 'subway_station', 'transit_station'].contains(googleType)) return 'durak';
+    if (['library', 'book_store'].contains(googleType)) return 'kutuphane';
+    if (['university'].contains(googleType)) return 'universite';
+    return 'diger';
+  }
+
+  String _mapAppFilterToGoogleType(String appFilter) {
+    switch (appFilter) {
+      case 'yemek': return 'restaurant';
+      case 'durak': return 'transit_station'; 
+      case 'kutuphane': return 'library';
+      case 'universite': return 'university';
+      default: return ''; 
+    }
+  }
+
+  // 1. Yakındaki Yerleri Getir
+  Future<List<LocationModel>> searchNearbyPlaces({
+    required LatLng center, 
+    required String typeFilter,
+    double radius = 1500 
+  }) async {
+    String typeParam = '';
+    if (typeFilter != 'all') {
+      String gType = _mapAppFilterToGoogleType(typeFilter);
+      if (gType.isNotEmpty) {
+        typeParam = '&type=$gType';
+      }
+    }
+
+    final String url = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?'
+        'location=${center.latitude},${center.longitude}'
+        '&radius=$radius'
+        '$typeParam'
+        '&language=tr'
+        '&key=$googleMapsApiKey';
+
+    try {
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        
+        if (data['status'] == 'OK' || data['status'] == 'ZERO_RESULTS') {
+          final List results = data['results'];
+          
+          return results.map((place) {
+            List<String> photos = [];
+            if (place['photos'] != null && (place['photos'] as List).isNotEmpty) {
+              String ref = place['photos'][0]['photo_reference'];
+              String photoUrl = 'https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=$ref&key=$googleMapsApiKey';
+              photos.add(photoUrl);
+            } else {
+              photos.add("https://placehold.co/600x400/png?text=Fotograf+Yok");
+            }
+
+            String googleType = (place['types'] as List).isNotEmpty ? place['types'][0] : 'point_of_interest';
+            String appType = _mapGoogleTypeToAppType(googleType);
+
+            if (typeFilter != 'all' && appType == 'diger') {
+              appType = typeFilter;
+            }
+
+            return LocationModel(
+              id: place['place_id'],
+              title: place['name'],
+              snippet: place['vicinity'] ?? 'Adres bilgisi yok',
+              type: appType,
+              position: LatLng(
+                place['geometry']['location']['lat'],
+                place['geometry']['location']['lng'],
+              ),
+              icon: getIconForType(appType),
+              openingHours: place['opening_hours'] != null && place['opening_hours']['open_now'] == true ? 'Şu an Açık' : 'Kapalı',
+              liveStatus: 'Bilinmiyor',
+              photoUrls: photos,
+            );
+          }).toList();
+        }
+      }
+    } catch (e) {
+      debugPrint("Google API Bağlantı Hatası: $e");
+    }
+    return [];
+  }
+
+  // 2. Arama Tahminleri (Autocomplete)
+  Future<List<Map<String, dynamic>>> getPlacePredictions(String query, LatLng? userLocation) async {
+    if (query.isEmpty) return [];
+
+    String locationParam = '';
+    if (userLocation != null) {
+      locationParam = '&location=${userLocation.latitude},${userLocation.longitude}&radius=5000';
+    }
+
+    final String url = 'https://maps.googleapis.com/maps/api/place/autocomplete/json?'
+        'input=$query'
+        '$locationParam'
+        '&language=tr'
+        '&key=$googleMapsApiKey';
+
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK') {
+          return List<Map<String, dynamic>>.from(data['predictions']);
+        }
+      }
+    } catch (e) {
+      debugPrint("Autocomplete Hatası: $e");
+    }
+    return [];
+  }
+
+  // 3. Yer Detayı (Details)
+  Future<LocationModel?> getPlaceDetails(String placeId) async {
+    final String url = 'https://maps.googleapis.com/maps/api/place/details/json?'
+        'place_id=$placeId'
+        '&fields=geometry,name,vicinity,place_id,types,opening_hours,photos'
+        '&language=tr'
+        '&key=$googleMapsApiKey';
+
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK') {
+          final result = data['result'];
+          
+          List<String> photos = [];
+          if (result['photos'] != null && (result['photos'] as List).isNotEmpty) {
+            String ref = result['photos'][0]['photo_reference'];
+            String photoUrl = 'https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=$ref&key=$googleMapsApiKey';
+            photos.add(photoUrl);
+          } else {
+            photos.add("https://placehold.co/600x400/png?text=Fotograf+Yok");
+          }
+
+          String googleType = (result['types'] as List).isNotEmpty ? result['types'][0] : 'point_of_interest';
+          String appType = _mapGoogleTypeToAppType(googleType);
+
+          return LocationModel(
+            id: result['place_id'],
+            title: result['name'],
+            snippet: result['vicinity'] ?? 'Adres bilgisi yok',
+            type: appType,
+            position: LatLng(
+              result['geometry']['location']['lat'],
+              result['geometry']['location']['lng'],
+            ),
+            icon: getIconForType(appType),
+            openingHours: result['opening_hours'] != null && result['opening_hours']['open_now'] == true ? 'Şu an Açık' : 'Kapalı',
+            liveStatus: 'Bilinmiyor',
+            photoUrls: photos,
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint("Place Details Hatası: $e");
+    }
+    return null;
+  }
+
+  // 4. Rota Çizimi (Directions API) - YENİ
+  Future<List<LatLng>> getRouteCoordinates(LatLng origin, LatLng destination) async {
+    final String url = 'https://maps.googleapis.com/maps/api/directions/json?'
+        'origin=${origin.latitude},${origin.longitude}'
+        '&destination=${destination.latitude},${destination.longitude}'
+        '&mode=walking' // Yürüyüş rotası (driving, bicycling, transit de olabilir)
+        '&key=$googleMapsApiKey';
+
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK' && (data['routes'] as List).isNotEmpty) {
+          final String encodedPolyline = data['routes'][0]['overview_polyline']['points'];
+          return _decodePolyline(encodedPolyline);
+        } else {
+           debugPrint("Directions API Hatası: ${data['status']}");
+        }
+      }
+    } catch (e) {
+      debugPrint("Rota Çekme Hatası: $e");
+    }
+    return [];
+  }
+
+  // Polyline Kod Çözücü Algoritması
+  List<LatLng> _decodePolyline(String encoded) {
+    List<LatLng> poly = [];
+    int index = 0, len = encoded.length;
+    int lat = 0, lng = 0;
+
+    while (index < len) {
+      int b, shift = 0, result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lat += dlat;
+
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lng += dlng;
+
+      poly.add(LatLng((lat / 1E5).toDouble(), (lng / 1E5).toDouble()));
+    }
+    return poly;
+  }
+
+  // --- FIREBASE İŞLEMLERİ ---
+
   Stream<List<LocationModel>> getLocationsStream(String filter) {
     Query query = _firestore.collection('locations');
-
     if (filter != 'all') {
       query = query.where('type', isEqualTo: filter);
     }
-
     return query.snapshots().map((snapshot) {
       return snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
@@ -113,37 +337,33 @@ class MapDataService {
     });
   }
 
-  // OYLAMA İŞLEMİ
   Future<void> voteForStatus(String locationId, String status) async {
-    await _firestore.collection('locations').doc(locationId).update({
-      'status': status,
-      'lastUpdate': FieldValue.serverTimestamp(),
-    });
+    final docRef = _firestore.collection('locations').doc(locationId);
+    try {
+      await docRef.set({
+        'status': status,
+        'lastUpdate': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint("Oylama hatası: $e");
+    }
   }
 
-  // FOTOĞRAF EKLEME
   Future<void> addPhotoToLocation(String locationId, String photoUrl) async {
-     await _firestore.collection('locations').doc(locationId).update({
-      'photos': FieldValue.arrayUnion([photoUrl]),
-    });
+     try {
+       await _firestore.collection('locations').doc(locationId).set({
+        'photos': FieldValue.arrayUnion([photoUrl]),
+      }, SetOptions(merge: true));
+     } catch(e) { debugPrint("Foto ekleme hatası: $e"); }
   }
 
-  // VERİTABANI DOLDURMA (SEEDING)
   Future<void> seedDatabaseIfEmpty() async {
     final snapshot = await _firestore.collection('locations').limit(1).get();
     if (snapshot.docs.isEmpty) {
       final batch = _firestore.batch();
-      
       for (var loc in _fixedLocations) {
         final docRef = _firestore.collection('locations').doc(loc['id'].toString());
-        
-        // Rastgele fotoğraflar (Demo için)
-        List<String> mockPhotos = [
-          "https://picsum.photos/seed/${loc['id']}/800/600",
-          "https://picsum.photos/seed/${loc['id']}detail/800/600",
-          "https://picsum.photos/seed/${loc['id']}extra/800/600",
-        ];
-
+        List<String> mockPhotos = ["https://placehold.co/600x400/png?text=${loc['title'].toString().replaceAll(' ', '+')}"];
         batch.set(docRef, {
           'title': loc['title'],
           'lat': loc['lat'],
@@ -151,38 +371,30 @@ class MapDataService {
           'type': loc['type'],
           'snippet': loc['snippet'] ?? 'Kampüs mekanı.',
           'hours': loc['hours'] ?? '08:00 - 17:00',
-          'status': loc['status'] ?? (_random.nextBool() ? 'Sakin' : 'Yoğun'),
+          'status': loc['status'] ?? 'Normal',
           'photos': mockPhotos,
         });
       }
-      
       await batch.commit();
     }
   }
-
-  // YEDEK (FALLBACK) LİSTE - İNTERNET YOKKEN ÇALIŞIR
+  
   List<LocationModel> getFallbackLocations(String currentFilter) {
     List<LocationModel> locations = [];
     for (var data in _fixedLocations) {
       if (data['type'] == null || data['lat'] == null || data['lng'] == null) continue;
       String type = data['type'];
-
       if (currentFilter == 'all' || type == currentFilter) {
-        List<String> mockPhotos = [
-          "https://picsum.photos/seed/${data['id']}/800/600",
-          "https://picsum.photos/seed/${data['id']}extra/800/600",
-        ];
-
         locations.add(LocationModel(
           id: data['id'], 
           title: data['title'], 
-          snippet: data['snippet'] ?? 'Detaylı bilgi bulunmuyor.', 
+          snippet: data['snippet'] ?? '', 
           type: type, 
           position: LatLng(data['lat'], data['lng']), 
           icon: getIconForType(type) ?? BitmapDescriptor.defaultMarker,
-          openingHours: data['hours'] ?? 'Saatler belirtilmedi',
+          openingHours: data['hours'],
           liveStatus: data['status'] ?? 'Normal',
-          photoUrls: mockPhotos,
+          photoUrls: ["https://placehold.co/600x400/png?text=${data['title'].toString().replaceAll(' ', '+')}"],
         ));
       }
     }
@@ -190,8 +402,7 @@ class MapDataService {
   }
 
   final List<Map<String, dynamic>> _fixedLocations = [
-  // VAKIF ÜNİVERSİTELERİ
-    {'id': 'vak_u25', 'title': 'İstanbul Galata Üniversitesi', 'lat': 41.0286, 'lng': 28.9744, 'type': 'universite'},
+   {'id': 'vak_u25', 'title': 'İstanbul Galata Üniversitesi', 'lat': 41.0286, 'lng': 28.9744, 'type': 'universite'},
     {'id': 'vak_u1', 'title': 'Koç Üniversitesi', 'lat': 41.2049, 'lng': 29.0718, 'type': 'universite'},
     {'id': 'vak_u2', 'title': 'Sabancı Üniversitesi', 'lat': 40.8912, 'lng': 29.3787, 'type': 'universite'},
     {'id': 'vak_u3', 'title': 'İstanbul Bilgi Üniversitesi (Santral)', 'lat': 41.0664, 'lng': 28.9458, 'type': 'universite'},

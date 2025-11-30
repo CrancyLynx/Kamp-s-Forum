@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_functions/cloud_functions.dart'; // Sayaç düzeltme fonksiyonu için
+import 'package:cloud_functions/cloud_functions.dart'; 
 import '../forum/forum_sayfasi.dart';
 import 'kesfet_sayfasi.dart';
 import '../market/pazar_sayfasi.dart'; 
 import '../chat/sohbet_listesi_ekrani.dart'; 
 import '../notification/bildirim_ekrani.dart'; 
+import '../profile/profil_ekrani.dart'; // EKLENDİ: Profil ekranı importu
 import '../../utils/app_colors.dart';
 
 class AnaEkran extends StatefulWidget {
@@ -37,20 +38,17 @@ class _AnaEkranState extends State<AnaEkran> {
     super.initState();
     _pageController = PageController(initialPage: _selectedIndex);
     
-    // UYGULAMA AÇILINCA SAYAÇLARI BİR KERE KONTROL ET (Opsiyonel Güvenlik)
     if (!_currentUserId.isEmpty && !widget.isGuest) {
       _verifyCounters();
     }
   }
   
-  // Eğer sayaçlar hiç yoksa (eski kullanıcı), Cloud Function ile hesaplat
   Future<void> _verifyCounters() async {
     try {
       final doc = await FirebaseFirestore.instance.collection('kullanicilar').doc(_currentUserId).get();
       if (doc.exists) {
         final data = doc.data();
         if (data != null && (data['totalUnreadMessages'] == null || data['unreadNotifications'] == null)) {
-          // Sayaçlar eksik, fonksiyonu çağır
           await FirebaseFunctions.instanceFor(region: 'europe-west1')
               .httpsCallable('recalculateUserCounters')
               .call();
@@ -79,7 +77,6 @@ class _AnaEkranState extends State<AnaEkran> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // SADECE KEŞFET SAYFASINDA ÖZEL APP BAR GÖSTERELİM
       appBar: (_selectedIndex == 0) ? _buildKesfetAppBar() : null,
       
       body: PageView(
@@ -97,6 +94,8 @@ class _AnaEkranState extends State<AnaEkran> {
             userName: widget.userName,
             realName: widget.realName,
           ),
+          // EKLENDİ: Profil Ekranı 4. sayfa olarak
+          const ProfilEkrani(),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -118,12 +117,16 @@ class _AnaEkranState extends State<AnaEkran> {
               icon: Icon(Icons.forum_outlined),
               activeIcon: Icon(Icons.forum),
               label: 'Forum'),
+          // EKLENDİ: Profil Butonu
+          BottomNavigationBarItem(
+              icon: Icon(Icons.person_outline),
+              activeIcon: Icon(Icons.person),
+              label: 'Profil'),
         ],
       ),
     );
   }
 
-  // --- OPTİMİZE EDİLMİŞ ÖZEL APP BAR ---
   AppBar _buildKesfetAppBar() {
     return AppBar(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -139,8 +142,6 @@ class _AnaEkranState extends State<AnaEkran> {
         ],
       ),
       actions: [
-        // TEK BİR STREAM İLE HEM MESAJ HEM BİLDİRİM SAYISINI ALIYORUZ
-        // Bu, önceki koddaki 2 ayrı ağır sorgu yerine sadece 1 basit okuma yapar.
         StreamBuilder<DocumentSnapshot>(
           stream: _currentUserId.isEmpty
               ? null
@@ -162,7 +163,6 @@ class _AnaEkranState extends State<AnaEkran> {
 
             return Row(
               children: [
-                // 1. MESAJ İKONU
                 Stack(
                   children: [
                     IconButton(
@@ -192,8 +192,6 @@ class _AnaEkranState extends State<AnaEkran> {
                       ),
                   ],
                 ),
-
-                // 2. BİLDİRİM İKONU
                 Stack(
                   children: [
                     IconButton(

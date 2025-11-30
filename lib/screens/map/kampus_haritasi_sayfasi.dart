@@ -6,6 +6,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:math' show cos, sqrt, atan2, pi, sin; 
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../services/map_data_service.dart'; 
 import '../../utils/app_colors.dart';
@@ -35,12 +36,23 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     zoom: 13,
   );
 
-  // HATA DÜZELTMESİ: late Stream'i initState'de hemen tanımlayacağız.
-  late Stream<List<LocationModel>> _locationsStream;
+  late Stream<List<LocationModel>> _firestoreStream;
+  List<LocationModel> _googleApiLocations = [];
+  Set<Polyline> _polylines = {}; // YENİ: Rota Çizgisi
+  
   String _currentFilter = 'all';
   bool _isLoadingLocation = true;
+  bool _isFetchingApi = false;
   bool _permissionGranted = false;
+  bool _isRouting = false; // YENİ: Rota modunda mı?
+
   LatLng? _userLocation;
+
+  // ARAMA DEĞİŞKENLERİ
+  final TextEditingController _searchController = TextEditingController();
+  List<Map<String, dynamic>> _searchResults = [];
+  bool _isSearching = false;
+  Timer? _debounce;
 
   final String _darkMapStyle = '''
     [
@@ -62,28 +74,153 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     super.initState();
     _currentFilter = widget.initialFilter;
     
-    // HATA ÇÖZÜMÜ: Stream'i initState içinde beklemeden başlatıyoruz.
-    _locationsStream = _mapDataService.getLocationsStream(_currentFilter);
+    _firestoreStream = _mapDataService.getLocationsStream(_currentFilter);
 
-    // Veritabanı boşsa doldur
-    _mapDataService.seedDatabaseIfEmpty();
-
-    // Marker ikonlarını oluştur
     _createCustomMarkers().then((_) {
-      if (mounted) setState(() {}); // İkonlar yüklenince yenile
-      
+      if (mounted) setState(() {});
       if (widget.initialFocus == null) {
         _getUserLocation();
       } else {
         setState(() => _isLoadingLocation = false);
+        _fetchNearbyPlaces(widget.initialFocus!);
       }
     });
   }
 
-  void _refreshLocationsStream() {
-    setState(() {
-      _locationsStream = _mapDataService.getLocationsStream(_currentFilter);
+  // ARAMA FONKSİYONLARI
+  void _onSearchChanged(String query) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    
+    if (query.isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
+      return;
+    }
+
+    _debounce = Timer(const Duration(milliseconds: 500), () async {
+      final results = await _mapDataService.getPlacePredictions(query, _userLocation);
+      if (mounted) {
+        setState(() {
+          _searchResults = results;
+          _isSearching = true;
+        });
+      }
     });
+  }
+
+  Future<void> _onResultSelected(String placeId) async {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _searchController.clear();
+      _searchResults = [];
+      _isSearching = false;
+    });
+
+    final location = await _mapDataService.getPlaceDetails(placeId);
+    if (location != null) {
+      final controller = await _controller.future;
+      controller.animateCamera(CameraUpdate.newLatLngZoom(location.position, 18));
+      
+      setState(() {
+        _googleApiLocations = [location]; // Aranan yeri listeye ekle
+      });
+
+      _showLocationDetails(location);
+    }
+  }
+
+  // ROTA ÇİZME FONKSİYONLARI (YENİ)
+  Future<void> _drawRoute(LatLng destination) async {
+    if (_userLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Konumunuz alınamadı.")));
+      return;
+    }
+
+    Navigator.pop(context); // Detay panelini kapat
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Rota hesaplanıyor..."), duration: Duration(seconds: 1)));
+
+    final coordinates = await _mapDataService.getRouteCoordinates(_userLocation!, destination);
+
+    if (coordinates.isNotEmpty) {
+      if (mounted) {
+        setState(() {
+          _polylines = {
+            Polyline(
+              polylineId: const PolylineId('route'),
+              points: coordinates,
+              color: AppColors.primary,
+              width: 5,
+              jointType: JointType.round,
+              startCap: Cap.roundCap,
+              endCap: Cap.roundCap,
+            )
+          };
+          _isRouting = true;
+        });
+
+        // Kamerayı rotaya sığdır
+        final controller = await _controller.future;
+        LatLngBounds bounds = _boundsFromLatLngList(coordinates);
+        controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
+      }
+    } else {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Rota bulunamadı.")));
+    }
+  }
+
+  void _clearRoute() {
+    setState(() {
+      _polylines = {};
+      _isRouting = false;
+    });
+  }
+
+  LatLngBounds _boundsFromLatLngList(List<LatLng> list) {
+    double? x0, x1, y0, y1;
+    for (LatLng latLng in list) {
+      if (x0 == null) {
+        x0 = x1 = latLng.latitude;
+        y0 = y1 = latLng.longitude;
+      } else {
+        if (latLng.latitude > x1!) x1 = latLng.latitude;
+        if (latLng.latitude < x0) x0 = latLng.latitude;
+        if (latLng.longitude > y1!) y1 = latLng.longitude;
+        if (latLng.longitude < y0!) y0 = latLng.longitude;
+      }
+    }
+    return LatLngBounds(northeast: LatLng(x1!, y1!), southwest: LatLng(x0!, y0!));
+  }
+
+  // MEVCUT FONKSİYONLAR
+  Future<void> _fetchNearbyPlaces(LatLng center) async {
+    if (_isFetchingApi) return;
+    if (mounted) setState(() => _isFetchingApi = true);
+
+    try {
+      final results = await _mapDataService.searchNearbyPlaces(
+        center: center,
+        typeFilter: _currentFilter,
+      );
+      if (mounted) {
+        setState(() {
+          _googleApiLocations = results;
+          _isFetchingApi = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isFetchingApi = false);
+    }
+  }
+
+  void _refreshLocations() {
+    setState(() {
+      _firestoreStream = _mapDataService.getLocationsStream(_currentFilter);
+      _googleApiLocations = []; 
+    });
+    LatLng searchCenter = _userLocation ?? widget.initialFocus ?? _kDefaultLocation.target;
+    _fetchNearbyPlaces(searchCenter);
   }
 
   @override
@@ -151,12 +288,12 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     if(mounted) setState(() => _isLoadingLocation = true);
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) { throw Exception('Servis kapalı'); }
+      if (!serviceEnabled) return;
       
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) throw Exception('İzin reddedildi');
+        if (permission == LocationPermission.denied) return;
       }
       
       Position position = await Geolocator.getCurrentPosition(timeLimit: const Duration(seconds: 10));
@@ -171,6 +308,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
         if (widget.initialFocus == null) {
           final GoogleMapController controller = await _controller.future;
           controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: _userLocation!, zoom: widget.initialZoom)));
+          _fetchNearbyPlaces(_userLocation!);
         }
       }
     } catch (e) {
@@ -178,30 +316,42 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     }
   }
 
-  Set<Marker> _buildMarkersFromData(List<LocationModel> locations) {
-      final newMarkers = <Marker>{};
-      for (var loc in locations) {
-        newMarkers.add(
-          Marker(
-            markerId: MarkerId(loc.id),
+  Set<Marker> _buildCombinedMarkers(List<LocationModel> firestoreLocations) {
+      final allMarkers = <Marker>{};
+      
+      for (var loc in firestoreLocations) {
+        allMarkers.add(Marker(
+            markerId: MarkerId("fs_${loc.id}"),
             position: loc.position,
             icon: loc.icon ?? BitmapDescriptor.defaultMarker,
             onTap: () => _showLocationDetails(loc),
-          ),
-        );
+            infoWindow: InfoWindow(title: loc.title),
+        ));
       }
+
+      for (var loc in _googleApiLocations) {
+        bool existsInFirestore = firestoreLocations.any((f) => f.id == loc.id);
+        if (!existsInFirestore) {
+           allMarkers.add(Marker(
+              markerId: MarkerId("g_${loc.id}"),
+              position: loc.position,
+              icon: loc.icon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+              onTap: () => _showLocationDetails(loc),
+              infoWindow: InfoWindow(title: loc.title),
+           ));
+        }
+      }
+
       if (_userLocation != null) {
-        newMarkers.add(
-            Marker(
+        allMarkers.add(Marker(
               markerId: const MarkerId('current_location'),
               position: _userLocation!,
               infoWindow: const InfoWindow(title: 'Siz Buradasınız', snippet: 'Yaklaşık Konum'),
               icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
               zIndex: 2,
-            ),
-          );
+        ));
       }
-      return newMarkers;
+      return allMarkers;
   }
   
   void _showLocationDetails(LocationModel location) {
@@ -217,7 +367,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     );
   }
 
-  // --- GÜNCELLENEN DETAY PANELİ (Galeri + Oylama) ---
   Widget _buildLocationDetailsSheet(LocationModel location) {
     final bool locationKnown = _userLocation != null;
     double distanceKm = locationKnown ? _calculateDistance(_userLocation!, location.position) : 0.0;
@@ -225,7 +374,10 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     String distanceText = locationKnown ? "${distanceKm.toStringAsFixed(2)} km" : "Bilinmiyor";
     String timeText = locationKnown ? "~$walkingTimeMinutes dk" : "---";
     
-    final PageController pageController = PageController();
+    String displayTitle = location.title;
+    if (location.type == 'durak' && !displayTitle.toLowerCase().contains('durak')) {
+      displayTitle += " (Durak)";
+    }
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.75, 
@@ -236,7 +388,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. Fotoğraf Galerisi (PageView)
+          // Galeri
           Stack(
             children: [
               SizedBox(
@@ -244,98 +396,48 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                 width: double.infinity,
                 child: location.photoUrls.isNotEmpty
                     ? PageView.builder(
-                        controller: pageController,
                         itemCount: location.photoUrls.length,
                         itemBuilder: (context, index) {
-                          return GestureDetector(
-                            onTap: () => _showFullScreenImage(context, location.photoUrls, index),
-                            child: ClipRRect(
-                              borderRadius: const BorderRadius.vertical(top: Radius.circular(25.0)),
-                              child: Image.network(
-                                location.photoUrls[index], 
-                                fit: BoxFit.cover, 
-                                errorBuilder: (c,e,s) => Container(color: Colors.grey[300], child: const Icon(Icons.broken_image, size: 50))
-                              ),
-                            ),
+                          return CachedNetworkImage(
+                            imageUrl: location.photoUrls[index],
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => Container(color: Colors.grey[200]),
+                            errorWidget: (context, url, error) => Image.network("https://placehold.co/600x400/png?text=Fotograf+Yok", fit: BoxFit.cover),
                           );
                         },
                       )
-                    : Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryLight,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(25.0)),
-                        ),
-                        child: Center(child: Icon(Icons.image_outlined, size: 50, color: AppColors.primary)),
-                      ),
+                    : Image.network("https://placehold.co/600x400/png?text=Fotograf+Yok", fit: BoxFit.cover),
               ),
-              
-              // Kapat Butonu
-              Positioned(
-                top: 15, 
-                right: 15, 
-                child: CircleAvatar(
-                  backgroundColor: Colors.black45, 
-                  child: IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context))
-                )
-              ),
-
-              // Sayfa Göstergesi (Dots)
-              if (location.photoUrls.length > 1)
-              Positioned(
-                bottom: 10,
-                left: 0,
-                right: 0,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(location.photoUrls.length, (index) {
-                    return Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(0.8)),
-                    );
-                  }),
-                ),
-              ),
+              Positioned(top: 15, right: 15, child: CircleAvatar(backgroundColor: Colors.black45, child: IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context)))),
             ],
           ),
           
-          // 2. İçerik ve Oylama
+          // İçerik
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 15),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                   Row(
-                     children: [
-                       Expanded(child: Text(location.title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold))),
-                       Container(
-                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                         decoration: BoxDecoration(color: _getStatusColor(location.liveStatus).withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: _getStatusColor(location.liveStatus))),
-                         child: Text(location.liveStatus ?? "Normal", style: TextStyle(color: _getStatusColor(location.liveStatus), fontWeight: FontWeight.bold)),
-                       ),
-                     ],
-                   ),
+                   Text(displayTitle, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                   const SizedBox(height: 5),
+                   Text(location.snippet, style: const TextStyle(color: Colors.grey)),
                    const SizedBox(height: 20),
 
-                  Row(
+                   // Bilgi Kutuları
+                   Row(
                     children: [
                       _buildQuickInfoBox(icon: Icons.alt_route, value: distanceText, label: "Mesafe", color: AppColors.primary),
                       const SizedBox(width: 15),
                       _buildQuickInfoBox(icon: Icons.directions_walk, value: timeText, label: "Yürüyüş", color: Colors.green),
+                      const SizedBox(width: 15),
+                      _buildQuickInfoBox(icon: Icons.access_time, value: location.openingHours ?? "-", label: "Saatler", color: Colors.orange),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 25),
 
-                  _buildDetailRow(label: "Kategori", value: location.type.toUpperCase(), icon: _mapDataService.getIconForType(location.type) != null ? Icons.place : Icons.info, color: AppColors.primary),
-                  _buildDetailRow(label: "Açıklama", value: location.snippet, icon: Icons.info_outline, color: Colors.grey),
-                  _buildDetailRow(label: "Çalışma Saatleri", value: location.openingHours ?? "Bilinmiyor", icon: Icons.access_time, color: Colors.green),
-                  
-                  const Divider(height: 30),
-                  
-                  // OYLAMA ALANI
-                  const Text("Sizce şu an burası nasıl?", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  // Oylama
+                  const Text("Şu an burası nasıl?", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -346,36 +448,40 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                       _buildVoteButton(location, "Kalabalık", Colors.red),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 25),
                   
-                  // AKSİYON BUTONLARI
+                  // AKSİYON BUTONLARI (GÜNCELLENDİ)
                   Row(
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () {
-                             _mapDataService.addPhotoToLocation(location.id, "https://picsum.photos/800/600?random=${DateTime.now().millisecondsSinceEpoch}");
-                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fotoğraf yüklendi!')));
+                             _mapDataService.addPhotoToLocation(location.id, "https://placehold.co/600x400/png?text=Yeni+Foto");
+                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fotoğraf eklendi (Demo)!')));
                           },
                           icon: const Icon(Icons.add_a_photo),
                           label: const Text("Foto Ekle"),
-                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15)),
+                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         flex: 2,
                         child: ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _launchDirections(location.position);
-                          },
+                          onPressed: () => _drawRoute(location.position), // YENİ: Rota Çizimi
                           icon: const Icon(Icons.directions, color: Colors.white),
-                          label: const Text("Yol Tarifi Al", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                          label: const Text("Rota Çiz", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, padding: const EdgeInsets.symmetric(vertical: 12)),
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 10),
+                  Center(
+                    child: TextButton(
+                      onPressed: () => _launchDirections(location.position),
+                      child: const Text("Google Haritalar'da Aç", style: TextStyle(color: Colors.grey)),
+                    )
                   ),
                   const SizedBox(height: 20),
                 ],
@@ -383,6 +489,23 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildQuickInfoBox({required IconData icon, required String value, required String label, required Color color}) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+        child: Column(
+          children: [
+            Icon(icon, size: 24, color: color),
+            const SizedBox(height: 4),
+            Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: color), maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(label, style: TextStyle(fontSize: 10, color: color.withOpacity(0.8))),
+          ],
+        ),
       ),
     );
   }
@@ -408,82 +531,11 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       ),
     );
   }
-
-  void _showFullScreenImage(BuildContext context, List<String> photos, int initialIndex) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.black,
-        insetPadding: EdgeInsets.zero,
-        child: Stack(
-          children: [
-            PageView.builder(
-              itemCount: photos.length,
-              controller: PageController(initialPage: initialIndex),
-              itemBuilder: (context, index) {
-                return InteractiveViewer(child: Image.network(photos[index], fit: BoxFit.contain));
-              },
-            ),
-            Positioned(top: 40, right: 20, child: IconButton(icon: const Icon(Icons.close, color: Colors.white, size: 30), onPressed: () => Navigator.pop(context))),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Color _getStatusColor(String? status) {
-    switch (status) {
-      case 'Sakin': return Colors.green;
-      case 'Yoğun': case 'Kalabalık': return Colors.red;
-      default: return Colors.orange;
-    }
-  }
-
-  Widget _buildDetailRow({required String label, required String value, required IconData icon, required Color color}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 15.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey.shade600)),
-              const SizedBox(height: 2),
-              Text(value, style: const TextStyle(fontSize: 16)),
-            ],
-          )),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildQuickInfoBox({required IconData icon, required String value, required String label, required Color color}) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-        child: Column(
-          children: [
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, size: 18, color: color), const SizedBox(width: 5), Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: color))]),
-            const SizedBox(height: 4),
-            Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-          ],
-        ),
-      ),
-    );
-  }
   
   Future<void> _launchDirections(LatLng destination) async {
-    final String destinationLat = destination.latitude.toString();
-    final String destinationLng = destination.longitude.toString();
-    String url = 'comgooglemaps://?daddr=$destinationLat,$destinationLng';
-    if (_userLocation != null) {
-      url += '&saddr=${_userLocation!.latitude},${_userLocation!.longitude}';
-    }
-    final Uri uri = Uri.parse(url);
-    if (!await launchUrl(uri)) {
-       await launchUrl(Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$destinationLat,$destinationLng'));
+    final String url = 'https://www.google.com/maps/dir/?api=1&destination=${destination.latitude},${destination.longitude}&travelmode=walking';
+    if (!await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)) {
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Harita açılamadı.")));
     }
   }
 
@@ -494,15 +546,16 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     return Scaffold(
       body: Stack(
         children: [
+          // 1. HARİTA (En altta)
           StreamBuilder<List<LocationModel>>(
-            stream: _locationsStream,
+            stream: _firestoreStream,
             builder: (context, snapshot) {
-              final locations = snapshot.hasData ? snapshot.data! : _mapDataService.getFallbackLocations(_currentFilter);
-              
+              final firestoreLocations = snapshot.hasData ? snapshot.data! : <LocationModel>[];
               return GoogleMap(
                 mapType: MapType.normal,
                 initialCameraPosition: CameraPosition(target: initialTarget, zoom: widget.initialZoom),
-                markers: _buildMarkersFromData(locations),
+                markers: _buildCombinedMarkers(firestoreLocations),
+                polylines: _polylines, // YENİ: Rota Çizgisi
                 myLocationEnabled: _permissionGranted,
                 myLocationButtonEnabled: false,
                 zoomControlsEnabled: false,
@@ -511,10 +564,30 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
             },
           ),
           
-          // ÜST BAR (Filtreler)
+          if (_isFetchingApi)
+            Positioned(
+              top: 100, left: 0, right: 0, 
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(blurRadius: 5, color: Colors.black26)]),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2)),
+                      SizedBox(width: 8),
+                      Text("Yükleniyor...", style: TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // 2. ARAYÜZ KATMANI
           SafeArea(
             child: Column(
               children: [
+                // ARAMA ÇUBUĞU ve ROTA BUTONU
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Row(
@@ -529,30 +602,98 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              _buildFilterChip('Tümü', 'all', Icons.map),
-                              _buildFilterChip('Üniversiteler', 'universite', Icons.school),
-                              _buildFilterChip('Yemek', 'yemek', Icons.restaurant),
-                              _buildFilterChip('Durak', 'durak', Icons.directions_bus),
-                              _buildFilterChip('Kütüphane', 'kutuphane', Icons.menu_book),
-                            ],
+                        child: _isRouting 
+                        // Rota varsa "Temizle" butonu göster
+                        ? GestureDetector(
+                            onTap: _clearRoute,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(24), boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 8)]),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.close, color: Colors.white),
+                                  SizedBox(width: 8),
+                                  Text("Rotayı Temizle", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                          )
+                        // Rota yoksa Arama Çubuğunu göster
+                        : Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(24),
+                              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+                            ),
+                            child: TextField(
+                              controller: _searchController,
+                              onChanged: _onSearchChanged,
+                              decoration: InputDecoration(
+                                hintText: "Mekan veya durak ara...",
+                                border: InputBorder.none,
+                                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                                suffixIcon: _searchController.text.isNotEmpty 
+                                  ? IconButton(icon: const Icon(Icons.clear, color: Colors.grey), onPressed: () { _searchController.clear(); _onSearchChanged(''); }) 
+                                  : null,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              ),
+                            ),
                           ),
-                        ),
                       ),
                     ],
                   ),
                 ),
+
+                // ARAMA SONUÇLARI
+                if (_searchResults.isNotEmpty)
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    constraints: const BoxConstraints(maxHeight: 300), 
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4))]),
+                    child: ListView.separated(
+                      padding: EdgeInsets.zero,
+                      shrinkWrap: true,
+                      itemCount: _searchResults.length,
+                      separatorBuilder: (context, index) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final item = _searchResults[index];
+                        final mainText = item['structured_formatting']['main_text'] ?? item['description'];
+                        final secondaryText = item['structured_formatting']['secondary_text'] ?? '';
+                        return ListTile(
+                          leading: const Icon(Icons.location_on_outlined, color: Colors.grey),
+                          title: Text(mainText, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: secondaryText.isNotEmpty ? Text(secondaryText, maxLines: 1, overflow: TextOverflow.ellipsis) : null,
+                          onTap: () => _onResultSelected(item['place_id']),
+                        );
+                      },
+                    ),
+                  ),
+
+                // FİLTRELER (Arama ve Rota yoksa)
+                if (!_isSearching && _searchResults.isEmpty && !_isRouting)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 16.0),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildFilterChip('Tümü', 'all', Icons.map),
+                          _buildFilterChip('Üniversiteler', 'universite', Icons.school),
+                          _buildFilterChip('Yemek', 'yemek', Icons.restaurant),
+                          _buildFilterChip('Durak', 'durak', Icons.directions_bus),
+                          _buildFilterChip('Kütüphane', 'kutuphane', Icons.menu_book),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
 
           // KONUM BUTONU
           Positioned(
-            bottom: 30,
-            right: 20,
+            bottom: 30, right: 20,
             child: FloatingActionButton(
               heroTag: 'myloc',
               backgroundColor: AppColors.primary,
@@ -560,16 +701,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
               onPressed: _getUserLocation,
             ),
           ),
-          if (_userLocation != null || widget.initialFocus != null)
-            Positioned(
-              bottom: 30,
-              left: 20,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.95), borderRadius: BorderRadius.circular(20), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)]),
-                child: Text(_userLocation != null ? "Konumunuz Alındı" : "Odaklanılan Merkez", style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
-              ),
-            ),
         ],
       ),
     );
@@ -581,11 +712,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       onTap: () {
         setState(() {
           _currentFilter = filterKey;
-          _refreshLocationsStream();
-          LatLng target = _userLocation ?? widget.initialFocus ?? _kDefaultLocation.target;
-          double zoom = widget.initialZoom;
-          if (filterKey == 'universite') { target = const LatLng(41.0082, 28.9784); zoom = 10; }
-          _controller.future.then((c) => c.animateCamera(CameraUpdate.newLatLngZoom(target, zoom)));
+          _refreshLocations(); 
         });
       },
       child: AnimatedContainer(

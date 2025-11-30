@@ -12,8 +12,7 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
     
-    // GÜNCELLEME: Admin kontrolü artık veritabanından yapılıyor.
-    // Kullanıcının kendi dokümanını okuyup 'role' alanına bakıyoruz.
+    // Admin kontrolü: Kullanıcının kendi dokümanındaki 'role' alanı 'admin' olmalı.
     function isAdmin() {
       return isSignedIn() && 
              get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.role == 'admin';
@@ -25,11 +24,8 @@ service cloud.firestore {
     match /kullanicilar/{userId} {
       allow read: if isSignedIn();
       // Sadece kendi hesabını oluşturabilir ve rolü 'user' olmalı.
-      allow create: if isOwner(userId) && request.resource.data.role == 'user'; 
-      
-      // Bir kullanıcı kendi profilini güncelleyebilir AMA rolünü değiştiremez.
-      // Adminler rolü güncelleyebilir.
-      // Diğer kullanıcılar sadece takipçi listesini güncelleyebilir.
+      allow create: if isOwner(userId) && request.resource.data.role == 'user';
+      // Kullanıcılar rollerini değiştiremez, adminler değiştirebilir.
       allow update: if (isOwner(userId) && !('role' in request.resource.data.diff(resource.data).affectedKeys())) ||
                       (isAdmin() && 'role' in request.resource.data.diff(resource.data).affectedKeys()) ||
                       (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followers', 'followerCount']));
@@ -40,15 +36,15 @@ service cloud.firestore {
     // -----------------------------------------------------------
     match /gonderiler/{postId} {
       allow read: if true;
-      // Gönderi oluştururken userId kendi id'si olmalı.
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      // Güncellerken beğeni ve yorum sayısı gibi alanlar doğrudan değiştirilemez.
+      // Beğeni, yorum sayısı ve sabitlenme durumu manuel manipüle edilemez.
+      // Sabitleme sadece admin tarafından değiştirilebilir.
       allow update: if (isOwner(resource.data.userId) || isAdmin()) &&
-                       !('likes' in request.resource.data.diff(resource.data).affectedKeys()) &&
+                       !('likes' in request.resource.data.diff(resource.data).affectedKeys()) && !('isPinned' in request.resource.data.diff(resource.data).affectedKeys()) &&
                        !('commentCount' in request.resource.data.diff(resource.data).affectedKeys());
       allow delete: if isOwner(resource.data.userId) || isAdmin();
       
-      // Yorumlar (Subcollection)
+      // Yorumlar (Alt Koleksiyon)
       match /yorumlar/{commentId} {
         allow read: if true;
         allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
@@ -59,7 +55,27 @@ service cloud.firestore {
     }
     
     // -----------------------------------------------------------
-    // 3. SOHBETLER KOLEKSİYONU
+    // 3. HARİTA / MEKANLAR KOLEKSİYONU (YENİ EKLENDİ)
+    // -----------------------------------------------------------
+    match /locations/{locationId} {
+      // Haritadaki mekanları herkes görebilir
+      allow read: if true;
+      
+      // Yeni mekan ekleme ve silme işlemi sadece Admin tarafından yapılabilir.
+      // (Not: Uygulama ilk açıldığında otomatik seed işlemi için ilk kullanıcının Admin olması gerekir)
+      allow create, delete: if isAdmin();
+      
+      // Güncelleme Kuralları:
+      // 1. Admin her şeyi güncelleyebilir.
+      // 2. Normal kullanıcılar SADECE 'status' (doluluk oylaması), 'lastUpdate' ve 'photos' alanlarını güncelleyebilir.
+      //    Mekanın ismini veya koordinatlarını değiştiremezler.
+      allow update: if isAdmin() || 
+                    (isSignedIn() && 
+                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastUpdate', 'photos', 'votes']));
+    }
+
+    // -----------------------------------------------------------
+    // 4. SOHBETLER KOLEKSİYONU
     // -----------------------------------------------------------
     match /sohbetler/{chatId} {
         allow read: if request.auth.uid in resource.data.participants;
@@ -82,14 +98,13 @@ service cloud.firestore {
     }
     
     match /etkinlikler/{eventId} { 
-      allow read: if true; 
+      allow read: if true;
       allow write: if isAdmin(); // Sadece Admin yazabilir
     }
     
     match /bildirimler/{notificationId} { 
       allow read, update: if isOwner(resource.data.userId) || isAdmin(); 
-      // Bildirimler client tarafından değil, sunucu (Cloud Functions) veya güvenli işlemlerle oluşturulmalı.
-      allow create: if false;
+      allow create: if false; // Sadece backend/functions oluşturabilir
       allow delete: if isOwner(resource.data.userId) || isAdmin(); 
     }
     
