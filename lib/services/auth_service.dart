@@ -1,6 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // DEĞİŞTİ
+import 'package:shared_preferences/shared_preferences.dart'; // DEĞİŞTİ: Var olan paket
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -129,7 +129,7 @@ class AuthService {
     }, SetOptions(merge: true)); 
   }
 
-  // --- DİĞER FONKSİYONLAR (MFA, Validate, Guest vb.) ---
+  // --- DİĞER FONKSİYONLAR ---
   
   Future<bool> reauthenticateUser(String password) async {
     User? user = _auth.currentUser;

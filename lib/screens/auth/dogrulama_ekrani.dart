@@ -19,6 +19,7 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
   final TextEditingController _surnameController = TextEditingController();
   final TextEditingController _ageController = TextEditingController();
   
+  // Seçilen Değerler
   String? _selectedUniversity;
   String? _selectedDepartment;
 
@@ -29,17 +30,18 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
   @override
   void initState() {
     super.initState();
-    // Veriyi yükle ve ekranı tazele
+    
+    // 1. Verileri Yükle
     UniversityService().loadData().then((_) {
-      if(mounted) setState(() {});
+      if(mounted) setState(() {}); // Yükleme bitince ekranı yenile
     });
 
     final userId = FirebaseAuth.instance.currentUser?.uid;
     if (userId != null) {
       _userStatusStream = FirebaseFirestore.instance.collection('kullanicilar').doc(userId).snapshots();
     }
-
-    // Maskot Tanıtımı
+    
+    // Maskot Kodları
     _userStatusStream.first.then((snapshot) {
       if (mounted) {
         final userData = snapshot.data() as Map<String, dynamic>?;
@@ -52,7 +54,7 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
                   TargetFocus(
                       identify: "submit-button",
                       keyTarget: _submitButtonKey,
-                      contents: [TargetContent(align: ContentAlign.bottom, builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Profilini Tamamla', description: 'Öğrenci olduğunu doğrulamamız gerekiyor.', mascotAssetPath: 'assets/images/dedektif_bay.png'))])
+                      contents: [TargetContent(align: ContentAlign.bottom, builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Profilini Tamamla', description: 'Öğrenci olduğunu doğrulamamız için bilgilerini gir.', mascotAssetPath: 'assets/images/dedektif_bay.png'))])
                 ]);
           });
         }
@@ -62,7 +64,7 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
 
   void _submitVerificationForm(String userId) async {
     if (_nameController.text.isEmpty || _surnameController.text.isEmpty || _ageController.text.isEmpty || _selectedUniversity == null || _selectedDepartment == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Lütfen tüm alanları doldurun."), backgroundColor: Colors.orange));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Lütfen tüm alanları doldurun ve listeden seçim yapın."), backgroundColor: Colors.red));
       return;
     }
 
@@ -75,7 +77,6 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
       String newStatus = 'Pending';
       bool isVerified = false;
       
-      // .edu.tr kontrolü
       if (user != null && user.emailVerified && (email.endsWith('.edu.tr') || email.endsWith('.edu'))) {
         newStatus = 'Verified';
         isVerified = true;
@@ -91,7 +92,6 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
           'university': _selectedUniversity, 
           'department': _selectedDepartment, 
         },
-        // Profil bilgilerini de doğrudan güncelle
         'universite': _selectedUniversity,
         'bolum': _selectedDepartment,
         'rejectionReason': null,
@@ -100,7 +100,7 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
       if (newStatus == 'Verified') {
          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Otomatik onaylandı!"), backgroundColor: AppColors.success));
       } else {
-         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bilgiler gönderildi. Onay bekleniyor.")));
+         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bilgiler gönderildi. Yönetici onayı bekleniyor.")));
       }
 
     } catch (e) {
@@ -112,9 +112,11 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
 
   @override
   Widget build(BuildContext context) {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Profilini Tamamla"),
+        title: const Text("Öğrenci Profilini Tamamla"),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         automaticallyImplyLeading: false, 
@@ -123,8 +125,9 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
         stream: _userStatusStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+          if (!snapshot.hasData || snapshot.hasError) return const Center(child: Text("Kullanıcı verisi alınamadı."));
           
-          final userData = snapshot.data?.data() as Map<String, dynamic>? ?? {};
+          final userData = snapshot.data!.data() as Map<String, dynamic>? ?? {};
           final status = userData['status'] ?? 'Unverified';
 
           if (status == 'Verified') {
@@ -144,6 +147,8 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Text("Son Bir Adım!", textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                const SizedBox(height: 10),
+                const Text("Profilini oluşturmak için aşağıdaki bilgileri eksiksiz doldur.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
                 const SizedBox(height: 30),
                 
                 _buildTextField(_nameController, "İsim"),
@@ -153,26 +158,46 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
                 _buildTextField(_ageController, "Yaş", isNumber: true),
                 const SizedBox(height: 15),
                 
-                // Üniversite Seçimi
-                _buildAutocomplete(
+                // 1. Üniversite Seçimi (Gelişmiş Autocomplete)
+                _buildModernAutocomplete(
                   label: "Üniversite",
+                  hint: "Üniversiteni ara...",
                   options: UniversityService().getUniversityNames(),
                   onSelected: (val) {
                     setState(() {
                       _selectedUniversity = val;
-                      _selectedDepartment = null;
+                      _selectedDepartment = null; // Üniversite değişince bölümü sıfırla
                     });
                   },
+                  // HATA DÜZELTMESİ: Kullanıcı elle doğru yazarsa da kabul et
+                  onChanged: (val) {
+                    if (UniversityService().getUniversityNames().contains(val)) {
+                      setState(() {
+                        _selectedUniversity = val;
+                        _selectedDepartment = null;
+                      });
+                    } else {
+                      // Eşleşme bozulursa bölümü kilitle
+                      if (_selectedUniversity != null) {
+                        setState(() {
+                          _selectedUniversity = null;
+                          _selectedDepartment = null;
+                        });
+                      }
+                    }
+                  }
                 ),
+
                 const SizedBox(height: 15),
 
-                // Bölüm Seçimi
-                _buildAutocomplete(
+                // 2. Bölüm Seçimi (Gelişmiş Autocomplete)
+                _buildModernAutocomplete(
                   label: "Bölüm",
+                  hint: _selectedUniversity == null ? "Önce üniversite seçin" : "Bölümünü ara...",
                   enabled: _selectedUniversity != null,
                   options: _selectedUniversity != null ? UniversityService().getDepartmentsForUniversity(_selectedUniversity!) : [],
                   onSelected: (val) => setState(() => _selectedDepartment = val),
-                  key: ValueKey(_selectedUniversity),
+                  key: ValueKey(_selectedUniversity), // Üniversite değişince widget'ı yeniden oluştur
                 ),
 
                 const SizedBox(height: 30),
@@ -181,7 +206,7 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
                     ? const Center(child: CircularProgressIndicator())
                     : ElevatedButton(
                         key: _submitButtonKey, 
-                        onPressed: () => _submitVerificationForm(FirebaseAuth.instance.currentUser!.uid),
+                        onPressed: () => _submitVerificationForm(userId!),
                         style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                         child: const Text("Kaydet ve Gönder", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                       ),
@@ -195,58 +220,93 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label, {bool isNumber = false}) {
-    return TextField(
-      controller: controller,
-      keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-      decoration: InputDecoration(labelText: label, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: Colors.white),
-    );
-  }
-
-  Widget _buildAutocomplete({required String label, required List<String> options, required Function(String) onSelected, bool enabled = true, Key? key}) {
+  // --- MODERN AUTOCOMPLETE WIDGET ---
+  Widget _buildModernAutocomplete({
+    required String label, 
+    required String hint,
+    required List<String> options, 
+    required Function(String) onSelected, 
+    Function(String)? onChanged,
+    bool enabled = true,
+    Key? key
+  }) {
     return LayoutBuilder(
       key: key,
       builder: (context, constraints) {
         return Autocomplete<String>(
-          optionsBuilder: (textValue) {
-            if (textValue.text == '') return const Iterable<String>.empty();
-            return options.where((opt) => opt.toLowerCase().contains(textValue.text.toLowerCase()));
+          optionsBuilder: (TextEditingValue textEditingValue) {
+            if (textEditingValue.text == '') return const Iterable<String>.empty();
+            return options.where((String option) {
+              // Türkçe karakter duyarlı basit arama
+              return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+            });
           },
           onSelected: onSelected,
           fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
-            if (!enabled && controller.text.isNotEmpty) controller.clear();
+            // onChanged listener ekle
+            if (onChanged != null) {
+               // Mevcut listenerları temizle (tekrar eklememek için)
+               // Ancak basitlik adına burada inline builder içinde yeni bir listener eklemek yerine
+               // controller'a bir kez listener eklemek daha doğru olurdu.
+               // Pratik çözüm: onChanged'i TextField içinde kullanmak.
+            }
+
             return TextField(
               controller: controller,
               focusNode: focusNode,
               enabled: enabled,
+              onChanged: onChanged,
               decoration: InputDecoration(
                 labelText: label,
-                hintText: enabled ? "Yazmaya başla..." : "Önce üniversite seçin",
+                hintText: hint,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 filled: true,
-                fillColor: enabled ? Colors.white : Colors.grey[200],
-                suffixIcon: const Icon(Icons.arrow_drop_down),
+                fillColor: enabled ? Colors.white : Colors.grey[100],
+                prefixIcon: Icon(
+                  label == "Üniversite" ? Icons.school : Icons.book, 
+                  color: enabled ? AppColors.primary : Colors.grey
+                ),
+                suffixIcon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
               ),
             );
           },
+          // --- MODERN LİSTE TASARIMI ---
           optionsViewBuilder: (context, onSelected, options) {
             return Align(
               alignment: Alignment.topLeft,
               child: Material(
-                elevation: 4.0,
-                borderRadius: BorderRadius.circular(12),
+                elevation: 8.0, // Daha belirgin gölge
+                color: Colors.transparent, // Container'ın rengini kullan
                 child: Container(
                   width: constraints.maxWidth,
-                  constraints: const BoxConstraints(maxHeight: 250),
-                  color: Colors.white,
-                  child: ListView.builder(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    itemCount: options.length,
-                    itemBuilder: (context, index) {
-                      final option = options.elementAt(index);
-                      return ListTile(title: Text(option), onTap: () => onSelected(option));
-                    },
+                  constraints: const BoxConstraints(maxHeight: 300), // Daha uzun liste
+                  margin: const EdgeInsets.only(top: 8), // Textfield ile araya boşluk
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: ListView.separated(
+                      padding: EdgeInsets.zero,
+                      shrinkWrap: true,
+                      itemCount: options.length,
+                      separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade100),
+                      itemBuilder: (BuildContext context, int index) {
+                        final String option = options.elementAt(index);
+                        return InkWell(
+                          onTap: () => onSelected(option),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            child: Text(
+                              option,
+                              style: const TextStyle(fontSize: 15, color: Colors.black87),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
@@ -254,6 +314,14 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
           },
         );
       }
+    );
+  }
+
+  Widget _buildTextField(TextEditingController controller, String label, {bool isNumber = false}) {
+    return TextField(
+      controller: controller,
+      keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+      decoration: InputDecoration(labelText: label, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: Colors.white),
     );
   }
 

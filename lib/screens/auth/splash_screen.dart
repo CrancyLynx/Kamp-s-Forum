@@ -70,54 +70,67 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    // DÜZELTME: Native tarafındaki #673AB7 rengiyle birebir aynı renk kullanıldı.
-    // Şeffaflık (alpha) kaldırıldı, böylece renkler tam örtüşecek ve geçiş hissedilmeyecek.
-    const logoBackgroundColor = Color(0xFF673AB7); 
-
     return Scaffold(
-      backgroundColor: logoBackgroundColor,
-      body: Center(
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, child) {
-            return Transform.scale(
-              scale: _scaleAnimation.value,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Logo
-                  Opacity(
-                    opacity: _opacityAnimation.value,
-                    child: Image.asset('assets/images/app_logo3.png', width: 150),
-                  ),
-                  const SizedBox(height: 24),
-                  // Animasyonlu Yazı
-                  SlideTransition(
-                    position: _slideAnimation,
-                    child: FadeTransition(
-                      opacity: CurvedAnimation(parent: _controller, curve: const Interval(0.5, 1.0)),
-                      child: Text(
-                        "Kampüs Forum",
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white, // Arka plan koyu olduğu için yazı beyaz
-                          letterSpacing: 1.5,
-                          shadows: [
-                            Shadow(
-                              blurRadius: 8.0,
-                              color: Colors.black.withOpacity(0.4),
-                              offset: const Offset(0, 4),
+      body: Container(
+        // YENİ: Siyahtan griye doğru kayan gradyan arka plan
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF212121), Color(0xFF424242)], // Koyu griden -> Açık griye
+          ),
+        ),
+        child: Center(
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              return Transform.scale(
+                scale: _scaleAnimation.value,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Logo
+                    Opacity(
+                      opacity: _opacityAnimation.value,
+                      child: Image.asset('assets/images/app_logo3.png', width: 150),
+                    ),
+                    const SizedBox(height: 24),
+                    // Animasyonlu Yazı
+                    SlideTransition(
+                      position: _slideAnimation,
+                      child: FadeTransition(
+                        opacity: CurvedAnimation(parent: _controller, curve: const Interval(0.5, 1.0)),
+                        // YENİ: Metalik görünüm için ShaderMask
+                        child: ShaderMask(
+                          blendMode: BlendMode.srcIn,
+                          shaderCallback: (bounds) => const LinearGradient(
+                            colors: [Color(0xFFE0E0E0), Color(0xFFBDBDBD)], // Açık griden -> Koyu griye
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ).createShader(Rect.fromLTWH(0, 0, bounds.width, bounds.height)),
+                          child: const Text(
+                            "Kampüs Forum",
+                            style: TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.5,
+                              shadows: [
+                                Shadow(
+                                  blurRadius: 10.0,
+                                  color: Colors.black54,
+                                  offset: Offset(0, 5),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            );
-          },
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
     );

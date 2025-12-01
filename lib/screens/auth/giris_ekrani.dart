@@ -11,7 +11,7 @@ import '../../widgets/app_logo.dart';
 import '../../services/auth_service.dart';
 import '../../utils/maskot_helper.dart'; 
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
-import '../../services/university_service.dart'; // YENİ
+import '../../services/university_service.dart'; // YENİ: Servis importu
 
 class GirisEkrani extends StatefulWidget {
   const GirisEkrani({super.key});
@@ -33,11 +33,11 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
   final TextEditingController _phoneController = TextEditingController(); 
   final TextEditingController _smsCodeController = TextEditingController();
 
-  // YENİ: Seçilen Veriler
+  // Seçilen Üniversite ve Bölüm
   String? _selectedUniversity;
   String? _selectedDepartment;
 
-  // Durumlar
+  // Durum Değişkenleri
   bool isLogin = true;
   bool _rememberMe = false;
   bool _isEduEmail = false;
@@ -47,7 +47,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
   bool _codeSent = false; 
   String? _verificationId; 
 
-  // Key'ler
+  // Global Key'ler
   final GlobalKey _loginButtonKey = GlobalKey();
   final GlobalKey _registerSwitchKey = GlobalKey();
   final GlobalKey _loginFormKey = GlobalKey(); 
@@ -58,7 +58,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     super.initState();
     _loadSavedEmail();
 
-    // YENİ: Üniversite verilerini yükle
+    // Üniversite verilerini yükle
     UniversityService().loadData().then((_) {
       if(mounted) setState(() {});
     });
@@ -260,13 +260,11 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
   void handleAuth() async {
     FocusScope.of(context).unfocus();
 
-    // 1. KOD GİRME
     if (_codeSent) {
       _verifySmsCode();
       return;
     }
 
-    // 2. TELEFON GİRİŞİ
     if (isLogin && _isPhoneLoginMode) {
       final phone = _phoneController.text.trim();
       final password = passwordController.text; 
@@ -291,18 +289,17 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       return;
     }
 
-    // 3. E-POSTA İLE GİRİŞ / KAYIT
     setState(() => _isLoading = true);
     
     if (!isLogin) {
-      // --- KAYIT OL ---
+      // --- KAYIT OLMA İŞLEMİ ---
       if (passwordController.text != _confirmPasswordController.text) {
         if (mounted) setState(() => _isLoading = false);
         showSnackBar("Şifreler eşleşmiyor.", isError: true);
         return;
       }
 
-      // YENİ: Üniversite ve Bölüm Kontrolü
+      // YENİ: Üniversite Seçimi Kontrolü
       if (_selectedUniversity == null || _selectedDepartment == null) {
         if (mounted) setState(() => _isLoading = false);
         showSnackBar("Lütfen üniversite ve bölüm seçin.", isError: true);
@@ -315,8 +312,8 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
         adSoyad: _adSoyadController.text.trim(),
         takmaAd: _takmaAdController.text.trim(),
         phone: _phoneController.text.trim(),
-        university: _selectedUniversity!, // YENİ
-        department: _selectedDepartment!, // YENİ
+        university: _selectedUniversity!,
+        department: _selectedDepartment!,
       );
       
       if (mounted) setState(() => _isLoading = false);
@@ -324,7 +321,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       else showSnackBar(error, isError: true);
 
     } else {
-      // --- GİRİŞ YAP ---
+      // --- GİRİŞ YAPMA İŞLEMİ ---
       final result = await _authService.signInWithEmail(
         emailController.text.trim(),
         passwordController.text,
@@ -462,7 +459,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                             child: _isMfaVerification || (_isPhoneLoginMode && _codeSent)
                                 ? _buildSmsCodeForm(isDark, textColor) 
                                 : (!isLogin 
-                                    ? _buildRegisterForm(isDark) 
+                                    ? _buildRegisterForm(isDark) // BURASI GÜNCELLENDİ
                                     : (_isPhoneLoginMode 
                                         ? _buildPhoneLoginForm(isDark) 
                                         : _buildEmailLoginForm(isDark, textColor))), 
@@ -563,6 +560,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     );
   }
 
+  // --- MODERN KAYIT FORMU (GÜNCELLENDİ) ---
   Widget _buildRegisterForm(bool isDark) {
     return Column(
       key: const ValueKey('register'), 
@@ -576,9 +574,10 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
         _buildModernTextField(controller: emailController, label: "Üniversite E-postası (.edu.tr)", icon: Icons.email_outlined, isDark: isDark, suffixIcon: _isEduEmail ? const Icon(Icons.check_circle, color: AppColors.success) : null),
         const SizedBox(height: 16),
 
-        // YENİ: Üniversite Seçimi
-        _buildAutocomplete(
+        // YENİ: Modern Üniversite Seçimi
+        _buildModernAutocomplete(
           label: "Üniversite",
+          hint: "Üniversiteni ara...",
           options: UniversityService().getUniversityNames(),
           onSelected: (val) {
             setState(() {
@@ -586,17 +585,28 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
               _selectedDepartment = null;
             });
           },
+          onChanged: (val) {
+            // Elle yazmayı destekle
+            if (UniversityService().getUniversityNames().contains(val)) {
+              setState(() {
+                _selectedUniversity = val;
+                _selectedDepartment = null;
+              });
+            }
+          },
           isDark: isDark
         ),
         const SizedBox(height: 16),
-        // YENİ: Bölüm Seçimi
-        _buildAutocomplete(
+
+        // YENİ: Modern Bölüm Seçimi
+        _buildModernAutocomplete(
           label: "Bölüm",
+          hint: _selectedUniversity == null ? "Önce üniversite seçin" : "Bölümünü ara...",
           enabled: _selectedUniversity != null,
           options: _selectedUniversity != null ? UniversityService().getDepartmentsForUniversity(_selectedUniversity!) : [],
           onSelected: (val) => setState(() => _selectedDepartment = val),
-          isDark: isDark,
-          key: ValueKey(_selectedUniversity)
+          key: ValueKey(_selectedUniversity),
+          isDark: isDark
         ),
         const SizedBox(height: 16),
 
@@ -646,11 +656,13 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     );
   }
 
-  // YENİ: Autocomplete Widget (Modern Stil)
-  Widget _buildAutocomplete({
+  // YENİ: Modern Autocomplete Widget (Login Ekranı Stiline Uygun)
+  Widget _buildModernAutocomplete({
     required String label, 
+    required String hint,
     required List<String> options, 
     required Function(String) onSelected, 
+    Function(String)? onChanged,
     bool enabled = true,
     required bool isDark,
     Key? key
@@ -667,7 +679,12 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
           },
           onSelected: onSelected,
           fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
-             // Stil ayarları _buildModernTextField ile aynı
+             if (onChanged != null) {
+               // Basitlik adına onChanged'i burada kullanmıyoruz, 
+               // TextField'ın kendi onChanged'i ile çakışabilir.
+               // Gerekirse controller listener eklenebilir.
+             }
+             
              return Container(
                decoration: BoxDecoration(color: isDark ? Colors.grey[850] : Colors.grey[100], borderRadius: BorderRadius.circular(16)),
                child: TextField(
@@ -675,12 +692,16 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                  focusNode: focusNode,
                  enabled: enabled,
                  style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                 onChanged: onChanged, // Elle yazmayı desteklemek için
                  decoration: InputDecoration(
                    labelText: label,
-                   hintText: enabled ? "Yazmaya başla..." : "Önce üniversite seçin",
+                   hintText: hint,
                    labelStyle: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 14),
-                   prefixIcon: Icon(enabled ? Icons.school : Icons.lock_outline, color: AppColors.primary.withOpacity(0.7)),
-                   suffixIcon: const Icon(Icons.arrow_drop_down),
+                   prefixIcon: Icon(
+                      label == "Üniversite" ? Icons.school : Icons.book, 
+                      color: enabled ? AppColors.primary.withOpacity(0.7) : Colors.grey
+                   ),
+                   suffixIcon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
                    border: InputBorder.none,
                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                  ),
@@ -691,21 +712,32 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
             return Align(
               alignment: Alignment.topLeft,
               child: Material(
-                elevation: 4.0,
+                elevation: 8.0,
                 borderRadius: BorderRadius.circular(12),
+                color: Colors.transparent,
                 child: Container(
                   width: constraints.maxWidth,
                   constraints: const BoxConstraints(maxHeight: 200),
-                  color: isDark ? Colors.grey[800] : Colors.white,
-                  child: ListView.builder(
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.grey[900] : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ListView.separated(
                     padding: EdgeInsets.zero,
                     shrinkWrap: true,
                     itemCount: options.length,
+                    separatorBuilder: (context, index) => Divider(height: 1, color: isDark ? Colors.grey[800] : Colors.grey[200]),
                     itemBuilder: (BuildContext context, int index) {
                       final String option = options.elementAt(index);
-                      return ListTile(
-                        title: Text(option, style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
+                      return InkWell(
                         onTap: () => onSelected(option),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          child: Text(
+                            option, 
+                            style: TextStyle(color: isDark ? Colors.white : Colors.black87)
+                          ),
+                        ),
                       );
                     },
                   ),
