@@ -16,14 +16,20 @@ class MaskotHelper {
     final prefs = await SharedPreferences.getInstance();
     bool isShown = prefs.getBool(featureKey) ?? false;
 
-    // HATA DÜZELTMESİ: Eğer daha önce gösterilmediyse, context hala geçerliyse VE hedef listesi boş değilse turu başlat.
+    // Eğer daha önce gösterilmediyse, context hala geçerliyse VE hedef listesi boş değilse turu başlat.
     if (!isShown && targets.isNotEmpty && context.mounted) {
       // ignore: use_build_context_synchronously
       _showTutorial(
         context,
         targets: targets,
-        onFinish: () { prefs.setBool(featureKey, true); return true; },
-        onSkip: () { prefs.setBool(featureKey, true); return true; },
+        onFinish: () {
+          prefs.setBool(featureKey, true);
+          return true;
+        },
+        onSkip: () {
+          prefs.setBool(featureKey, true);
+          return true;
+        },
         skipText: skipText,
         finishText: finishText,
       );
@@ -39,39 +45,57 @@ class MaskotHelper {
     String skipText = "ATLA",
     String finishText = "ANLADIM",
   }) {
+    // DÜZELTME: TargetFocus özellikleri final olduğu için doğrudan değiştirilemez.
+    // Bunun yerine, varsayılan değerleri uygulayarak YENİ bir nesne oluşturuyoruz.
+    final updatedTargets = targets.map((target) {
+      return TargetFocus(
+        identify: target.identify,
+        keyTarget: target.keyTarget,
+        targetPosition: target.targetPosition,
+        contents: target.contents,
+        // Eğer shape null ise varsayılan olarak RRect (Yuvarlak Köşeli Kare) kullan
+        shape: target.shape ?? ShapeLightFocus.RRect,
+        // Eğer radius null ise varsayılan olarak 12 kullan
+        radius: target.radius ?? 12,
+        // Diğer özellikleri aynen kopyala
+        color: target.color,
+        enableOverlayTab: target.enableOverlayTab,
+        enableTargetTab: target.enableTargetTab,
+        alignSkip: target.alignSkip,
+        paddingFocus: target.paddingFocus,
+        focusAnimationDuration: target.focusAnimationDuration,
+        unFocusAnimationDuration: target.unFocusAnimationDuration,
+        pulseVariation: target.pulseVariation,
+      );
+    }).toList();
+
     TutorialCoachMark(
-      targets: targets, // Vurgulanacak hedefler
-      colorShadow: Colors.black.withOpacity(0.85), // Arka plan rengini siyah ve daha opak yap
+      targets: updatedTargets, // Güncellenmiş listeyi kullanıyoruz
+      colorShadow: Colors.black.withOpacity(0.85),
       textSkip: skipText,
       textStyleSkip: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
       paddingFocus: 10,
       opacityShadow: 0.8,
       onFinish: onFinish,
       onSkip: onSkip,
-      // Her adımda bir sonraki adıma geçmek için tıklanabilir yapar.
       onClickTarget: (target) {
-        // İsteğe bağlı: Her hedefe tıklandığında özel bir eylem gerçekleştirilebilir.
+        // İsteğe bağlı tıklama işlemi
       },
     ).show(context: context);
   }
 
   /// Tüm tanıtımlar için standart bir içerik balonu oluşturan yardımcı metot.
-  /// Bu metot, `TargetContent`'in `builder`'ı içinde kullanılmak üzere tasarlanmıştır.
-  ///
-  /// [title], [description] ve [mascotAssetPath] parametrelerini alarak standart bir
-  /// eğitim içeriği widget'ı döndürür.
   static Widget buildTutorialContent(BuildContext context, {
       required String title,
       required String description,
       String mascotAssetPath = 'assets/images/teltutan_bay.png',
   }) {
-    // YENİ: Modern ve okunaklı bir baloncuk tasarımı
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.75), // Yarı şeffaf siyah arka plan
-        borderRadius: BorderRadius.circular(16), // Yumuşak köşeler
-        border: Border.all(color: Colors.white.withOpacity(0.2)), // İnce bir çerçeve
+        color: Colors.black.withOpacity(0.75),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.2)),
         boxShadow: [
           BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 15, spreadRadius: 5),
         ],
@@ -80,7 +104,6 @@ class MaskotHelper {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          // Maskot görselini daha küçük ve sola dayalı kullanabiliriz.
           Image.asset(mascotAssetPath, height: 120),
           const SizedBox(height: 16),
           Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 20)),

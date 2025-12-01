@@ -180,10 +180,10 @@ class _AnaEkranState extends State<AnaEkran> {
       elevation: 0,
       title: Row(
         children: [
-          const Icon(Icons.school, color: AppColors.primary, size: 24),
+          Image.asset('assets/images/app_logo3.png', height: 40),
           const SizedBox(width: 8),
           Text(
-            "Kampüs", 
+            "Kampüs Forum", 
             style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color, fontWeight: FontWeight.bold)
           ),
         ],

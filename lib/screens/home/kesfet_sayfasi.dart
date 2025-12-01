@@ -15,6 +15,7 @@ import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart'; 
 import '../event/etkinlik_detay_ekrani.dart'; 
 import 'package:intl/intl.dart'; 
+import '../../services/image_cache_manager.dart'; // YENİ: Merkezi önbellek yöneticisi
 import 'dart:math'; 
 
 class KesfetSayfasi extends StatefulWidget {
@@ -463,8 +464,8 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                 child: Container(
                   margin: const EdgeInsets.only(right: 12),
                   child: Stack(
-                    children: [
-                      Positioned.fill(child: ClipRRect(borderRadius: BorderRadius.circular(16), child: CachedNetworkImage(imageUrl: img, fit: BoxFit.cover, errorWidget: (_,__,___) => Container(color: Colors.grey)))),
+                    children: [ 
+                      Positioned.fill(child: ClipRRect(borderRadius: BorderRadius.circular(16), child: CachedNetworkImage(cacheManager: ImageCacheManager.instance, imageUrl: img, fit: BoxFit.cover, errorWidget: (_,__,___) => Container(color: Colors.grey)))),
                       Positioned.fill(child: Container(decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black.withOpacity(0.8)], stops: const [0.5, 1.0])))),
                       Positioned(
                         bottom: 12, left: 12, right: 12, 
@@ -487,7 +488,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
 
   Widget _buildEventCard(String title, String date, String? imageUrl) {
     return Container(width: 140, margin: const EdgeInsets.only(right: 12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          ClipRRect(borderRadius: BorderRadius.circular(12), child: CachedNetworkImage(imageUrl: imageUrl ?? '', height: 90, width: double.infinity, fit: BoxFit.cover, placeholder: (c, u) => Container(color: Colors.grey[300]), errorWidget: (c, u, e) => Container(color: Colors.grey[300]))),
+          ClipRRect(borderRadius: BorderRadius.circular(12), child: CachedNetworkImage(cacheManager: ImageCacheManager.instance, imageUrl: imageUrl ?? '', height: 90, width: double.infinity, fit: BoxFit.cover, placeholder: (c, u) => Container(color: Colors.grey[300]), errorWidget: (c, u, e) => Container(color: Colors.grey[300]))),
           const SizedBox(height: 6),
           Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
           Text(date, style: const TextStyle(color: Colors.grey, fontSize: 10)),
@@ -538,7 +539,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
         child: Row(children: [
             Container(width: 32, height: 32, decoration: BoxDecoration(gradient: rank <= 3 ? LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight) : null, color: rank > 3 ? Colors.grey.shade300 : null, shape: BoxShape.circle), child: Center(child: Text("#$rank", style: TextStyle(color: rank <= 3 ? Colors.white : Colors.grey.shade700, fontWeight: FontWeight.w900, fontSize: 14)))),
             const SizedBox(width: 12),
-            CircleAvatar(radius: 20, backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty) ? CachedNetworkImageProvider(avatarUrl) : null, child: (avatarUrl == null || avatarUrl.isEmpty) ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: const TextStyle(fontWeight: FontWeight.bold)) : null),
+            CircleAvatar(radius: 20, backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty) ? CachedNetworkImageProvider(avatarUrl, cacheManager: ImageCacheManager.instance) : null, child: (avatarUrl == null || avatarUrl.isEmpty) ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: const TextStyle(fontWeight: FontWeight.bold)) : null),
             const SizedBox(width: 12),
             Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15), overflow: TextOverflow.ellipsis)),
             Text("$metricValue $metricLabel", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: rank <= 3 ? colors.first : AppColors.primary)),
@@ -695,10 +696,9 @@ class KampusSearchDelegate extends SearchDelegate {
               ...userResults.map((doc) {
                 final data = doc.data() as Map<String, dynamic>;
                 return ListTile(
-                  leading: CircleAvatar(
-                    backgroundImage: (data['avatarUrl'] != null && data['avatarUrl'] != "") ? CachedNetworkImageProvider(data['avatarUrl']) : null,
-                    child: data['avatarUrl'] == null ? const Icon(Icons.person) : null,
-                  ),
+                  leading: CircleAvatar(backgroundImage: (data['avatarUrl'] != null && data['avatarUrl'] != "") 
+                      ? CachedNetworkImageProvider(data['avatarUrl'], cacheManager: ImageCacheManager.instance) 
+                      : null, child: (data['avatarUrl'] == null || data['avatarUrl'] == "") ? const Icon(Icons.person) : null),
                   title: Text(data['takmaAd'] ?? 'Kullanıcı'),
                   onTap: () {
                     Navigator.push(context, MaterialPageRoute(builder: (context) => KullaniciProfilDetayEkrani(userId: doc.id, userName: data['takmaAd'])));

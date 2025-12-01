@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:intl/intl.dart'; 
 import 'package:intl/date_symbol_data_local.dart'; 
+// Native Splash Paketi Importu
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 // Servisler
 import 'services/push_notification_service.dart'; 
@@ -23,6 +25,7 @@ import 'screens/auth/giris_ekrani.dart';
 import 'screens/auth/verification_wrapper.dart'; 
 // Onboarding importu
 import 'screens/auth/onboarding_screen.dart';
+import 'screens/auth/splash_screen.dart'; 
 
 @pragma('vm:entry-point')
 Future<void> firebaseBackgroundMessageHander(RemoteMessage message) async {
@@ -46,7 +49,12 @@ class ThemeProvider extends ChangeNotifier {
 }
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  // DÜZELTME: WidgetsBinding yerine WidgetsFlutterBinding kullanıldı.
+  WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  
+  // Native Splash ekranını koru
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+
   await initializeDateFormatting('tr_TR', null);
   await Firebase.initializeApp();
   
@@ -160,7 +168,7 @@ class _BizimUygulamaState extends State<BizimUygulama> {
         scaffoldBackgroundColor: const Color(0xFF121212),
         useMaterial3: true,
       ),
-     home: const AnaKontrolcu(),
+     home: const SplashScreen(), 
     );
   }
 }
@@ -212,7 +220,6 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
           return StreamBuilder<DocumentSnapshot>(
             stream: FirebaseFirestore.instance.collection('kullanicilar').doc(userId).snapshots(),
             builder: (context, userSnapshot) { 
-              // HATA YÖNETİMİ EKLENDİ: Hata varsa otomatik çıkış yapma, hata göster
               if (userSnapshot.hasError) {
                 return Scaffold(
                   body: Center(
@@ -238,8 +245,6 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
                 return const LoadingScreen();
               }
               
-              // DÜZELTME: Veri hemen gelmezse Loading göster, direkt çıkış yapma!
-              // Eğer bağlantı aktifse ve veri YOKSA (null veya !exists), o zaman profil yok demektir.
               if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
                  return Scaffold(
                    body: Center(
@@ -250,7 +255,6 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
                          const SizedBox(height: 20),
                          const Text("Profil hazırlanıyor..."),
                          const SizedBox(height: 20),
-                         // Uzun sürerse çıkış butonu
                          TextButton(
                            onPressed: () => FirebaseAuth.instance.signOut(), 
                            child: const Text("İptal Et ve Çıkış Yap")

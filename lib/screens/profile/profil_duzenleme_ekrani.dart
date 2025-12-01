@@ -11,12 +11,9 @@ import '../../utils/app_colors.dart';
 import '../auth/giris_ekrani.dart'; 
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../services/auth_service.dart';
-import '../../utils/maskot_helper.dart'; // EKLENDİ
-
-Future<File> _compressImage(File file) async {
-  // İleride buraya resim sıkıştırma kütüphanesi eklenebilir.
-  return file; 
-}
+import '../../utils/maskot_helper.dart';
+import '../../services/image_compression_service.dart'; // DÜZELTME: Servis import edildi
+import '../../services/image_cache_manager.dart'; // YENİ: Merkezi önbellek yöneticisi
 
 class ProfilDuzenlemeEkrani extends StatefulWidget {
   const ProfilDuzenlemeEkrani({super.key});
@@ -40,7 +37,7 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   final _xPlatformController = TextEditingController();
   final _phoneController = TextEditingController();
 
-  // --- YENİ SİSTEM İÇİN GLOBAL KEY'LER ---
+  // Global Key'ler
   final GlobalKey _coverAvatarKey = GlobalKey();
   final GlobalKey _saveButtonKey = GlobalKey();
 
@@ -55,7 +52,7 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   bool _isAvatarRemoved = false;
   String? _selectedPresetAvatarUrl;
 
-  // Kapak Fotoğrafı Yönetimi (YENİ)
+  // Kapak Fotoğrafı Yönetimi
   String? _currentCoverUrl;
   File? _coverImageFile;
   bool _isCoverRemoved = false;
@@ -78,7 +75,6 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
     super.initState();
     _loadUserData();
 
-    // --- YENİ SİSTEM İLE MASKOT KODU ---
     WidgetsBinding.instance.addPostFrameCallback((_) {
       MaskotHelper.checkAndShow(context,
           featureKey: 'profil_duzenle_tutorial_gosterildi',
@@ -89,7 +85,7 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                 alignSkip: Alignment.topRight,
                 contents: [
                   TargetContent(
-                    align: ContentAlign.top, builder: (context, controller) =>
+                    align: ContentAlign.bottom, builder: (context, controller) =>
                       MaskotHelper.buildTutorialContent(
                           context,
                           title: 'Görünümünü Özelleştir',
@@ -128,14 +124,13 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
         _university = submissionData?['university'];
         _department = submissionData?['department'];
         _currentAvatarUrl = data['avatarUrl'];
-        _currentCoverUrl = data['coverUrl']; // Kapak URL'sini yükle
+        _currentCoverUrl = data['coverUrl'];
       });
     }
   }
 
   // --- 1. RESİM SEÇME FONKSİYONLARI ---
 
-  // Kaynak Seçimi (Kamera/Galeri)
   void _showImageSourceActionSheet({required bool isCover}) {
     showModalBottomSheet(
       context: context,
@@ -154,7 +149,6 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                 title: const Text('Galeriden Seç'), 
                 onTap: () { Navigator.pop(context); _pickImage(ImageSource.gallery, isCover: isCover); }
               ),
-              // Sadece Avatar için hazır seçenekler
               if (!isCover)
                 ListTile(
                   leading: const Icon(Icons.face, color: AppColors.primary), 
@@ -204,7 +198,7 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                     setState(() { _selectedPresetAvatarUrl = url; _avatarImageFile = null; _isAvatarRemoved = false; });
                     Navigator.pop(context);
                   },
-                  child: CircleAvatar(backgroundImage: CachedNetworkImageProvider(url)),
+                  child: CircleAvatar(backgroundImage: CachedNetworkImageProvider(url, cacheManager: ImageCacheManager.instance)),
                 );
               },
             ),
@@ -218,7 +212,10 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
     final pickedFile = await ImagePicker().pickImage(source: source, imageQuality: 80);
     if (pickedFile != null) {
       File file = File(pickedFile.path);
-      file = await _compressImage(file);
+      // DÜZELTME: Gerçek sıkıştırma servisi kullanılıyor
+      File? compressedFile = await ImageCompressionService.compressImage(file);
+      file = compressedFile ?? file; 
+
       if (mounted) {
         setState(() {
           if (isCover) {
@@ -276,7 +273,7 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
     // Kapak Fotoğrafı Yükleme/Belirleme
     String? newCoverUrl;
     if (_isCoverRemoved) {
-      newCoverUrl = ''; // Boşalt
+      newCoverUrl = ''; 
     } else if (_coverImageFile != null) {
       newCoverUrl = await _uploadImage(_coverImageFile!, 'kapak_resimleri/$_userId.jpg');
     }
@@ -363,11 +360,9 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                       if (user != null) {
                         await user.updatePhoneNumber(credential);
                         
-                        // --- HATA VEREN KISIM GÜNCELLENDİ (DOĞRUDAN FIRESTORE) ---
                         await FirebaseFirestore.instance.collection('kullanicilar').doc(_userId).update({
                           'phoneNumber': newPhoneController.text.trim(),
                         });
-                        // -----------------------------------------------------------
 
                         setState(() => _phoneController.text = newPhoneController.text.trim());
                         if (mounted) { Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Güncellendi!"))); }
@@ -406,7 +401,6 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   }
 
   Future<void> _deleteAccount() async {
-    // Güvenlik ve Silme Fonksiyonu (Aynen korunuyor)
     final passwordController = TextEditingController();
     final verified = await showDialog<bool>(
       context: context,
@@ -450,7 +444,6 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   }
   
   void _showChangeRequestDialog() {
-      // Değişiklik talep dialogu (aynen korunuyor)
       final uniController = TextEditingController(text: _university);
       final deptController = TextEditingController(text: _department);
       showDialog(
@@ -535,9 +528,9 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
           children: [
             // --- 1. GÖRSEL DÜZENLEME ALANI (Kapak + Avatar) ---
             SizedBox(
-              height: 240, // Toplam yükseklik
+              height: 240, 
               child: Stack(
-                key: _coverAvatarKey, // --- KEY EKLE ---
+                key: _coverAvatarKey, 
                 children: [
                   // A. Kapak Fotoğrafı
                   GestureDetector(
@@ -551,12 +544,12 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                             ? null
                             : (_coverImageFile != null)
                                 ? DecorationImage(image: FileImage(_coverImageFile!), fit: BoxFit.cover)
-                                : (_currentCoverUrl != null && _currentCoverUrl!.isNotEmpty)
-                                    ? DecorationImage(image: CachedNetworkImageProvider(_currentCoverUrl!), fit: BoxFit.cover)
+                                : (_currentCoverUrl != null && _currentCoverUrl!.isNotEmpty) 
+                                    ? DecorationImage(image: CachedNetworkImageProvider(_currentCoverUrl!, cacheManager: ImageCacheManager.instance), fit: BoxFit.cover)
                                     : const DecorationImage(image: CachedNetworkImageProvider('https://images.unsplash.com/photo-1557683316-973673baf926?w=900&q=80'), fit: BoxFit.cover),
                       ),
                       child: Container(
-                        color: Colors.black26, // Düzenleme olduğunu belli etmek için hafif karartma
+                        color: Colors.black26, 
                         child: const Center(
                           child: Icon(Icons.camera_alt, color: Colors.white70, size: 40),
                         ),
@@ -564,7 +557,7 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                     ),
                   ),
 
-                  // B. Avatar (Ortalanmış ve aşağı taşmış)
+                  // B. Avatar
                   Positioned(
                     bottom: 0,
                     left: 0,
@@ -581,18 +574,17 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                                 radius: 55,
                                 backgroundColor: Colors.grey[200],
                                 backgroundImage: _isAvatarRemoved ? null : (_avatarImageFile != null
-                                    ? FileImage(_avatarImageFile!) as ImageProvider
-                                    : _selectedPresetAvatarUrl != null
-                                      ? CachedNetworkImageProvider(_selectedPresetAvatarUrl!)
-                                      : (_currentAvatarUrl != null && _currentAvatarUrl!.isNotEmpty)
-                                          ? CachedNetworkImageProvider(_currentAvatarUrl!)
+                                    ? FileImage(_avatarImageFile!) as ImageProvider 
+                                    : _selectedPresetAvatarUrl != null 
+                                      ? CachedNetworkImageProvider(_selectedPresetAvatarUrl!, cacheManager: ImageCacheManager.instance)
+                                      : (_currentAvatarUrl != null && _currentAvatarUrl!.isNotEmpty) 
+                                          ? CachedNetworkImageProvider(_currentAvatarUrl!, cacheManager: ImageCacheManager.instance)
                                           : null),
                                 child: (_isAvatarRemoved || (_avatarImageFile == null && _selectedPresetAvatarUrl == null && (_currentAvatarUrl == null || _currentAvatarUrl!.isEmpty)))
                                     ? const Icon(Icons.person, size: 60, color: Colors.grey)
                                     : null,
                               ),
                             ),
-                            // Avatar üzerindeki kamera ikonu
                             Positioned(
                               bottom: 0,
                               right: 0,
@@ -681,7 +673,7 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton(
-                        key: _saveButtonKey, // --- KEY EKLE ---
+                        key: _saveButtonKey, 
                         onPressed: _isLoading ? null : _saveProfile,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.success,

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:intl/intl.dart'; // Tarih formatı için
+import 'package:intl/intl.dart'; 
 import '../../utils/app_colors.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
-import '../../utils/maskot_helper.dart'; // EKLENDİ
+import '../../utils/maskot_helper.dart';
 
 class BildirimEkrani extends StatefulWidget {
   const BildirimEkrani({super.key});
@@ -16,7 +16,7 @@ class BildirimEkrani extends StatefulWidget {
 class _BildirimEkraniState extends State<BildirimEkrani> {
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
-  // --- YENİ SİSTEM İÇİN GLOBAL KEY'LER ---
+  // Global Key'ler
   final GlobalKey _markAllReadButtonKey = GlobalKey();
   final GlobalKey _firstNotificationKey = GlobalKey();
   final GlobalKey _emptyStateKey = GlobalKey();
@@ -24,10 +24,8 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
   @override
   void initState() {
     super.initState();
-    // Ekran açıldığında eski bildirimleri temizle
     _cleanupOldNotifications();
     
-    // --- YENİ SİSTEM İLE MASKOT KODU ---
     FirebaseFirestore.instance
         .collection('bildirimler')
         .where('userId', isEqualTo: _currentUserId)
@@ -53,7 +51,6 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
                 )
               ]));
 
-          // Eğer hiç bildirim yoksa boş ekranı, varsa ilk bildirimi vurgula
           bool hasNotifications = snapshot.docs.isNotEmpty;
           targets.add(TargetFocus(
               identify: hasNotifications ? "first-notification" : "empty-state",
@@ -76,19 +73,23 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
     });
   }
 
-  /// 7 günden eski ve OKUNMUŞ bildirimleri otomatik siler
+  // DÜZELTME: Batch Limit Kontrolü Eklendi
   Future<void> _cleanupOldNotifications() async {
     try {
       final cutoffDate = DateTime.now().subtract(const Duration(days: 7));
       
-      final snapshot = await FirebaseFirestore.instance
-          .collection('bildirimler')
-          .where('userId', isEqualTo: _currentUserId)
-          .where('isRead', isEqualTo: true)
-          .where('timestamp', isLessThan: Timestamp.fromDate(cutoffDate))
-          .get();
+      // Döngüsel silme (Her seferinde 500 adet)
+      while (true) {
+        final snapshot = await FirebaseFirestore.instance
+            .collection('bildirimler')
+            .where('userId', isEqualTo: _currentUserId)
+            .where('isRead', isEqualTo: true)
+            .where('timestamp', isLessThan: Timestamp.fromDate(cutoffDate))
+            .limit(500) // Firestore limitine uy
+            .get();
 
-      if (snapshot.docs.isNotEmpty) {
+        if (snapshot.docs.isEmpty) break;
+
         final batch = FirebaseFirestore.instance.batch();
         for (var doc in snapshot.docs) {
           batch.delete(doc.reference);
@@ -101,37 +102,36 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
     }
   }
 
-  /// Tekil bildirim silme fonksiyonu
   Future<void> _deleteNotification(String docId) async {
     await FirebaseFirestore.instance.collection('bildirimler').doc(docId).delete();
   }
 
-  /// Tümünü okundu işaretle
   Future<void> _markAllAsRead() async {
-    final batch = FirebaseFirestore.instance.batch();
-    final snapshot = await FirebaseFirestore.instance
-        .collection('bildirimler')
-        .where('userId', isEqualTo: _currentUserId)
-        .where('isRead', isEqualTo: false)
-        .get();
+    // Okunmamışları parça parça çekip güncelle
+    while (true) {
+        final snapshot = await FirebaseFirestore.instance
+            .collection('bildirimler')
+            .where('userId', isEqualTo: _currentUserId)
+            .where('isRead', isEqualTo: false)
+            .limit(500)
+            .get();
+        
+        if (snapshot.docs.isEmpty) break;
 
-    for (var doc in snapshot.docs) {
-      batch.update(doc.reference, {'isRead': true});
+        final batch = FirebaseFirestore.instance.batch();
+        for (var doc in snapshot.docs) {
+          batch.update(doc.reference, {'isRead': true});
+        }
+        await batch.commit();
     }
-    await batch.commit();
   }
 
-  /// Bildirime tıklandığında detayına gitme veya okundu yapma
   void _handleNotificationTap(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     
-    // Okunmadıysa okundu yap
     if (data['isRead'] == false) {
       doc.reference.update({'isRead': true});
     }
-
-    // Bildirim tipine göre yönlendirme yapılabilir
-    // Örneğin: if (data['type'] == 'follow') ...
   }
 
   @override
@@ -143,7 +143,7 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-            key: _markAllReadButtonKey, // --- KEY EKLE ---
+            key: _markAllReadButtonKey, 
             icon: const Icon(Icons.done_all),
             tooltip: "Tümünü Okundu Say",
             onPressed: _markAllAsRead,
@@ -173,7 +173,7 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
             itemBuilder: (context, index) {
               final doc = docs[index];
               return KeyedSubtree(
-                key: index == 0 ? _firstNotificationKey : null, // --- İLK ELEMANA KEY EKLE ---
+                key: index == 0 ? _firstNotificationKey : null, 
                 child: _buildNotificationItem(doc, context),
               );
             },
@@ -191,10 +191,9 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
     final Timestamp? timestamp = data['timestamp'];
     final String timeAgo = timestamp != null ? _formatTimestamp(timestamp) : '';
 
-    // Kaydırarak Silme Widget'ı
     return Dismissible(
       key: Key(doc.id),
-      direction: DismissDirection.endToStart, // Sadece sağdan sola kaydırma
+      direction: DismissDirection.endToStart, 
       onDismissed: (direction) {
         _deleteNotification(doc.id);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -227,23 +226,21 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // İkon veya Avatar
                 _buildNotificationIcon(data['type']),
                 const SizedBox(width: 15),
-                // İçerik
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       RichText(
                         text: TextSpan(
-                          style: TextStyle(color: Colors.black87, fontSize: 14, fontFamily: 'Segoe UI'), // Font ailesini projenize göre ayarlayın
+                          style: TextStyle(color: Colors.black87, fontSize: 14, fontFamily: 'Segoe UI'), 
                           children: [
                             TextSpan(
                               text: "$senderName ",
                               style: const TextStyle(fontWeight: FontWeight.bold),
                             ),
-                            TextSpan(text: message.replaceAll(senderName, '')), // Mesajda isim tekrar ederse temizle
+                            TextSpan(text: message.replaceAll(senderName, '')), 
                           ],
                         ),
                       ),
@@ -255,7 +252,6 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
                     ],
                   ),
                 ),
-                // Okunmadı İşareti
                 if (!isRead)
                   Container(
                     margin: const EdgeInsets.only(left: 8, top: 5),
@@ -287,7 +283,7 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
         icon = Icons.comment;
         color = Colors.blueAccent;
         break;
-      case 'follow': // 'new_follower' olabilir, veritabanına göre ayarla
+      case 'follow': 
       case 'new_follower':
         icon = Icons.person_add;
         color = Colors.green;
@@ -309,7 +305,7 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
 
   Widget _buildEmptyState() {
     return Center(
-      key: _emptyStateKey, // --- KEY EKLE ---
+      key: _emptyStateKey, 
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [

@@ -7,6 +7,7 @@ import '../chat/sohbet_detay_ekrani.dart';
 // Düzeltilmiş Importlar
 import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart';
+import '../../services/image_cache_manager.dart'; // YENİ: Merkezi önbellek yöneticisi
 
 class UrunDetayEkrani extends StatelessWidget {
   final String productId;
@@ -142,6 +143,7 @@ class UrunDetayEkrani extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   CachedNetworkImage(
+                    cacheManager: ImageCacheManager.instance, // YENİ: Merkezi önbellek yöneticisi kullanılıyor.
                     imageUrl: productData['imageUrl'] ?? '',
                     fit: BoxFit.cover,
                     placeholder: (_,__) => Container(color: Colors.grey[300]),
@@ -220,22 +222,41 @@ class UrunDetayEkrani extends StatelessWidget {
                     productData['description'] ?? 'Açıklama yok.',
                     style: TextStyle(fontSize: 15, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.8), height: 1.5),
                   ),
+                  // YENİ: Satıcı bilgileri daha belirgin hale getirildi.
                   const SizedBox(height: 30),
-                  const Text("Satıcı", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text("Satıcı Bilgileri", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
                   const SizedBox(height: 10),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: GestureDetector(
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    child: InkWell(
                       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => KullaniciProfilDetayEkrani(userId: productData['sellerId'], userName: productData['sellerName']))),
-                      child: CircleAvatar(
-                        radius: 24,
-                        backgroundImage: (productData['sellerAvatar'] != null) ? CachedNetworkImageProvider(productData['sellerAvatar']) : null,
-                        child: (productData['sellerAvatar'] == null) ? const Icon(Icons.person) : null,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 28,
+                              backgroundImage: (productData['sellerAvatar'] != null && productData['sellerAvatar'].isNotEmpty) ? CachedNetworkImageProvider(productData['sellerAvatar'], cacheManager: ImageCacheManager.instance) : null,
+                              child: (productData['sellerAvatar'] == null || productData['sellerAvatar'].isEmpty) ? const Icon(Icons.person, size: 30) : null,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(productData['sellerName'] ?? 'Satıcı', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                  const SizedBox(height: 4),
+                                  const Text("Profilini Görüntüle", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.arrow_forward_ios, size: 18, color: Colors.grey),
+                          ],
+                        ),
                       ),
                     ),
-                    title: Text(productData['sellerName'] ?? 'Satıcı', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: const Text("Kampüs Üyesi"),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
                   ),
                   const SizedBox(height: 80),
                 ],

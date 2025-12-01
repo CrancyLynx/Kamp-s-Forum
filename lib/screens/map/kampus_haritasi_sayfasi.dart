@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' show cos, sqrt, atan2, pi, sin;
 import 'dart:ui' as ui;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -9,8 +10,10 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../services/map_data_service.dart';
 import '../../utils/app_colors.dart';
-import 'package:tutorial_coach_mark/tutorial_coach_mark.dart'; // HATA DÜZELTMESİ: Eksik import
-import '../../utils/maskot_helper.dart'; // EKLENDİ: Maskot Helper
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import '../../services/image_cache_manager.dart'; // YENİ: Merkezi önbellek yöneticisi
+import '../../utils/maskot_helper.dart';
+import 'package:timeago/timeago.dart' as timeago;
 
 class KampusHaritasiSayfasi extends StatefulWidget {
   final String initialFilter;
@@ -32,6 +35,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   // Controller
   GoogleMapController? _mapController;
   final MapDataService _mapDataService = MapDataService();
+  StreamSubscription? _firestoreSubscription; // YENİ: Stream aboneliğini yönetmek için
 
   // State Variables
   String _currentFilter = 'all';
@@ -41,7 +45,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   bool _isLoading = false;
   bool _isRouteActive = false;
 
-  // Veri Kaynakları (Hata Düzeltmesi İçin Ayrıldı)
+  // Veri Kaynakları
   List<LocationModel> _firestoreLocations = [];
   List<LocationModel> _googleLocations = [];
   
@@ -50,12 +54,12 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   List<Map<String, dynamic>> _searchResults = [];
   Timer? _debounce;
 
-  // --- YENİ SİSTEM İÇİN GLOBAL KEY'LER ---
+  // Global Key'ler
   final GlobalKey _searchBarKey = GlobalKey();
   final GlobalKey _filterChipKey = GlobalKey();
   final GlobalKey _myLocationButtonKey = GlobalKey();
 
-  // Harita Stili (Dark Mode için)
+  // Harita Stili
   final String _darkMapStyle = '''
     [
       {"elementType": "geometry","stylers": [{"color": "#242f3e"}]},
@@ -82,9 +86,91 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     super.initState();
     _currentFilter = widget.initialFilter;
     _initializeMap();
+  }
 
-    // --- YENİ SİSTEM İLE MASKOT KODU ---
+  Future<void> _initializeMap() async {
+    setState(() => _isLoading = true);
+    await _prepareCustomMarkers();
+    final bool hasPermission = await _getUserLocation();
+
+    // Sadece konum izni varsa yerleri yükle ve tanıtımı göster.
+    if (hasPermission) {
+      await _loadPlaces();
+      _showTutorial(); // Tanıtımı göster.
+    }
+
+    setState(() => _isLoading = false);
+  }
+
+  // 1. İkonları Oluştur
+  Future<void> _prepareCustomMarkers() async {
+    final iconUni = await _createMarkerBitmap(Icons.school, Colors.redAccent);
+    final iconYemek = await _createMarkerBitmap(Icons.restaurant, Colors.orangeAccent);
+    final iconDurak = await _createMarkerBitmap(Icons.directions_bus, Colors.blueAccent);
+    final iconKutuphane = await _createMarkerBitmap(Icons.menu_book, Colors.purpleAccent);
+
+    _mapDataService.setIcons(
+      iconUni: iconUni,
+      iconYemek: iconYemek,
+      iconDurak: iconDurak,
+      iconKutuphane: iconKutuphane,
+    );
+  }
+
+  Future<BitmapDescriptor> _createMarkerBitmap(IconData icon, Color color) async {
+    final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
+    final Canvas canvas = Canvas(pictureRecorder);
+    const size = Size(100, 100);
+    
+    final Paint paint = Paint()..color = color;
+    canvas.drawCircle(Offset(size.width / 2, size.height / 2), size.width / 2, paint);
+    
+    final TextPainter textPainter = TextPainter(textDirection: TextDirection.ltr);
+    textPainter.text = TextSpan(
+      text: String.fromCharCode(icon.codePoint),
+      style: TextStyle(fontSize: 60, fontFamily: icon.fontFamily, color: Colors.white),
+    );
+    textPainter.layout();
+    textPainter.paint(canvas, Offset((size.width - textPainter.width) / 2, (size.height - textPainter.height) / 2));
+
+    final img = await pictureRecorder.endRecording().toImage(size.width.toInt(), size.height.toInt());
+    final data = await img.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.fromBytes(data!.buffer.asUint8List());
+  }
+
+  // 2. Kullanıcı Konumu
+  Future<bool> _getUserLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return false;
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) return false;
+      }
+      if (permission == LocationPermission.deniedForever) return false;
+
+      Position pos = await Geolocator.getCurrentPosition();
+      if (mounted) { // mounted kontrolü önemli
+        setState(() {
+          _userLocation = LatLng(pos.latitude, pos.longitude);
+        });
+        if (widget.initialFocus == null && _mapController != null) {
+          _mapController!.animateCamera(CameraUpdate.newLatLngZoom(_userLocation!, 15));
+        }
+      }
+      return true; // İzin alındı ve konum mevcut.
+    } catch (e) {
+      debugPrint("Konum hatası: $e");
+      return false; // Hata durumunda false dön.
+    }
+  }
+
+  // Tanıtımı gösteren fonksiyon
+  void _showTutorial() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return; // Widget ağaçtan kaldırıldıysa işlem yapma.
       MaskotHelper.checkAndShow(context,
           featureKey: 'harita_tutorial_gosterildi',
           targets: [
@@ -112,123 +198,42 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                 alignSkip: Alignment.topLeft,
                 contents: [
                   TargetContent(
-                    align: ContentAlign.top,
-                    builder: (context, controller) => MaskotHelper.buildTutorialContent(
-                      context,
-                      title: 'Konumunu Bul',
-                      description: 'Haritada kaybolursan bu butona basarak anında kendi konumuna dönebilirsin.',
-                    ),
-                  )
+                      align: ContentAlign.top,
+                      builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Konumunu Bul', description: 'Haritada kaybolursan bu butona basarak anında kendi konumuna dönebilirsin.'))
                 ])
           ]);
     });
   }
 
-  Future<void> _initializeMap() async {
-    setState(() => _isLoading = true);
-    await _prepareCustomMarkers();
-    await _getUserLocation();
-    await _loadPlaces();
-    setState(() => _isLoading = false);
-  }
-
-  // 1. İkonları Oluştur (Canvas ile yüksek kalite)
-  Future<void> _prepareCustomMarkers() async {
-    final iconUni = await _createMarkerBitmap(Icons.school, Colors.redAccent);
-    final iconYemek = await _createMarkerBitmap(Icons.restaurant, Colors.orangeAccent);
-    final iconDurak = await _createMarkerBitmap(Icons.directions_bus, Colors.blueAccent);
-    final iconKutuphane = await _createMarkerBitmap(Icons.menu_book, Colors.purpleAccent);
-
-    _mapDataService.setIcons(
-      iconUni: iconUni,
-      iconYemek: iconYemek,
-      iconDurak: iconDurak,
-      iconKutuphane: iconKutuphane,
-    );
-  }
-
-  Future<BitmapDescriptor> _createMarkerBitmap(IconData icon, Color color) async {
-    final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
-    final Canvas canvas = Canvas(pictureRecorder);
-    const size = Size(100, 100);
-    
-    // Arka plan dairesi
-    final Paint paint = Paint()..color = color;
-    canvas.drawCircle(Offset(size.width / 2, size.height / 2), size.width / 2, paint);
-    
-    // İkon
-    final TextPainter textPainter = TextPainter(textDirection: TextDirection.ltr);
-    textPainter.text = TextSpan(
-      text: String.fromCharCode(icon.codePoint),
-      style: TextStyle(fontSize: 60, fontFamily: icon.fontFamily, color: Colors.white),
-    );
-    textPainter.layout();
-    textPainter.paint(canvas, Offset((size.width - textPainter.width) / 2, (size.height - textPainter.height) / 2));
-
-    final img = await pictureRecorder.endRecording().toImage(size.width.toInt(), size.height.toInt());
-    final data = await img.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.fromBytes(data!.buffer.asUint8List());
-  }
-
-  // 2. Kullanıcı Konumu (Güvenli)
-  Future<void> _getUserLocation() async {
-    try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) return;
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) return;
-      }
-      if (permission == LocationPermission.deniedForever) return;
-
-      Position pos = await Geolocator.getCurrentPosition();
-      if (mounted) {
-        setState(() {
-          _userLocation = LatLng(pos.latitude, pos.longitude);
-        });
-        // Eğer focus noktası verilmemişse kullanıcıya git
-        if (widget.initialFocus == null && _mapController != null) {
-          _mapController!.animateCamera(CameraUpdate.newLatLngZoom(_userLocation!, 15));
-        }
-      }
-    } catch (e) {
-      debugPrint("Konum hatası: $e");
-    }
-  }
-
-  // 3. Mekanları Getir ve Marker Oluştur (DÜZELTİLMİŞ YAPI)
+  // 3. Mekanları Getir
   Future<void> _loadPlaces() async {
-    // A) Firestore Mekanları (Dinleyerek)
-    // Stream olduğu için veri geldikçe listeyi günceller ve markerları yeniden oluştururuz.
-    _mapDataService.getLocationsStream(_currentFilter).listen((firestorePlaces) {
-      if (mounted) {
-        setState(() {
-          _firestoreLocations = firestorePlaces;
-        });
-        _rebuildMarkers();
-      }
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+
+    // Önceki stream aboneliğini iptal et
+    await _firestoreSubscription?.cancel();
+
+    final center = _userLocation ?? widget.initialFocus ?? const LatLng(41.0082, 28.9784);
+
+    // Firestore stream'ini dinlemeye başla
+    _firestoreSubscription = _mapDataService.getLocationsStream(_currentFilter).listen((firestorePlaces) {
+      if (!mounted) return;
+      _firestoreLocations = firestorePlaces;
+      _rebuildMarkers(); // Firestore'dan her yeni veri geldiğinde marker'ları güncelle
     });
 
-    // B) Google API Mekanları (Konum varsa tek seferlik çekilir)
-    final center = _userLocation ?? widget.initialFocus ?? const LatLng(41.0082, 28.9784);
-    final googlePlaces = await _mapDataService.searchNearbyPlaces(center: center, typeFilter: _currentFilter);
-    
-    if (mounted) {
-      setState(() {
-        _googleLocations = googlePlaces;
-      });
-      _rebuildMarkers();
-    }
+    // Google Places verisini tek seferde çek
+    _googleLocations = await _mapDataService.searchNearbyPlaces(center: center, typeFilter: _currentFilter);
+
+    // Tüm işlemler bittikten sonra state'i güncelle
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    _rebuildMarkers(); // Google verisi de geldikten sonra marker'ları son kez güncelle
   }
 
-  // DÜZELTME: Tek bir Marker Oluşturma Fonksiyonu
-  // İki listeyi birleştirip tek seferde haritaya basar, hatayı ve flicker'ı önler.
   void _rebuildMarkers() {
     Set<Marker> newMarkers = {};
 
-    // 1. Firestore Markerları
     for (var loc in _firestoreLocations) {
       newMarkers.add(Marker(
         markerId: MarkerId("fs_${loc.id}"),
@@ -239,9 +244,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       ));
     }
 
-    // 2. Google API Markerları
     for (var loc in _googleLocations) {
-      // Eğer Firestore'da aynı isimde mekan varsa Google'dan gelenini ekleme (Duplicate önleme)
       bool exists = _firestoreLocations.any((f) => f.title == loc.title);
       if (!exists) {
         newMarkers.add(Marker(
@@ -259,21 +262,17 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   // 4. Harita Oluştuğunda
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
-    
-    // Tema Kontrolü
     if (Theme.of(context).brightness == Brightness.dark) {
       controller.setMapStyle(_darkMapStyle);
     }
-
-    // İlk animasyon
     if (widget.initialFocus != null) {
       controller.animateCamera(CameraUpdate.newLatLngZoom(widget.initialFocus!, 16));
     }
   }
 
-  // --- MESAFE HESAPLAMA ---
+  // Mesare
   double _calculateDistance(LatLng p1, LatLng p2) {
-    const R = 6371.0; // Dünya yarıçapı (km)
+    const R = 6371.0; 
     double degToRad(double deg) => deg * (pi / 180);
     double lat1Rad = degToRad(p1.latitude);
     double lon1Rad = degToRad(p1.longitude);
@@ -286,7 +285,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     return R * c; 
   }
 
-  // --- ARAMA İŞLEMLERİ ---
+  // Arama
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () async {
@@ -309,7 +308,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       _mapController!.animateCamera(CameraUpdate.newLatLngZoom(location.position, 17));
       _showLocationDetails(location);
       
-      // Arama sonucunu marker olarak ekle
       setState(() {
         _markers.add(Marker(
           markerId: MarkerId("s_${location.id}"),
@@ -321,7 +319,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     }
   }
 
-  // --- ROTA İŞLEMİ ---
+  // Rota
   Future<void> _drawRoute(LatLng destination) async {
     if (_userLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Konumunuz alınamadı.")));
@@ -376,7 +374,149 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     return LatLngBounds(northeast: LatLng(x1!, y1!), southwest: LatLng(x0!, y0!));
   }
 
-  // --- DETAY PENCERESİ ---
+  // --- YENİ: YORUM WIDGET'LARI ---
+
+  void _showAddReviewDialog(LocationModel location) {
+    double _rating = 3.0;
+    final _commentController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text("Yorum Yap"),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text("'${location.title}' için puanınız:"),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(5, (index) {
+                        return IconButton(
+                          icon: Icon(
+                            index < _rating ? Icons.star : Icons.star_border,
+                            color: Colors.amber,
+                          ),
+                          onPressed: () => setDialogState(() => _rating = index + 1.0),
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _commentController,
+                      decoration: const InputDecoration(
+                        hintText: "Deneyimlerinizi paylaşın...",
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 4,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text("İptal")),
+                ElevatedButton(
+                  onPressed: () async {
+                    final comment = _commentController.text.trim();
+                    if (comment.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Yorum boş bırakılamaz.")));
+                      return;
+                    }
+                    Navigator.pop(context); // Önce dialogu kapat
+                    final error = await _mapDataService.addReview(location.id, _rating, comment);
+                    if (error != null) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: AppColors.error));
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Yorumunuz eklendi!"), backgroundColor: AppColors.success));
+                    }
+                  },
+                  child: const Text("Gönder"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showReviewsSheet(LocationModel location) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.8,
+        maxChildSize: 0.9,
+        builder: (_, scrollController) => Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Text("${location.title} Yorumları", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Divider(height: 20),
+              Expanded(
+                child: StreamBuilder<List<ReviewModel>>(
+                  stream: _mapDataService.getReviewsStream(location.id),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return const Center(child: Text("Henüz yorum yapılmamış."));
+                    }
+                    final reviews = snapshot.data!;
+                    return ListView.separated(
+                      controller: scrollController,
+                      itemCount: reviews.length,
+                      separatorBuilder: (c, i) => const Divider(),
+                      itemBuilder: (c, i) => _buildReviewTile(reviews[i]),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReviewTile(ReviewModel review) {
+    final timeStr = timeago.format(review.timestamp.toDate(), locale: 'tr');
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundImage: (review.userAvatar != null && review.userAvatar!.isNotEmpty)
+                ? CachedNetworkImageProvider(review.userAvatar!, cacheManager: ImageCacheManager.instance)
+                : null,
+            child: (review.userAvatar == null || review.userAvatar!.isEmpty) ? const Icon(Icons.person) : null,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(review.userName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                Row(children: List.generate(5, (index) => Icon(index < review.rating ? Icons.star : Icons.star_border, color: Colors.amber, size: 16))),
+                const SizedBox(height: 4),
+                Text(review.comment, style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.8))),
+                const SizedBox(height: 4),
+                Text(timeStr, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Detay Penceresi
   void _showLocationDetails(LocationModel location) {
     String distanceText = "Bilinmiyor";
     String timeText = "---";
@@ -414,6 +554,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                         ? PageView.builder(
                             itemCount: location.photoUrls.length,
                             itemBuilder: (_, i) => CachedNetworkImage(
+                              cacheManager: ImageCacheManager.instance, // YENİ: Merkezi önbellek yöneticisi kullanılıyor.
                               imageUrl: location.photoUrls[i],
                               fit: BoxFit.cover,
                               placeholder: (c, u) => Container(color: Colors.grey[200]),
@@ -447,20 +588,22 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                       Text(location.snippet, style: const TextStyle(color: Colors.grey, fontSize: 14)),
                       const SizedBox(height: 16),
                       
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            if (_userLocation != null) ...[
-                              _buildInfoBadge(Icons.straighten, distanceText, AppColors.primary),
-                              _buildInfoBadge(Icons.directions_walk, timeText, Colors.blue),
-                            ],
-                            if (location.rating > 0) 
-                              _buildInfoBadge(Icons.star, "${location.rating}", Colors.amber),
-                            if (location.openingHours != null)
-                              _buildInfoBadge(Icons.access_time, location.openingHours!, Colors.green),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          if (_userLocation != null) ...[
+                            _buildInfoBadge(Icons.straighten, distanceText, AppColors.primary),
+                            _buildInfoBadge(Icons.directions_walk, timeText, Colors.blue),
                           ],
-                        ),
+                          // YENİ: Uygulama içi puanlama
+                          if (location.reviewCount > 0)
+                            _buildInfoBadge(Icons.star, "${location.firestoreRating.toStringAsFixed(1)} (${location.reviewCount})", Colors.purple),
+                          if (location.rating > 0) 
+                            _buildInfoBadge(Icons.public, "Google: ${location.rating}", Colors.amber),
+                          if (location.openingHours != null)
+                            _buildInfoBadge(Icons.access_time, location.openingHours!, Colors.green),
+                        ],
                       ),
                       const SizedBox(height: 24),
 
@@ -496,6 +639,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                           const SizedBox(width: 8),
                           IconButton.filledTonal( 
                             onPressed: () {
+                                // DÜZELTME: Doğru URL formatı
                                 final url = 'https://www.google.com/maps/search/?api=1&query=${location.position.latitude},${location.position.longitude}';
                                 launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
                             },
@@ -586,7 +730,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
             mapToolbarEnabled: false,
           ),
 
-          // 2. ARAMA VE FİLTRE BAR (Yüzen)
+          // 2. ARAMA VE FİLTRE BAR
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -595,7 +739,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                 children: [
                   // Arama Çubuğu
                   Container(
-                    key: _searchBarKey, // --- KEY EKLE ---
+                    key: _searchBarKey, 
                     decoration: BoxDecoration(
                       color: Theme.of(context).cardColor,
                       borderRadius: BorderRadius.circular(30),
@@ -630,7 +774,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                     ),
                   ),
                   
-                  // Arama Sonuçları (Autocomplete)
+                  // Arama Sonuçları
                   if (_searchResults.isNotEmpty)
                     Container(
                       margin: const EdgeInsets.only(top: 8),
@@ -663,7 +807,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
-                        key: _filterChipKey, // --- KEY EKLE ---
+                        key: _filterChipKey, 
                         children: [
                           _buildFilterChip('Tümü', 'all', Icons.map),
                           _buildFilterChip('Üniversiteler', 'universite', Icons.school),
@@ -678,7 +822,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
             ),
           ),
 
-          // 3. YÜKLENİYOR İNDİKATÖRÜ
+          // 3. YÜKLENİYOR
           if (_isLoading)
             Positioned(
               top: 130, left: 0, right: 0,
@@ -698,7 +842,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
               ),
             ),
 
-          // 4. KONUM & ROTA BUTONLARI
+          // 4. KONUM & ROTA
           Positioned(
             bottom: 30, right: 20,
             child: Column(
@@ -717,7 +861,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                   ),
                 const SizedBox(height: 12),
                 FloatingActionButton(
-                  key: _myLocationButtonKey, // --- KEY EKLE ---
+                  key: _myLocationButtonKey, 
                   heroTag: 'myLoc',
                   backgroundColor: AppColors.primary,
                   child: const Icon(Icons.my_location, color: Colors.white),

@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../utils/app_colors.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../utils/maskot_helper.dart';
+import '../../services/image_cache_manager.dart'; // YENİ: Merkezi önbellek yöneticisi
 
 class EtkinlikDetayEkrani extends StatefulWidget {
   final DocumentSnapshot eventDoc;
@@ -160,6 +161,7 @@ class _EtkinlikDetayEkraniState extends State<EtkinlikDetayEkrani> {
                       centerTitle: true,
                       background: (imageUrl != null && imageUrl.isNotEmpty)
                           ? CachedNetworkImage(
+                              cacheManager: ImageCacheManager.instance, // YENİ: Merkezi önbellek yöneticisi kullanılıyor.
                               imageUrl: imageUrl,
                               fit: BoxFit.cover,
                               placeholder: (context, url) => Container(color: Colors.grey[300]),

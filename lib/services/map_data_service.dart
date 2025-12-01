@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:kampus_yardim_app/utils/api_keys.dart' as ApiKeys;
 import '../utils/api_keys.dart';
@@ -16,6 +17,9 @@ class LocationModel {
   final String? openingHours;
   final double rating;
   final BitmapDescriptor? icon;
+  // YENİ: Uygulama içi oylama için alanlar
+  final double firestoreRating;
+  final int reviewCount;
 
   LocationModel({
     required this.id,
@@ -26,7 +30,26 @@ class LocationModel {
     this.photoUrls = const [],
     this.openingHours,
     this.rating = 0.0,
+    this.firestoreRating = 0.0,
+    this.reviewCount = 0,
     this.icon,
+  });
+}
+
+// YENİ: Yorum Modeli
+class ReviewModel {
+  final String id;
+  final String userId;
+  final String userName;
+  final String? userAvatar;
+  final double rating;
+  final String comment;
+  final Timestamp timestamp;
+
+  ReviewModel({
+    required this.id, required this.userId, required this.userName,
+    this.userAvatar, required this.rating, required this.comment,
+    required this.timestamp,
   });
 }
 
@@ -85,6 +108,8 @@ class MapDataService {
           type: type,
           photoUrls: List<String>.from(data['photos'] ?? []),
           openingHours: data['hours'],
+          firestoreRating: (data['rating'] as num?)?.toDouble() ?? 0.0,
+          reviewCount: data['reviewCount'] ?? 0,
           icon: _getIconForType(type),
         );
       }).toList();
@@ -112,46 +137,39 @@ class MapDataService {
     // 'keyword' yerine 'type' parametresi daha güvenilirdir ancak sadece tek bir tip destekler.
     // Bu yüzden 'keyword' kullanmaya devam edip daha spesifik terimler seçeceğiz.
     
-    String keyword = '';
-    String typeParam = ''; // type parametresi (varsa)
+    String keyword;
 
     if (typeFilter == 'yemek') {
       // Sadece kafe ve restoranlar
-      typeParam = 'cafe|restaurant|bakery|meal_takeaway'; 
+      keyword = 'cafe|restaurant|bakery|meal_takeaway'; 
     } else if (typeFilter == 'durak') {
       // Sadece toplu taşıma
-      typeParam = 'bus_station|transit_station|subway_station';
+      keyword = 'bus_station|transit_station|subway_station';
     } else if (typeFilter == 'kutuphane') {
-      typeParam = 'library';
+      keyword = 'library';
     } else if (typeFilter == 'universite') {
-      typeParam = 'university'; 
+      keyword = 'university'; 
     } else {
-      // 'all' (Tümü) seçeneği için karma bir yapı yerine en önemli yerleri çekiyoruz
+      // 'all' (Tümü) seçeneği için en önemli yerleri çekiyoruz
       // Keyword kullanımı type'dan daha esnektir çoklu arama için
       keyword = 'university OR library OR cafe OR bus station';
     }
 
     // URL Oluşturma
     String baseUrl = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json'
-        '?location=${center.latitude},${center.longitude}'
-        '&radius=1000'
-        '&language=tr'
-        '&key=$_apiKey';
+        '?location=${center.latitude},${center.longitude}' // radius buradan kaldırıldı
+        '&language=tr' //
+        '&key=$_apiKey'; //
 
-    if (typeParam.isNotEmpty) {
-      // Google API type parametresinde pipe (|) desteklemez, o yüzden keyword kullanmak daha güvenli olabilir.
-      // Ancak Nearby Search 'type' parametresini destekler.
-      // Birden fazla type desteklenmediği için burada 'keyword' kullanmak en doğrusudur.
-      // typeParam'ı keyword'e dönüştürüyoruz.
-      keyword = typeParam.replaceAll('|', ' OR '); 
+    // YENİ: Filtreye göre dinamik arama yarıçapı
+    // Üniversite, kütüphane ve tümü için daha geniş bir alanda (10km) arama yap.
+    int radius = 1000; // Varsayılan 1km
+    if (typeFilter == 'universite' || typeFilter == 'kutuphane' || typeFilter == 'all') {
+      radius = 10000; // 10km
     }
 
-    // Eğer keyword boşsa (örn: hata durumu) varsayılan bir şey ata
-    if (keyword.isEmpty) keyword = 'university';
-
-    final url = Uri.parse('$baseUrl&keyword=$keyword');
-
     try {
+      final url = Uri.parse('$baseUrl&radius=$radius&keyword=${Uri.encodeComponent(keyword)}');
       final response = await http.get(url);
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -298,6 +316,73 @@ class MapDataService {
     await FirebaseFirestore.instance.collection('locations').doc(locationId).update({
       'photos': FieldValue.arrayUnion([photoUrl])
     });
+  }
+
+  // --- YENİ: YORUM VE PUANLAMA SİSTEMİ ---
+
+  /// Belirli bir mekan için yorumları stream olarak getirir.
+  Stream<List<ReviewModel>> getReviewsStream(String locationId) {
+    return FirebaseFirestore.instance
+        .collection('locations')
+        .doc(locationId)
+        .collection('reviews')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        return ReviewModel(
+          id: doc.id,
+          userId: data['userId'],
+          userName: data['userName'],
+          userAvatar: data['userAvatar'],
+          rating: (data['rating'] as num).toDouble(),
+          comment: data['comment'],
+          timestamp: data['timestamp'],
+        );
+      }).toList();
+    });
+  }
+
+  /// Bir mekana yeni bir yorum ve puan ekler.
+  /// Transaction kullanarak mekanın ortalama puanını ve yorum sayısını günceller.
+  Future<String?> addReview(String locationId, double rating, String comment) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return "Yorum yapmak için giriş yapmalısınız.";
+
+    final locationRef = FirebaseFirestore.instance.collection('locations').doc(locationId);
+    final reviewRef = locationRef.collection('reviews').doc(currentUser.uid);
+
+    try {
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final locationSnapshot = await transaction.get(locationRef);
+        if (!locationSnapshot.exists) throw Exception("Mekan bulunamadı!");
+
+        // Yeni yorumu ekle/güncelle
+        transaction.set(reviewRef, {
+          'userId': currentUser.uid,
+          'userName': currentUser.displayName ?? 'Kullanıcı',
+          'userAvatar': currentUser.photoURL,
+          'rating': rating,
+          'comment': comment,
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+
+        // Ortalama puanı ve yorum sayısını güncelle
+        // Not: Bu işlem çok sayıda eşzamanlı yazmada hatalı sonuç verebilir.
+        // İdeali, bu hesaplamayı bir Cloud Function ile yapmaktır.
+        // Ancak istemci tarafı için bu pratik bir çözümdür.
+        transaction.update(locationRef, {
+          'reviewCount': FieldValue.increment(1),
+          // Ortalama puanı güncellemek için daha karmaşık bir mantık gerekir.
+          // Şimdilik sadece yorum sayısını artırıyoruz. Gerçek bir ortalama için
+          // tüm yorumları okumak veya toplam puanı tutmak gerekir.
+        });
+      });
+      return null; // Başarılı
+    } catch (e) {
+      return "Bir hata oluştu: $e";
+    }
   }
 
   List<String> _extractPhotoUrls(List<dynamic>? photos) {

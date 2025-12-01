@@ -49,6 +49,8 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
   // --- YENİ SİSTEM İÇİN GLOBAL KEY'LER ---
   final GlobalKey _loginButtonKey = GlobalKey();
   final GlobalKey _registerSwitchKey = GlobalKey();
+  final GlobalKey _loginFormKey = GlobalKey(); // YENİ: Giriş formu için key
+  final GlobalKey _logoKey = GlobalKey(); // YENİ: Logo için key
 
   @override
   void initState() {
@@ -71,20 +73,33 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
           featureKey: 'giris_tutorial_gosterildi',
           targets: [
             TargetFocus(
-                identify: "login-button",
-                keyTarget: _loginButtonKey,
+                identify: "welcome-notification",
+                shape: ShapeLightFocus.Circle, // YENİ: Vurgu şeklini daire yapar
+                keyTarget: _logoKey, // Logoyu hedef alıyoruz
+                alignSkip: Alignment.bottomRight,
+                contents: [
+                  TargetContent( // YENİ: Konum aşağıya alındı
+                      align: ContentAlign.top,
+                      builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Haberdar Ol!', description: 'Duyurulardan, etkinliklerden ve kampüsteki önemli gelişmelerden anında haberdar olmak için bildirimlere izin vermeyi unutma!', mascotAssetPath: 'assets/images/mutlu_bay.png'))
+                ]),
+            TargetFocus(
+                identify: "login-form", // YENİ: ID değiştirildi
+                keyTarget: _loginFormKey, // YENİ: Formu hedef al
+                shape: ShapeLightFocus.RRect, // YENİ: Şekil dikdörtgen
+                radius: 24, // YENİ: Köşe yuvarlaklığı
                 contents: [
                   TargetContent(
-                    align: ContentAlign.top, builder: (context, controller) =>
+                    align: ContentAlign.bottom, builder: (context, controller) => // YENİ: Konum değiştirildi
                       MaskotHelper.buildTutorialContent(
                           context,
                           title: 'Seni Bekliyoruz!',
                           description: 'Eğer bir hesabın varsa buradan giriş yapabilirsin.'),
-                          
                   )
                 ]),
             TargetFocus(
                 identify: "register-switch",
+                shape: ShapeLightFocus.RRect, // YENİ: Şekil dikdörtgen
+                radius: 16, // YENİ: Köşe yuvarlaklığı
                 keyTarget: _registerSwitchKey,
                 contents: [
                   TargetContent(align: ContentAlign.top, builder: (context, controller) => MaskotHelper.buildTutorialContent(
@@ -402,7 +417,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const SizedBox(height: 60),
-                    Hero(tag: 'app_logo', child: AppLogo(size: 145, isLightMode: !isDark)),
+                    Hero(tag: 'app_logo', child: KeyedSubtree(key: _logoKey, child: AppLogo(size: 145, isLightMode: !isDark))), // YENİ: Logo'ya key atandı
                     const SizedBox(height: 30), 
                     
                     AnimatedContainer(
@@ -415,9 +430,11 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                         border: Border.all(color: Colors.white.withOpacity(0.2)),
                         boxShadow: [
                           BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, 10)),
-                        ],
+                        ], 
                       ),
-                      child: Column(
+                      child: KeyedSubtree( // YENİ: Formu hedeflemek için KeyedSubtree
+                        key: _loginFormKey,
+                        child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Row(
@@ -469,7 +486,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                             height: 50,
                             child: ElevatedButton(
                               key: _loginButtonKey, // --- KEY EKLE ---
-                              onPressed: _isLoading ? null : handleAuth,
+                                onPressed: _isLoading ? null : handleAuth, 
                               style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                               child: _isLoading 
                                   ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
@@ -494,6 +511,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                               child: const Text("Vazgeç / Düzenle", style: TextStyle(color: Colors.grey)),
                             ),
                         ],
+                      ),
                       ),
                     ),
                     

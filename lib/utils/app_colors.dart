@@ -45,5 +45,6 @@ class AppColors {
   static const Color chatBubbleMe = Color(0xFF673AB7); // Colors.deepPurple
   static const Color chatBubbleOther = Color(0xFFE0E0E0);
 
-  static Color? get textDark => null; // Colors.grey.shade300
+  // DÜZELTME: null yerine sabit bir koyu renk atandı.
+  static const Color textDark = Color(0xFF212121); 
 }

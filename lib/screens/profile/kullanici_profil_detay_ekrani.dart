@@ -3,19 +3,23 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:kampus_yardim_app/main.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart'; // EKLENDİ
+
 import '../../utils/app_colors.dart';
 import '../../models/badge_model.dart';
+import '../../utils/maskot_helper.dart'; // EKLENDİ
 import '../chat/sohbet_detay_ekrani.dart';
 import 'profil_duzenleme_ekrani.dart';
-import '../forum/forum_sayfasi.dart'; // GonderiKarti için
+import '../forum/forum_sayfasi.dart';
 import '../../widgets/animated_list_item.dart';
 import 'rozetler_sayfasi.dart';
 import '../admin/admin_panel_ekrani.dart';
 import '../auth/giris_ekrani.dart'; 
 import '../admin/kullanici_listesi_ekrani.dart';
+import '../../services/image_cache_manager.dart';
+import '../../main.dart'; // ThemeProvider için
 
 class KullaniciProfilDetayEkrani extends StatefulWidget {
   final String? userId; // Eğer null ise kendi profilim
@@ -35,13 +39,70 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
   late String _targetUserId;
   bool _isOwnProfile = false;
-  Map<String, dynamic>? _myUserData; // HATA DÜZELTMESİ: Mevcut kullanıcı verisi için state değişkeni
+  Map<String, dynamic>? _myUserData;
+  Future<DocumentSnapshot>? _myUserDataFuture;
+
+  // --- MASKOT İÇİN KEY'LER ---
+  final GlobalKey _statsKey = GlobalKey();
+  final GlobalKey _actionButtonsKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     _targetUserId = widget.userId ?? _currentUserId;
     _isOwnProfile = _targetUserId == _currentUserId;
+    
+    if (_currentUserId.isNotEmpty) {
+      _myUserDataFuture = FirebaseFirestore.instance.collection('kullanicilar').doc(_currentUserId).get();
+    }
+
+    // --- MASKOT TANITIMI ---
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      MaskotHelper.checkAndShow(
+        context,
+        featureKey: 'profil_detay_tutorial_gosterildi',
+        targets: [
+          TargetFocus(
+            identify: "profil-stats",
+            keyTarget: _statsKey,
+            alignSkip: Alignment.bottomLeft,
+            shape: ShapeLightFocus.RRect,
+            radius: 16,
+            contents: [
+              TargetContent(
+                align: ContentAlign.bottom,
+                builder: (context, controller) => MaskotHelper.buildTutorialContent(
+                  context,
+                  title: 'İstatistikler',
+                  description: 'Buradan takipçi sayılarını ve gönderi istatistiklerini inceleyebilirsin.',
+                  mascotAssetPath: 'assets/images/düsünceli_bay.png',
+                ),
+              ),
+            ],
+          ),
+          TargetFocus(
+            identify: "profil-actions",
+            keyTarget: _actionButtonsKey,
+            alignSkip: Alignment.topRight,
+            shape: ShapeLightFocus.RRect,
+            radius: 12,
+            contents: [
+              TargetContent(
+                align: ContentAlign.top,
+                builder: (context, controller) => MaskotHelper.buildTutorialContent(
+                  context,
+                  title: _isOwnProfile ? 'Profili Düzenle' : 'İletişime Geç',
+                  description: _isOwnProfile 
+                      ? 'Profil bilgilerini ve ayarlarını buradan güncelleyebilirsin.' 
+                      : 'Bu kullanıcıyı takip edebilir veya mesaj atabilirsin.',
+                  mascotAssetPath: 'assets/images/mutlu_bay.png',
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    });
   }
 
   Future<void> _launchURL(String? url) async {
@@ -65,10 +126,9 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
 
     return DefaultTabController(
       length: _isOwnProfile ? 2 : 1,
-      child: FutureBuilder<DocumentSnapshot>(
-        future: FirebaseFirestore.instance.collection('kullanicilar').doc(_currentUserId).get(),
+      child: FutureBuilder<DocumentSnapshot?>(
+        future: _myUserDataFuture,
         builder: (context, mySnapshot) {
-          // HATA DÜZELTMESİ: Veriyi state değişkenine ata
           _myUserData = mySnapshot.data?.data() as Map<String, dynamic>?;
           final myData = _myUserData;
           final bool amIAdmin = (myData?['role'] == 'admin');
@@ -90,6 +150,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
               
               return Scaffold(
                 backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                // DÜZELTME: Scroll sorunlarını çözmek için NestedScrollView kullanıldı.
                 body: NestedScrollView(
                   headerSliverBuilder: (context, innerBoxIsScrolled) {
                     return [
@@ -143,7 +204,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     final List<String> followers = List<String>.from(data['followers'] ?? []);
     final bool isFollowing = followers.contains(_currentUserId);
 
-    // Sosyal Medya Linkleri
     final String? github = data['github'];
     final String? linkedin = data['linkedin'];
     final String? instagram = data['instagram'];
@@ -151,11 +211,12 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     final bool hasSocial = (github?.isNotEmpty ?? false) || (linkedin?.isNotEmpty ?? false) || (instagram?.isNotEmpty ?? false) || (xPlatform?.isNotEmpty ?? false);
 
     return SliverAppBar(
-      expandedHeight: 580, // Yükseklik sosyal medya ikonları için biraz artırıldı
+      expandedHeight: 580, // Yükseklik içeriğe göre ayarlanabilir
       pinned: true,
       stretch: true,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       elevation: isScrolled ? 2 : 0,
+      automaticallyImplyLeading: false,
       title: isScrolled ? Text(name, style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color, fontWeight: FontWeight.bold)) : null,
       leading: _isOwnProfile 
           ? null 
@@ -167,6 +228,23 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
       actions: [
         if (_isOwnProfile)
           Container(
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black26),
+            child: Consumer<ThemeProvider>(
+              builder: (context, themeProvider, child) {
+                final isDark = themeProvider.themeMode == ThemeMode.dark ||
+                    (themeProvider.themeMode == ThemeMode.system &&
+                        MediaQuery.of(context).platformBrightness == Brightness.dark);
+                return IconButton(
+                  icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, color: Colors.white),
+                  tooltip: isDark ? 'Aydınlık Tema' : 'Karanlık Tema',
+                  onPressed: () => themeProvider.setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark),
+                );
+              },
+            ),
+          ),
+        if (_isOwnProfile)
+          Container(
             margin: const EdgeInsets.all(8),
             decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black26),
             child: IconButton(
@@ -174,53 +252,53 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
               onPressed: () => _showSettingsModal(context, isUserAdmin),
             ),
           )
-      ],
+      ],      
       flexibleSpace: FlexibleSpaceBar(
+        stretchModes: const [StretchMode.zoomBackground, StretchMode.fadeTitle],
         background: Stack(
           fit: StackFit.expand,
           children: [
-            // Kapak Fotoğrafı
             CachedNetworkImage(
+              cacheManager: ImageCacheManager.instance,
               imageUrl: coverUrl,
               fit: BoxFit.cover,
               color: Colors.black.withOpacity(0.3),
               colorBlendMode: BlendMode.darken,
             ),
-            // İçerik Alanı
-            Positioned.fill(
-              top: 0,
-              bottom: 0,
+            SafeArea(
               child: Container(
+                width: double.infinity,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Theme.of(context).scaffoldBackgroundColor.withOpacity(0.8), Theme.of(context).scaffoldBackgroundColor],
-                    stops: const [0.0, 0.4, 0.6], 
+                    colors: [Colors.transparent, Colors.transparent, Theme.of(context).scaffoldBackgroundColor],
+                    stops: const [0.0, 0.5, 0.75],
                   ),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 60), // Alt boşluk artırıldı
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 60),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
+                      const Spacer(flex: 2),
                       // Avatar
                       Container(
                         padding: const EdgeInsets.all(3),
                         decoration: const BoxDecoration(
                           shape: BoxShape.circle,
-                          gradient: LinearGradient(colors: [AppColors.primary, Colors.purpleAccent]),
+                          gradient: LinearGradient(colors: [AppColors.primary, Colors.purple]),
                         ),
                         child: CircleAvatar(
                           radius: 50,
                           backgroundColor: Colors.white,
-                          backgroundImage: avatarUrl.isNotEmpty ? CachedNetworkImageProvider(avatarUrl) : null,
+                          backgroundImage: avatarUrl.isNotEmpty ? CachedNetworkImageProvider(avatarUrl, cacheManager: ImageCacheManager.instance) : null,
                           child: avatarUrl.isEmpty ? Text(name[0].toUpperCase(), style: const TextStyle(fontSize: 35, fontWeight: FontWeight.bold)) : null,
                         ),
                       ),
                       const SizedBox(height: 10),
                       
-                      // İsim ve Rozet
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -230,7 +308,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                       ),
                       if (realName.isNotEmpty) Text(realName, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
 
-                      // Okul Bilgisi
                       if (university.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
@@ -244,7 +321,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                           ),
                         ),
 
-                      // Rozetler
                       if (badges.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 10.0),
@@ -276,15 +352,15 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                           ),
                         ),
 
-                      // Biyografi
                       if (bio.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           child: Text(bio, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.grey[700], fontSize: 13)),
                         ),
 
-                      // İstatistikler
+                      // İstatistikler (KEY EKLENDİ)
                       Container(
+                        key: _statsKey,
                         margin: const EdgeInsets.symmetric(vertical: 10),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
@@ -309,7 +385,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                         ),
                       ),
 
-                      // Sosyal Medya İkonları (GERİ GELDİ!)
                       if (hasSocial)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 12.0),
@@ -327,10 +402,11 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                           ),
                         ),
 
-                      // Butonlar
+                      // Butonlar (KEY EKLENDİ)
                       const SizedBox(height: 5),
                       if (_isOwnProfile)
                         SizedBox(
+                          key: _actionButtonsKey,
                           width: double.infinity,
                           child: ElevatedButton(
                             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilDuzenlemeEkrani())),
@@ -340,6 +416,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                         )
                       else
                         Row(
+                          key: _actionButtonsKey,
                           children: [
                             Expanded(
                               child: ElevatedButton(
@@ -356,7 +433,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                             Expanded(
                               child: OutlinedButton(
                                 onPressed: () {
-                                  // Chat ID oluşturma
                                   final chatId = _getChatId(_currentUserId, _targetUserId);
                                   Navigator.push(context, MaterialPageRoute(builder: (context) => SohbetDetayEkrani(
                                     chatId: chatId,
@@ -371,7 +447,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                           ],
                         ),
                       
-                      // Admin Butonu
                       if (amIAdmin && !_isOwnProfile)
                         Padding(
                           padding: const EdgeInsets.only(top: 8.0),
@@ -384,6 +459,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                           ),
                         ),
                       const SizedBox(height: 10),
+                      const Spacer(flex: 1),
                     ],
                   ),
                 ),
@@ -411,7 +487,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     );
   }
 
-  // YENİDEN EKLENEN YARDIMCI FONKSİYON
   Widget _buildSocialIcon(IconData icon, String url) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6.0),
@@ -432,7 +507,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
           .collection('gonderiler')
           .where('userId', isEqualTo: userId)
           .orderBy('zaman', descending: true)
-          .limit(20) // Performans için limit
+          .limit(20)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
@@ -453,7 +528,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
   Widget _buildSavedPostsList(List<String> savedPostIds) {
     if (savedPostIds.isEmpty) return const Center(child: Text("Henüz kaydedilen gönderi yok.", style: TextStyle(color: Colors.grey)));
 
-    // Sadece son 10 kaydedileni gösterelim (Performans)
     final idsToShow = savedPostIds.reversed.take(10).toList();
 
     return FutureBuilder<List<DocumentSnapshot>>(
@@ -476,9 +550,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
   }
 
   Widget _buildPostItem(DocumentSnapshot doc, Map<String, dynamic> data) {
-    // HATA DÜZELTMESİ: Gönderinin kaydedilme durumu, mevcut kullanıcının
-    // 'savedPosts' listesi kontrol edilerek doğru bir şekilde belirleniyor.
-    // Bu, başka bir kullanıcının profiline bakarken yaşanan çökme sorununu çözer.
     final bool isSaved = (_myUserData?['savedPosts'] as List<dynamic>? ?? []).contains(doc.id);
 
     String formattedTime = '...';
@@ -571,7 +642,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
       builder: (context) {
         return SafeArea(
           child: Column(
-            // YENİ: Tema Değiştirme Butonu Eklendi
             mainAxisSize: MainAxisSize.min,
             children: [
               const SizedBox(height: 8),
@@ -592,19 +662,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilDuzenlemeEkrani()));
-                },
-              ),
-              Consumer<ThemeProvider>(
-                builder: (context, themeProvider, child) {
-                  final isDark = themeProvider.themeMode == ThemeMode.dark || (themeProvider.themeMode == ThemeMode.system && MediaQuery.of(context).platformBrightness == Brightness.dark);
-                  return ListTile(
-                    leading: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, color: Colors.orangeAccent),
-                    title: Text(isDark ? 'Aydınlık Tema' : 'Karanlık Tema'),
-                    onTap: () {
-                      Navigator.pop(context);
-                      themeProvider.setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark);
-                    },
-                  );
                 },
               ),
               ListTile(

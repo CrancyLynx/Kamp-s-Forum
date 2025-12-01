@@ -266,10 +266,10 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
         elevation: 0,
         automaticallyImplyLeading: false,
         title: Row(
-          children: const [
-            Icon(Icons.school_rounded, color: AppColors.primary, size: 28),
-            SizedBox(width: 10),
-            Text(
+          children: [
+          Image.asset('assets/images/app_logo3.png', height: 40),
+            const SizedBox(width: 10),
+            const Text(
               "Kampüs Forum",
               style: TextStyle(
                 fontWeight: FontWeight.w800,
