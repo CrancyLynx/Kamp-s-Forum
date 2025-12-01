@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:intl/intl.dart'; 
 import 'package:intl/date_symbol_data_local.dart'; 
+import 'package:timeago/timeago.dart' as timeago;
 // Native Splash Paketi Importu
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
@@ -24,7 +25,6 @@ import 'screens/home/ana_ekran.dart';
 import 'screens/auth/giris_ekrani.dart'; 
 import 'screens/auth/verification_wrapper.dart'; 
 // Onboarding importu
-import 'screens/auth/onboarding_screen.dart';
 import 'screens/auth/splash_screen.dart'; 
 
 @pragma('vm:entry-point')
@@ -74,17 +74,35 @@ Future<void> main() async {
 
   bool isFirstTime = prefs.getBool('isFirstTime') ?? true;
 
-  runApp( 
-    ChangeNotifierProvider(
-      create: (context) => ThemeProvider(initialThemeMode),
-      child: BizimUygulama(isFirstTime: isFirstTime),
-    ),
+  // Timeago paketi için Türkçe yerelleştirme ayarı
+  timeago.setLocaleMessages('tr', timeago.TrMessages());
+  timeago.setDefaultLocale('tr');
+
+  runApp(
+    ChangeNotifierProvider(create: (context) => ThemeProvider(initialThemeMode),
+      child: const BizimUygulama(),
+    )
   );
 }
 
 class BizimUygulama extends StatefulWidget {
-  final bool isFirstTime;
-  const BizimUygulama({super.key, required this.isFirstTime});
+  const BizimUygulama({super.key});
+
+  static Future<void> setFirstTime(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isFirstTime', value);
+  }
+
+  static Future<bool> isFirstTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('isFirstTime') ?? true;
+  }
+
+  static Future<void> clearFirstTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('isFirstTime');
+  }
+
   @override
   State<BizimUygulama> createState() => _BizimUygulamaState();
 }
@@ -152,24 +170,24 @@ class _BizimUygulamaState extends State<BizimUygulama> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Kampüs Forum',
-      navigatorKey: navigatorKey, 
-      themeMode: context.watch<ThemeProvider>().themeMode,
-      theme: ThemeData(
-        primarySwatch: Colors.deepPurple, 
-        brightness: Brightness.light,
-        scaffoldBackgroundColor: Colors.grey[100],
-        useMaterial3: true,
-      ),
-      darkTheme: ThemeData(
-        primarySwatch: Colors.deepPurple,
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF121212),
-        useMaterial3: true,
-      ),
-     home: const SplashScreen(), 
-    );
+        debugShowCheckedModeBanner: false,
+        title: 'Kampüs Forum',
+        navigatorKey: navigatorKey,
+        themeMode: context.watch<ThemeProvider>().themeMode,
+        theme: ThemeData(
+          primarySwatch: Colors.deepPurple,
+          brightness: Brightness.light,
+          scaffoldBackgroundColor: Colors.grey[100],
+          useMaterial3: true,
+        ),
+        darkTheme: ThemeData(
+          primarySwatch: Colors.deepPurple,
+          brightness: Brightness.dark,
+          scaffoldBackgroundColor: const Color(0xFF121212),
+          useMaterial3: true,
+        ),
+        home: const AnaKontrolcu()
+      );
   }
 }
 
@@ -196,11 +214,21 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
 
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, authSnapshot) { 
+      builder: (context, authSnapshot) {
         // 1. Auth Durumu Bekleniyor
         if (authSnapshot.connectionState == ConnectionState.waiting) {
           return const LoadingScreen();
         }
+
+        // 0. İlk Açılış Kontrolü (SplashScreen'den sonra)
+        return FutureBuilder<bool>(
+          future: BizimUygulama.isFirstTime(),
+          builder: (context, firstTimeSnapshot) {
+            if (firstTimeSnapshot.connectionState == ConnectionState.waiting) {
+              return const LoadingScreen();
+            }
+
+            // if (firstTimeSnapshot.data == true) { return const OnboardingScreen(); }
         
         // 2. Kullanıcı Giriş Yapmışsa
         if (authSnapshot.hasData) {
@@ -288,6 +316,8 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
 
         // 4. Kullanıcı Yoksa (Giriş Ekranı)
         return const GirisEkrani(); 
+          },
+        );
       }, 
     );
   }

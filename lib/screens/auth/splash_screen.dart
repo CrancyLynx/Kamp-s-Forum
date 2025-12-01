@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-// YENİ: Native Splash Paketi Importu
+// Native Splash Paketi Importu
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import '../../utils/app_colors.dart';
 import '../../main.dart'; 
@@ -22,9 +22,11 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   void initState() {
     super.initState();
 
-    // YENİ: Bu ekran açıldığı anda Native (Beyaz) Splash ekranını kaldırıyoruz.
-    // Böylece kullanıcı doğrudan animasyonumuzu görüyor.
-    FlutterNativeSplash.remove();
+    // YENİ: Native Splash'i hemen kaldırmak yerine, build işlemi bittikten sonra kaldırıyoruz.
+    // Bu sayede arada siyah/beyaz boşluk oluşmaz.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FlutterNativeSplash.remove();
+    });
 
     _controller = AnimationController(
       vsync: this,
@@ -35,7 +37,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       CurvedAnimation(parent: _controller, curve: Curves.elasticOut),
     );
 
-    // Logo ve yazının opaklık animasyonları için farklı zamanlamalar
+    // Logo ve yazının opaklık animasyonları
     _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.8, curve: Curves.easeIn)),
     );
@@ -68,8 +70,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    // Arka plan rengini, logonun kendi rengiyle aynı yapıyoruz.
-    const logoBackgroundColor = Color.fromARGB(34, 67, 0, 55);
+    // DÜZELTME: Native tarafındaki #673AB7 rengiyle birebir aynı renk kullanıldı.
+    // Şeffaflık (alpha) kaldırıldı, böylece renkler tam örtüşecek ve geçiş hissedilmeyecek.
+    const logoBackgroundColor = Color(0xFF673AB7); 
 
     return Scaffold(
       backgroundColor: logoBackgroundColor,
@@ -88,24 +91,18 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     child: Image.asset('assets/images/app_logo3.png', width: 150),
                   ),
                   const SizedBox(height: 24),
-                  // Animasyonlu ve Gradient'li Yazı
+                  // Animasyonlu Yazı
                   SlideTransition(
                     position: _slideAnimation,
                     child: FadeTransition(
                       opacity: CurvedAnimation(parent: _controller, curve: const Interval(0.5, 1.0)),
-                      child: ShaderMask(
-                        shaderCallback: (bounds) => const LinearGradient(
-                          colors: [AppColors.primaryLight, AppColors.primaryAccent],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ).createShader(bounds),
-                        child: const Text(
-                          "Kampüs Forum",
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white, // ShaderMask için temel renk
-                          ),
+                      child: const Text(
+                        "Kampüs Forum",
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white, // Arka plan koyu olduğu için yazı beyaz
+                          letterSpacing: 1.5,
                         ),
                       ),
                     ),

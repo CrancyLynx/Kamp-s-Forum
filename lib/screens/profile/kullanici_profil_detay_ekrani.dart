@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:timeago/timeago.dart' as timeago;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:tutorial_coach_mark/tutorial_coach_mark.dart'; // EKLENDİ
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 import '../../utils/app_colors.dart';
 import '../../models/badge_model.dart';
-import '../../utils/maskot_helper.dart'; // EKLENDİ
+import '../../utils/maskot_helper.dart';
 import '../chat/sohbet_detay_ekrani.dart';
 import 'profil_duzenleme_ekrani.dart';
 import '../forum/forum_sayfasi.dart';
@@ -45,6 +46,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
   // --- MASKOT İÇİN KEY'LER ---
   final GlobalKey _statsKey = GlobalKey();
   final GlobalKey _actionButtonsKey = GlobalKey();
+  final GlobalKey _badgesKey = GlobalKey();
 
   @override
   void initState() {
@@ -63,6 +65,24 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
         featureKey: 'profil_detay_tutorial_gosterildi',
         targets: [
           TargetFocus(
+            identify: "profil-badges",
+            keyTarget: _badgesKey,
+            alignSkip: Alignment.bottomCenter,
+            shape: ShapeLightFocus.RRect,
+            radius: 12,
+            contents: [
+              TargetContent(
+                align: ContentAlign.bottom,
+                builder: (context, controller) => MaskotHelper.buildTutorialContent(
+                  context,
+                  title: 'Rozetlerin',
+                  description: 'Kazandığın başarı rozetleri burada listelenir. Sağa kaydırarak hepsini görebilirsin!',
+                  mascotAssetPath: 'assets/images/mutlu_bay.png',
+                ),
+              ),
+            ],
+          ),
+          TargetFocus(
             identify: "profil-stats",
             keyTarget: _statsKey,
             alignSkip: Alignment.bottomLeft,
@@ -74,7 +94,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                 builder: (context, controller) => MaskotHelper.buildTutorialContent(
                   context,
                   title: 'İstatistikler',
-                  description: 'Buradan takipçi sayılarını ve gönderi istatistiklerini inceleyebilirsin.',
+                  description: 'Takipçi ve gönderi sayılarını buradan inceleyebilirsin.',
                   mascotAssetPath: 'assets/images/düsünceli_bay.png',
                 ),
               ),
@@ -95,7 +115,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                   description: _isOwnProfile 
                       ? 'Profil bilgilerini ve ayarlarını buradan güncelleyebilirsin.' 
                       : 'Bu kullanıcıyı takip edebilir veya mesaj atabilirsin.',
-                  mascotAssetPath: 'assets/images/mutlu_bay.png',
+                  mascotAssetPath: 'assets/images/dedektif_bay.png',
                 ),
               ),
             ],
@@ -150,11 +170,47 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
               
               return Scaffold(
                 backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                // DÜZELTME: Scroll sorunlarını çözmek için NestedScrollView kullanıldı.
+                // NestedScrollView maskotun kaydırma yapabilmesi için daha stabildir.
                 body: NestedScrollView(
                   headerSliverBuilder: (context, innerBoxIsScrolled) {
                     return [
-                      _buildModernSliverAppBar(userData, amIAdmin, innerBoxIsScrolled),
+                      // Modern AppBar (Geri tuşu ve Ayarlar için)
+                      SliverAppBar(
+                        pinned: true,
+                        floating: true,
+                        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                        elevation: innerBoxIsScrolled ? 2 : 0,
+                        leading: !_isOwnProfile ? IconButton(
+                          icon: Icon(Icons.arrow_back, color: Theme.of(context).textTheme.bodyLarge?.color),
+                          onPressed: () => Navigator.pop(context),
+                        ) : null,
+                        actions: [
+                          if (_isOwnProfile)
+                            IconButton(
+                              icon: const Icon(Icons.settings),
+                              color: Theme.of(context).textTheme.bodyLarge?.color,
+                              onPressed: () => _showSettingsModal(context, userData['role'] == 'admin'),
+                            ),
+                          // Tema Değiştirme
+                          Consumer<ThemeProvider>(
+                            builder: (context, themeProvider, child) {
+                              final isDark = themeProvider.themeMode == ThemeMode.dark;
+                              return IconButton(
+                                icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
+                                color: Theme.of(context).textTheme.bodyLarge?.color,
+                                onPressed: () => themeProvider.setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                      
+                      // PROFİL İÇERİĞİ (Header)
+                      SliverToBoxAdapter(
+                        child: _buildProfileHeader(userData, amIAdmin),
+                      ),
+
+                      // TAB BAR (Sabitlenen kısım)
                       SliverPersistentHeader(
                         delegate: _SliverAppBarDelegate(
                           TabBar(
@@ -162,9 +218,10 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                             unselectedLabelColor: Colors.grey,
                             indicatorColor: AppColors.primary,
                             indicatorWeight: 3,
+                            labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                             tabs: [
-                              const Tab(icon: Icon(Icons.grid_on_rounded), text: "Gönderiler"),
-                              if (_isOwnProfile) const Tab(icon: Icon(Icons.bookmark_border_rounded), text: "Kaydedilenler"),
+                              const Tab(text: "Gönderiler"),
+                              if (_isOwnProfile) const Tab(text: "Kaydedilenler"),
                             ],
                           ),
                         ),
@@ -188,10 +245,8 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     );
   }
 
-  // --- WIDGETLER ---
-
-  Widget _buildModernSliverAppBar(Map<String, dynamic> data, bool amIAdmin, bool isScrolled) {
-    final String coverUrl = data['coverUrl'] ?? 'https://images.unsplash.com/photo-1557683316-973673baf926?w=900&q=80';
+  // --- MODERN PROFİL HEADER TASARIMI ---
+  Widget _buildProfileHeader(Map<String, dynamic> data, bool amIAdmin) {
     final String avatarUrl = data['avatarUrl'] ?? '';
     final String name = data['takmaAd'] ?? 'Anonim';
     final String realName = data['ad'] ?? '';
@@ -210,277 +265,299 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     final String? xPlatform = data['x_platform'];
     final bool hasSocial = (github?.isNotEmpty ?? false) || (linkedin?.isNotEmpty ?? false) || (instagram?.isNotEmpty ?? false) || (xPlatform?.isNotEmpty ?? false);
 
-    return SliverAppBar(
-      expandedHeight: 580, // Yükseklik içeriğe göre ayarlanabilir
-      pinned: true,
-      stretch: true,
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      elevation: isScrolled ? 2 : 0,
-      automaticallyImplyLeading: false,
-      title: isScrolled ? Text(name, style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color, fontWeight: FontWeight.bold)) : null,
-      leading: _isOwnProfile 
-          ? null 
-          : Container(
-              margin: const EdgeInsets.all(8),
-              decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black26),
-              child: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
+    return Column(
+      children: [
+        const SizedBox(height: 10),
+        
+        // 1. AVATAR (Gölge Efektli)
+        Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 20, spreadRadius: 5),
+            ],
+          ),
+          child: CircleAvatar(
+            radius: 60,
+            backgroundColor: Colors.white,
+            backgroundImage: avatarUrl.isNotEmpty 
+                ? CachedNetworkImageProvider(avatarUrl, cacheManager: ImageCacheManager.instance) 
+                : null,
+            child: avatarUrl.isEmpty 
+                ? Text(name[0].toUpperCase(), style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: AppColors.primary)) 
+                : null,
+          ),
+        ),
+        
+        const SizedBox(height: 16),
+
+        // 2. İSİM VE ADMİN ROZETİ
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              name, 
+              style: TextStyle(
+                fontSize: 26, 
+                fontWeight: FontWeight.w900, 
+                letterSpacing: 0.5,
+                color: Theme.of(context).textTheme.bodyLarge?.color
+              )
             ),
-      actions: [
-        if (_isOwnProfile)
+            if (isUserAdmin) 
+              const Padding(
+                padding: EdgeInsets.only(left: 6), 
+                child: Icon(Icons.verified, color: AppColors.primary, size: 24)
+              ),
+          ],
+        ),
+        if (realName.isNotEmpty) 
+          Text(realName, style: TextStyle(fontSize: 16, color: Colors.grey[600], fontWeight: FontWeight.w500)),
+
+        const SizedBox(height: 12),
+
+        // 3. ŞAŞALI ÜNİVERSİTE BİLGİSİ (Flashy Badge)
+        if (university.isNotEmpty)
           Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black26),
-            child: Consumer<ThemeProvider>(
-              builder: (context, themeProvider, child) {
-                final isDark = themeProvider.themeMode == ThemeMode.dark ||
-                    (themeProvider.themeMode == ThemeMode.system &&
-                        MediaQuery.of(context).platformBrightness == Brightness.dark);
-                return IconButton(
-                  icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, color: Colors.white),
-                  tooltip: isDark ? 'Aydınlık Tema' : 'Karanlık Tema',
-                  onPressed: () => themeProvider.setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark),
+            margin: const EdgeInsets.symmetric(horizontal: 40),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [AppColors.primary, Color(0xFF9C27B0)], // Mor - Pembe Gradyan
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(30),
+              boxShadow: [
+                BoxShadow(color: AppColors.primary.withOpacity(0.4), blurRadius: 10, offset: const Offset(0, 4)),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(FontAwesomeIcons.graduationCap, color: Colors.white, size: 16),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    "$university ${department.isNotEmpty ? '| $department' : ''}",
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        const SizedBox(height: 16),
+
+        // 4. KAYDIRILABİLİR ROZETLER (Sağ Kayan Tasarım)
+        if (badges.isNotEmpty)
+          SizedBox(
+            key: _badgesKey,
+            height: 50,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              // Ortadan başlaması için padding
+              padding: EdgeInsets.symmetric(horizontal: MediaQuery.of(context).size.width * 0.1), 
+              itemCount: badges.length,
+              itemBuilder: (context, index) {
+                final badgeId = badges[index];
+                final badge = allBadges.firstWhere((b) => b.id == badgeId, orElse: () => allBadges[0]);
+                
+                return GestureDetector(
+                  onTap: () {
+                     Navigator.push(context, MaterialPageRoute(builder: (context) => RozetlerSayfasi(
+                       earnedBadgeIds: Set<String>.from(badges),
+                       isAdmin: isUserAdmin,
+                       userData: data,
+                     )));
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).cardColor,
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: badge.color.withOpacity(0.3)),
+                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 5)],
+                    ),
+                    child: Row(
+                      children: [
+                        FaIcon(badge.icon, size: 16, color: badge.color),
+                        const SizedBox(width: 6),
+                        Text(badge.name, style: TextStyle(color: badge.color, fontWeight: FontWeight.bold, fontSize: 12)),
+                      ],
+                    ),
+                  ),
                 );
               },
             ),
           ),
-        if (_isOwnProfile)
-          Container(
-            margin: const EdgeInsets.all(8),
-            decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black26),
-            child: IconButton(
-              icon: const Icon(Icons.settings, color: Colors.white),
-              onPressed: () => _showSettingsModal(context, isUserAdmin),
+
+        const SizedBox(height: 16),
+
+        // 5. BİYOGRAFİ
+        if (bio.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              bio, 
+              textAlign: TextAlign.center, 
+              style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.8), fontSize: 14, height: 1.4)
             ),
-          )
-      ],      
-      flexibleSpace: FlexibleSpaceBar(
-        stretchModes: const [StretchMode.zoomBackground, StretchMode.fadeTitle],
-        background: Stack(
-          fit: StackFit.expand,
-          children: [
-            CachedNetworkImage(
-              cacheManager: ImageCacheManager.instance,
-              imageUrl: coverUrl,
-              fit: BoxFit.cover,
-              color: Colors.black.withOpacity(0.3),
-              colorBlendMode: BlendMode.darken,
+          ),
+
+        const SizedBox(height: 20),
+
+        // 6. İSTATİSTİKLER (Kart İçinde)
+        Container(
+          key: _statsKey,
+          margin: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildStatItem("Takipçi", data['followerCount'] ?? 0,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => KullaniciListesiEkrani(title: "$name Takipçileri", userIds: List<String>.from(data['followers'] ?? []))))
+              ),
+              Container(height: 30, width: 1, color: Colors.grey.withOpacity(0.3)),
+              _buildStatItem("Takip", data['followingCount'] ?? 0,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => KullaniciListesiEkrani(title: "$name Takip Ettikleri", userIds: List<String>.from(data['following'] ?? []))))
+              ),
+              Container(height: 30, width: 1, color: Colors.grey.withOpacity(0.3)),
+              _buildStatItem("Gönderi", data['postCount'] ?? 0),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // 7. SOSYAL MEDYA
+        if (hasSocial)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 20.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (github?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.github, "https://github.com/$github"),
+                if (linkedin?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.linkedin, "https://linkedin.com/in/$linkedin"),
+                if (instagram?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.instagram, "https://instagram.com/$instagram"),
+                if (xPlatform?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.xTwitter, "https://x.com/$xPlatform"),
+              ],
             ),
-            SafeArea(
-              child: Container(
+          ),
+
+        // 8. BUTONLAR
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: _isOwnProfile
+            ? SizedBox(
+                key: _actionButtonsKey,
                 width: double.infinity,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.transparent, Theme.of(context).scaffoldBackgroundColor],
-                    stops: const [0.0, 0.5, 0.75],
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilDuzenlemeEkrani())),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary, 
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 4,
                   ),
+                  child: const Text("Profili Düzenle", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 60),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const Spacer(flex: 2),
-                      // Avatar
-                      Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(colors: [AppColors.primary, Colors.purple]),
+              )
+            : Row(
+                key: _actionButtonsKey,
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: () => _toggleFollow(isFollowing),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isFollowing ? Colors.grey[200] : AppColors.primary,
+                          foregroundColor: isFollowing ? Colors.black87 : Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          elevation: isFollowing ? 0 : 4,
                         ),
-                        child: CircleAvatar(
-                          radius: 50,
-                          backgroundColor: Colors.white,
-                          backgroundImage: avatarUrl.isNotEmpty ? CachedNetworkImageProvider(avatarUrl, cacheManager: ImageCacheManager.instance) : null,
-                          child: avatarUrl.isEmpty ? Text(name[0].toUpperCase(), style: const TextStyle(fontSize: 35, fontWeight: FontWeight.bold)) : null,
-                        ),
+                        child: Text(isFollowing ? "Takibi Bırak" : "Takip Et", style: const TextStyle(fontWeight: FontWeight.bold)),
                       ),
-                      const SizedBox(height: 10),
-                      
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(name, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.bodyLarge?.color)),
-                          if (isUserAdmin) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.verified, color: AppColors.primary, size: 20)),
-                        ],
-                      ),
-                      if (realName.isNotEmpty) Text(realName, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
-
-                      if (university.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.school, size: 14, color: Colors.grey[600]),
-                              const SizedBox(width: 6),
-                              Flexible(child: Text("$university${department.isNotEmpty ? ' - $department' : ''}", style: TextStyle(color: Colors.grey[700], fontSize: 12), overflow: TextOverflow.ellipsis)),
-                            ],
-                          ),
-                        ),
-
-                      if (badges.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 10.0),
-                          child: GestureDetector(
-                            onTap: () {
-                               Navigator.push(context, MaterialPageRoute(builder: (context) => RozetlerSayfasi(
-                                 earnedBadgeIds: Set<String>.from(badges),
-                                 isAdmin: isUserAdmin,
-                                 userData: data,
-                               )));
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.08), borderRadius: BorderRadius.circular(20)),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  ...badges.take(3).map((id) {
-                                    final badge = allBadges.firstWhere((b) => b.id == id, orElse: () => allBadges[0]);
-                                    return Padding(
-                                      padding: const EdgeInsets.only(right: 8.0),
-                                      child: FaIcon(badge.icon, size: 14, color: badge.color),
-                                    );
-                                  }).toList(),
-                                  if(badges.length > 3) Text("+${badges.length - 3}", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold))
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-
-                      if (bio.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          child: Text(bio, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.grey[700], fontSize: 13)),
-                        ),
-
-                      // İstatistikler (KEY EKLENDİ)
-                      Container(
-                        key: _statsKey,
-                        margin: const EdgeInsets.symmetric(vertical: 10),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).cardColor,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-                          border: Border.all(color: Colors.grey.withOpacity(0.1)),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _buildStatItem("Takipçi", data['followerCount'] ?? 0,
-                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => KullaniciListesiEkrani(title: "$name Takipçileri", userIds: List<String>.from(data['followers'] ?? []))))
-                            ),
-                            Container(height: 20, width: 1, color: Colors.grey[300]),
-                            _buildStatItem("Takip", data['followingCount'] ?? 0,
-                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => KullaniciListesiEkrani(title: "$name Takip Ettikleri", userIds: List<String>.from(data['following'] ?? []))))
-                            ),
-                            Container(height: 20, width: 1, color: Colors.grey[300]),
-                            _buildStatItem("Gönderi", data['postCount'] ?? 0),
-                          ],
-                        ),
-                      ),
-
-                      if (hasSocial)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12.0),
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                if (github?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.github, "https://github.com/$github"),
-                                if (linkedin?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.linkedin, "https://linkedin.com/in/$linkedin"),
-                                if (instagram?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.instagram, "https://instagram.com/$instagram"),
-                                if (xPlatform?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.xTwitter, "https://x.com/$xPlatform"),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                      // Butonlar (KEY EKLENDİ)
-                      const SizedBox(height: 5),
-                      if (_isOwnProfile)
-                        SizedBox(
-                          key: _actionButtonsKey,
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilDuzenlemeEkrani())),
-                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                            child: const Text("Profili Düzenle", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          ),
-                        )
-                      else
-                        Row(
-                          key: _actionButtonsKey,
-                          children: [
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: () => _toggleFollow(isFollowing),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: isFollowing ? Colors.grey[200] : AppColors.primary,
-                                  foregroundColor: isFollowing ? Colors.black : Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                ),
-                                child: Text(isFollowing ? "Takibi Bırak" : "Takip Et"),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () {
-                                  final chatId = _getChatId(_currentUserId, _targetUserId);
-                                  Navigator.push(context, MaterialPageRoute(builder: (context) => SohbetDetayEkrani(
-                                    chatId: chatId,
-                                    receiverId: _targetUserId, 
-                                    receiverName: name, 
-                                    receiverAvatarUrl: avatarUrl)));
-                                },
-                                style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                                child: const Text("Mesaj"),
-                              ),
-                            ),
-                          ],
-                        ),
-                      
-                      if (amIAdmin && !_isOwnProfile)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8.0),
-                          child: InkWell(
-                            onTap: () => _toggleAdminRole(isUserAdmin),
-                            child: Text(
-                              isUserAdmin ? "Yönetici Yetkisini Al" : "Yönetici Yap",
-                              style: TextStyle(color: isUserAdmin ? Colors.red : Colors.green, fontWeight: FontWeight.bold, fontSize: 12),
-                            ),
-                          ),
-                        ),
-                      const SizedBox(height: 10),
-                      const Spacer(flex: 1),
-                    ],
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 50,
+                      child: OutlinedButton(
+                        onPressed: () {
+                          final chatId = _getChatId(_currentUserId, _targetUserId);
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => SohbetDetayEkrani(
+                            chatId: chatId,
+                            receiverId: _targetUserId, 
+                            receiverName: name, 
+                            receiverAvatarUrl: avatarUrl)));
+                        },
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          side: BorderSide(color: AppColors.primary.withOpacity(0.5), width: 1.5),
+                        ),
+                        child: const Text("Mesaj Gönder", style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+        ),
+        
+        // ADMIN BUTONU
+        if (amIAdmin && !_isOwnProfile)
+          Padding(
+            padding: const EdgeInsets.only(top: 12.0),
+            child: TextButton(
+              onPressed: () => _toggleAdminRole(isUserAdmin),
+              child: Text(
+                isUserAdmin ? "Yönetici Yetkisini Al" : "Yönetici Yap",
+                style: TextStyle(color: isUserAdmin ? Colors.red : Colors.green, fontWeight: FontWeight.bold),
               ),
             ),
-          ],
-        ),
-      ),
+          ),
+
+        const SizedBox(height: 20),
+      ],
     );
   }
 
   Widget _buildStatItem(String label, int count, {VoidCallback? onTap}) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Column(
           children: [
-            Text(count.toString(), style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.bodyLarge?.color)),
-            Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+            Text(
+              count.toString(), 
+              style: TextStyle(
+                fontSize: 20, 
+                fontWeight: FontWeight.w900, 
+                color: Theme.of(context).textTheme.bodyLarge?.color
+              )
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label, 
+              style: TextStyle(
+                color: Colors.grey[600], 
+                fontSize: 13, 
+                fontWeight: FontWeight.w500
+              )
+            ),
           ],
         ),
       ),
@@ -489,14 +566,18 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
 
   Widget _buildSocialIcon(IconData icon, String url) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6.0),
-      child: IconButton(
-        icon: FaIcon(icon, size: 22, color: Colors.grey[700]),
-        onPressed: () => _launchURL(url),
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(),
-        visualDensity: VisualDensity.compact,
-        tooltip: "Bağlantıyı Aç",
+      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+      child: GestureDetector(
+        onTap: () => _launchURL(url),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            shape: BoxShape.circle,
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)],
+          ),
+          child: FaIcon(icon, size: 20, color: Colors.grey[800]),
+        ),
       ),
     );
   }
@@ -511,10 +592,21 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("Henüz gönderi yok.", style: TextStyle(color: Colors.grey)));
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.article_outlined, size: 60, color: Colors.grey[300]),
+                const SizedBox(height: 10),
+                Text("Henüz gönderi yok.", style: TextStyle(color: Colors.grey[500])),
+              ],
+            ),
+          );
+        }
 
         return ListView.builder(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(12),
           itemCount: snapshot.data!.docs.length,
           itemBuilder: (context, index) {
             final doc = snapshot.data!.docs[index];
@@ -526,7 +618,18 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
   }
 
   Widget _buildSavedPostsList(List<String> savedPostIds) {
-    if (savedPostIds.isEmpty) return const Center(child: Text("Henüz kaydedilen gönderi yok.", style: TextStyle(color: Colors.grey)));
+    if (savedPostIds.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.bookmark_border, size: 60, color: Colors.grey[300]),
+            const SizedBox(height: 10),
+            Text("Kaydedilen gönderi yok.", style: TextStyle(color: Colors.grey[500])),
+          ],
+        ),
+      );
+    }
 
     final idsToShow = savedPostIds.reversed.take(10).toList();
 
@@ -538,7 +641,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
         if (docs.isEmpty) return const Center(child: Text("Kaydedilenler bulunamadı.", style: TextStyle(color: Colors.grey)));
 
         return ListView.builder(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(12),
           itemCount: docs.length,
           itemBuilder: (context, index) {
             final doc = docs[index];
@@ -554,8 +657,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
 
     String formattedTime = '...';
     if (data['zaman'] is Timestamp) {
-      final diff = DateTime.now().difference((data['zaman'] as Timestamp).toDate());
-      formattedTime = diff.inDays > 0 ? "${diff.inDays}g" : "${diff.inHours}s";
+      formattedTime = timeago.format((data['zaman'] as Timestamp).toDate(), locale: 'tr');
     }
 
     return AnimatedListItem(

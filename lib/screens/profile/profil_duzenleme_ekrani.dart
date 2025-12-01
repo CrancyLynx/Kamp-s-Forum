@@ -12,8 +12,8 @@ import '../auth/giris_ekrani.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../services/auth_service.dart';
 import '../../utils/maskot_helper.dart';
-import '../../services/image_compression_service.dart'; // DÜZELTME: Servis import edildi
-import '../../services/image_cache_manager.dart'; // YENİ: Merkezi önbellek yöneticisi
+import '../../services/image_compression_service.dart'; 
+import '../../services/image_cache_manager.dart'; 
 
 class ProfilDuzenlemeEkrani extends StatefulWidget {
   const ProfilDuzenlemeEkrani({super.key});
@@ -37,8 +37,8 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   final _xPlatformController = TextEditingController();
   final _phoneController = TextEditingController();
 
-  // Global Key'ler
-  final GlobalKey _coverAvatarKey = GlobalKey();
+  // Global Key'ler (Sadece avatar ve kaydet butonu kaldı)
+  final GlobalKey _avatarAreaKey = GlobalKey();
   final GlobalKey _saveButtonKey = GlobalKey();
 
   // State Değişkenleri
@@ -51,11 +51,6 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   File? _avatarImageFile;
   bool _isAvatarRemoved = false;
   String? _selectedPresetAvatarUrl;
-
-  // Kapak Fotoğrafı Yönetimi
-  String? _currentCoverUrl;
-  File? _coverImageFile;
-  bool _isCoverRemoved = false;
 
   bool _isTwoFactorEnabled = false;
   bool _isLoading = false;
@@ -80,16 +75,16 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
           featureKey: 'profil_duzenle_tutorial_gosterildi',
           targets: [
             TargetFocus(
-                identify: "cover-avatar-area",
-                keyTarget: _coverAvatarKey,
-                alignSkip: Alignment.topRight,
+                identify: "avatar-area",
+                keyTarget: _avatarAreaKey,
+                alignSkip: Alignment.bottomCenter,
                 contents: [
                   TargetContent(
                     align: ContentAlign.bottom, builder: (context, controller) =>
                       MaskotHelper.buildTutorialContent(
                           context,
-                          title: 'Görünümünü Özelleştir',
-                          description: 'Buraya tıklayarak kapak fotoğrafını ve avatarını değiştirebilirsin. İstersen hazır avatarlardan birini de seçebilirsin!'),
+                          title: 'Yeni Tarzın',
+                          description: 'Profil fotoğrafını buradan değiştirebilir veya hazır avatarlardan birini seçebilirsin.'),
                   )
                 ]),
             TargetFocus(
@@ -124,14 +119,13 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
         _university = submissionData?['university'];
         _department = submissionData?['department'];
         _currentAvatarUrl = data['avatarUrl'];
-        _currentCoverUrl = data['coverUrl'];
       });
     }
   }
 
   // --- 1. RESİM SEÇME FONKSİYONLARI ---
 
-  void _showImageSourceActionSheet({required bool isCover}) {
+  void _showImageSourceActionSheet() {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -142,33 +136,27 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
               ListTile(
                 leading: const Icon(Icons.camera_alt, color: AppColors.primary), 
                 title: const Text('Kameradan Çek'), 
-                onTap: () { Navigator.pop(context); _pickImage(ImageSource.camera, isCover: isCover); }
+                onTap: () { Navigator.pop(context); _pickImage(ImageSource.camera); }
               ),
               ListTile(
                 leading: const Icon(Icons.photo_library, color: AppColors.primary), 
                 title: const Text('Galeriden Seç'), 
-                onTap: () { Navigator.pop(context); _pickImage(ImageSource.gallery, isCover: isCover); }
+                onTap: () { Navigator.pop(context); _pickImage(ImageSource.gallery); }
               ),
-              if (!isCover)
-                ListTile(
-                  leading: const Icon(Icons.face, color: AppColors.primary), 
-                  title: const Text('Hazır Avatar Seç'), 
-                  onTap: () { Navigator.pop(context); _selectPresetAvatar(); }
-                ),
+              ListTile(
+                leading: const Icon(Icons.face, color: AppColors.primary), 
+                title: const Text('Hazır Avatar Seç'), 
+                onTap: () { Navigator.pop(context); _selectPresetAvatar(); }
+              ),
               ListTile(
                 leading: const Icon(Icons.delete, color: AppColors.error), 
-                title: Text(isCover ? 'Kapağı Kaldır' : 'Fotoğrafı Kaldır'), 
+                title: const Text('Fotoğrafı Kaldır'), 
                 onTap: () { 
                   Navigator.pop(context); 
                   setState(() { 
-                    if (isCover) {
-                      _coverImageFile = null;
-                      _isCoverRemoved = true;
-                    } else {
-                      _avatarImageFile = null;
-                      _selectedPresetAvatarUrl = null;
-                      _isAvatarRemoved = true;
-                    }
+                    _avatarImageFile = null;
+                    _selectedPresetAvatarUrl = null;
+                    _isAvatarRemoved = true;
                   }); 
                 }
               ),
@@ -208,24 +196,18 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
     );
   }
 
-  Future<void> _pickImage(ImageSource source, {required bool isCover}) async {
+  Future<void> _pickImage(ImageSource source) async {
     final pickedFile = await ImagePicker().pickImage(source: source, imageQuality: 80);
     if (pickedFile != null) {
       File file = File(pickedFile.path);
-      // DÜZELTME: Gerçek sıkıştırma servisi kullanılıyor
       File? compressedFile = await ImageCompressionService.compressImage(file);
       file = compressedFile ?? file; 
 
       if (mounted) {
         setState(() {
-          if (isCover) {
-            _coverImageFile = file;
-            _isCoverRemoved = false;
-          } else {
-            _avatarImageFile = file;
-            _selectedPresetAvatarUrl = null;
-            _isAvatarRemoved = false;
-          }
+          _avatarImageFile = file;
+          _selectedPresetAvatarUrl = null;
+          _isAvatarRemoved = false;
         });
       }
     }
@@ -270,14 +252,6 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
       newAvatarUrl = await _uploadImage(_avatarImageFile!, 'profil_resimleri/$_userId.jpg');
     }
 
-    // Kapak Fotoğrafı Yükleme/Belirleme
-    String? newCoverUrl;
-    if (_isCoverRemoved) {
-      newCoverUrl = ''; 
-    } else if (_coverImageFile != null) {
-      newCoverUrl = await _uploadImage(_coverImageFile!, 'kapak_resimleri/$_userId.jpg');
-    }
-
     final Map<String, dynamic> updateData = {
       'ad': _adSoyadController.text.trim(),
       'takmaAd': _takmaAdController.text.trim(),
@@ -289,7 +263,7 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
     };
 
     if (newAvatarUrl != null) updateData['avatarUrl'] = newAvatarUrl;
-    if (newCoverUrl != null) updateData['coverUrl'] = newCoverUrl;
+    // CoverUrl artık güncellenmiyor/kullanılmıyor
 
     try {
       await FirebaseFirestore.instance.collection('kullanicilar').doc(_userId).update(updateData);
@@ -402,7 +376,7 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
 
   Future<void> _deleteAccount() async {
     final passwordController = TextEditingController();
-    final verified = await showDialog<bool>(
+    await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Güvenlik Kontrolü"),
@@ -518,6 +492,7 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
         elevation: 0,
         actions: [
           IconButton(
+            key: _saveButtonKey,
             icon: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.check),
             onPressed: _isLoading ? null : _saveProfile,
           )
@@ -526,84 +501,58 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // --- 1. GÖRSEL DÜZENLEME ALANI (Kapak + Avatar) ---
-            SizedBox(
-              height: 240, 
-              child: Stack(
-                key: _coverAvatarKey, 
-                children: [
-                  // A. Kapak Fotoğrafı
-                  GestureDetector(
-                    onTap: () => _showImageSourceActionSheet(isCover: true),
-                    child: Container(
-                      height: 180,
-                      width: double.infinity,
+            const SizedBox(height: 20),
+            
+            // --- 1. SADECE AVATAR DÜZENLEME ---
+            Center(
+              child: GestureDetector(
+                key: _avatarAreaKey,
+                onTap: _showImageSourceActionSheet,
+                child: Stack(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        image: (_isCoverRemoved) 
-                            ? null
-                            : (_coverImageFile != null)
-                                ? DecorationImage(image: FileImage(_coverImageFile!), fit: BoxFit.cover)
-                                : (_currentCoverUrl != null && _currentCoverUrl!.isNotEmpty) 
-                                    ? DecorationImage(image: CachedNetworkImageProvider(_currentCoverUrl!, cacheManager: ImageCacheManager.instance), fit: BoxFit.cover)
-                                    : const DecorationImage(image: CachedNetworkImageProvider('https://images.unsplash.com/photo-1557683316-973673baf926?w=900&q=80'), fit: BoxFit.cover),
+                        color: Theme.of(context).scaffoldBackgroundColor, 
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(color: AppColors.primary.withOpacity(0.2), blurRadius: 15, spreadRadius: 5)
+                        ]
                       ),
+                      child: CircleAvatar(
+                        radius: 65, // Biraz daha büyük
+                        backgroundColor: Colors.grey[200],
+                        backgroundImage: _isAvatarRemoved ? null : (_avatarImageFile != null
+                            ? FileImage(_avatarImageFile!) as ImageProvider
+                            : _selectedPresetAvatarUrl != null
+                              ? CachedNetworkImageProvider(_selectedPresetAvatarUrl!, cacheManager: ImageCacheManager.instance)
+                              : (_currentAvatarUrl != null && _currentAvatarUrl!.isNotEmpty)
+                                  ? CachedNetworkImageProvider(_currentAvatarUrl!, cacheManager: ImageCacheManager.instance)
+                                  : null),
+                        child: (_isAvatarRemoved || (_avatarImageFile == null && _selectedPresetAvatarUrl == null && (_currentAvatarUrl == null || _currentAvatarUrl!.isEmpty)))
+                            ? const Icon(Icons.person, size: 70, color: Colors.grey)
+                            : null,
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
                       child: Container(
-                        color: Colors.black26, 
-                        child: const Center(
-                          child: Icon(Icons.camera_alt, color: Colors.white70, size: 40),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary, 
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 3),
                         ),
+                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
                       ),
                     ),
-                  ),
-
-                  // B. Avatar
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: GestureDetector(
-                        onTap: () => _showImageSourceActionSheet(isCover: false),
-                        child: Stack(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                              child: CircleAvatar(
-                                radius: 55,
-                                backgroundColor: Colors.grey[200],
-                                backgroundImage: _isAvatarRemoved ? null : (_avatarImageFile != null
-                                    ? FileImage(_avatarImageFile!) as ImageProvider 
-                                    : _selectedPresetAvatarUrl != null 
-                                      ? CachedNetworkImageProvider(_selectedPresetAvatarUrl!, cacheManager: ImageCacheManager.instance)
-                                      : (_currentAvatarUrl != null && _currentAvatarUrl!.isNotEmpty) 
-                                          ? CachedNetworkImageProvider(_currentAvatarUrl!, cacheManager: ImageCacheManager.instance)
-                                          : null),
-                                child: (_isAvatarRemoved || (_avatarImageFile == null && _selectedPresetAvatarUrl == null && (_currentAvatarUrl == null || _currentAvatarUrl!.isEmpty)))
-                                    ? const Icon(Icons.person, size: 60, color: Colors.grey)
-                                    : null,
-                              ),
-                            ),
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-                                child: const Icon(Icons.camera_alt, color: Colors.white, size: 18),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             
-            const SizedBox(height: 20),
+            const SizedBox(height: 30),
 
             // --- 2. FORM ALANLARI ---
             Padding(
@@ -673,7 +622,6 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton(
-                        key: _saveButtonKey, 
                         onPressed: _isLoading ? null : _saveProfile,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.success,

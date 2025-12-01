@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart'; 
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart';
@@ -28,11 +29,6 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
   String _allUsersSearchQuery = "";
   String _reportsSearchQuery = "";
 
-  late Stream<QuerySnapshot> _pendingStream;
-  late Stream<QuerySnapshot> _requestsStream;
-  late Stream<QuerySnapshot> _usersStream;
-  late Stream<QuerySnapshot> _reportsStream;
-
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
   
   bool _isLoadingAuth = true;
@@ -43,8 +39,8 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     super.initState();
     _checkAdminAccess(); // Yetki kontrolü
 
-    // 5 Sekme: Onay, Talepler, Kullanıcılar, Şikayetler, Etkinlikler
-    _tabController = TabController(length: 5, vsync: this); 
+    // 6 Sekme: Onay, Talepler, Kullanıcılar, Şikayetler, Etkinlikler, İstatistikler
+    _tabController = TabController(length: 6, vsync: this); 
     
     _pendingSearchController.addListener(() {
       if(mounted) setState(() => _pendingSearchQuery = _pendingSearchController.text.toLowerCase());
@@ -57,11 +53,6 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     _reportsSearchController.addListener(() {
       if(mounted) setState(() => _reportsSearchQuery = _reportsSearchController.text.toLowerCase());
     });
-
-    _pendingStream = FirebaseFirestore.instance.collection('kullanicilar').where('status', isEqualTo: 'Pending').snapshots();
-    _requestsStream = FirebaseFirestore.instance.collection('degisiklik_istekleri').orderBy('timestamp', descending: true).snapshots();
-    _usersStream = FirebaseFirestore.instance.collection('kullanicilar').orderBy('kayit_tarihi', descending: true).limit(50).snapshots(); 
-    _reportsStream = FirebaseFirestore.instance.collection('sikayetler').orderBy('timestamp', descending: true).snapshots();
   }
 
   // --- Orijinal Mantık Korundu: Admin Yetki Kontrolü ---
@@ -273,6 +264,19 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
     }
   }
 
+  // --- İstatistik Fonksiyonları ---
+  Future<Map<String, int>> _getRecentPostCounts() async {
+    Map<String, int> dailyCounts = {};
+    final now = DateTime.now();
+    for (int i = 0; i < 7; i++) {
+      final day = now.subtract(Duration(days: i));
+      final start = Timestamp.fromDate(DateTime(day.year, day.month, day.day));
+      final end = Timestamp.fromDate(DateTime(day.year, day.month, day.day, 23, 59, 59));
+      final snapshot = await FirebaseFirestore.instance.collection('gonderiler').where('zaman', isGreaterThanOrEqualTo: start).where('zaman', isLessThanOrEqualTo: end).count().get();
+      dailyCounts[day.toIso8601String().substring(0, 10)] = snapshot.count ?? 0;
+    }
+    return dailyCounts;
+  }
   // --- Arayüz (Build) ---
 
   @override
@@ -319,12 +323,13 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
               labelColor: Colors.white,
               unselectedLabelColor: Colors.white.withOpacity(0.7),
               isScrollable: true,
-              tabs: const [
-                Tab(icon: Icon(Icons.person_add), text: "Onay"),
-                Tab(icon: Icon(Icons.change_circle), text: "Talepler"),
-                Tab(icon: Icon(Icons.group), text: "Kullanıcılar"),
-                Tab(icon: Icon(Icons.report_problem), text: "Şikayetler"),
-                Tab(icon: Icon(Icons.event_note), text: "Etkinlikler"), 
+              tabs: [
+                const Tab(icon: Icon(Icons.person_add), text: "Onay"),
+                const Tab(icon: Icon(Icons.change_circle), text: "Talepler"),
+                const Tab(icon: Icon(Icons.group), text: "Kullanıcılar"),
+                const Tab(icon: Icon(Icons.report_problem), text: "Şikayetler"),
+                const Tab(icon: Icon(Icons.event_note), text: "Etkinlikler"), 
+                const Tab(icon: Icon(Icons.bar_chart), text: "İstatistikler"),
               ],
             ),
           ),
@@ -337,6 +342,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
             _buildUsersTab(),
             _buildReportsTab(),
             const EtkinlikListesiEkrani(), 
+            _buildStatisticsTab(),
           ],
         ),
       ),
@@ -355,7 +361,8 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: _pendingStream,
+            // DÜZELTME: Stream doğrudan build içinde oluşturuluyor.
+            stream: FirebaseFirestore.instance.collection('kullanicilar').where('status', isEqualTo: 'Pending').snapshots(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
               final docs = snapshot.data!.docs.where((doc) {
@@ -407,7 +414,8 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
 
   Widget _buildRequestsTab() {
     return StreamBuilder<QuerySnapshot>(
-      stream: _requestsStream,
+      // DÜZELTME: Stream doğrudan build içinde oluşturuluyor.
+      stream: FirebaseFirestore.instance.collection('degisiklik_istekleri').orderBy('timestamp', descending: true).snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final docs = snapshot.data!.docs;
@@ -505,7 +513,8 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: _usersStream,
+            // DÜZELTME: Stream doğrudan build içinde oluşturuluyor.
+            stream: FirebaseFirestore.instance.collection('kullanicilar').orderBy('kayit_tarihi', descending: true).limit(50).snapshots(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
               
@@ -581,7 +590,8 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: _reportsStream,
+            // DÜZELTME: Stream doğrudan build içinde oluşturuluyor.
+            stream: FirebaseFirestore.instance.collection('sikayetler').orderBy('timestamp', descending: true).snapshots(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
               if (snapshot.hasError) return Center(child: Text("Hata oluştu: ${snapshot.error}", style: const TextStyle(color: AppColors.error)));
@@ -744,6 +754,162 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                 Text(count.toString(), style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
                 Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey), textAlign: TextAlign.center),
               ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // --- YENİ: İstatistikler Sekmesi ---
+  Widget _buildStatisticsTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildChartCard(
+            title: "Kullanıcı Durum Dağılımı",
+            child: _buildUserStatusPieChart(),
+          ),
+          const SizedBox(height: 24),
+          _buildChartCard(
+            title: "Son 7 Günlük Gönderi Aktivitesi",
+            child: _buildRecentPostsLineChart(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChartCard({required String title, required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 20),
+          SizedBox(height: 250, child: child),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserStatusPieChart() {
+    return FutureBuilder<List<int>>(
+      future: Future.wait([
+        _getUserCount('Verified'),
+        _getUserCount('Pending'),
+        _getUserCount('Rejected'),
+      ]),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        final counts = snapshot.data!;
+        final total = counts.fold(0, (prev, e) => prev + e);
+        if (total == 0) return _buildEmptyState("Veri Yok", Icons.pie_chart_outline);
+
+        return PieChart(
+          PieChartData(
+            sectionsSpace: 4,
+            centerSpaceRadius: 40,
+            sections: [
+              PieChartSectionData(
+                value: counts[0].toDouble(),
+                title: '${counts[0]}',
+                color: AppColors.success,
+                radius: 80,
+                titleStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              PieChartSectionData(
+                value: counts[1].toDouble(),
+                title: '${counts[1]}',
+                color: AppColors.warning,
+                radius: 80,
+                titleStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              PieChartSectionData(
+                value: counts[2].toDouble(),
+                title: '${counts[2]}',
+                color: AppColors.error,
+                radius: 80,
+                titleStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRecentPostsLineChart() {
+    return FutureBuilder<Map<String, int>>(
+      future: _getRecentPostCounts(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        final data = snapshot.data!;
+        final spots = data.entries.toList().reversed.toList().asMap().entries.map((entry) {
+          return FlSpot(entry.key.toDouble(), entry.value.value.toDouble());
+        }).toList();
+
+        return LineChart(
+          LineChartData(
+            gridData: const FlGridData(show: false),
+            titlesData: FlTitlesData(
+              leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 30,
+                  interval: 2,
+                  getTitlesWidget: (value, meta) {
+                    final index = value.toInt();
+                    if (index >= 0 && index < data.length) {
+                      final dateStr = data.keys.toList().reversed.toList()[index];
+                      final date = DateTime.parse(dateStr);
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Text('${date.day}/${date.month}', style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                      );
+                    }
+                    return const Text('');
+                  },
+                ),
+              ),
+            ),
+            borderData: FlBorderData(show: true, border: Border.all(color: Colors.grey.withOpacity(0.2))),
+            lineBarsData: [
+              LineChartBarData(
+                spots: spots,
+                isCurved: true,
+                color: AppColors.primary,
+                barWidth: 4,
+                isStrokeCapRound: true,
+                dotData: const FlDotData(show: true),
+                belowBarData: BarAreaData(
+                  show: true,
+                  color: AppColors.primary.withOpacity(0.2),
+                ),
+              ),
+            ],
+            lineTouchData: LineTouchData(
+              touchTooltipData: LineTouchTooltipData(
+                getTooltipItems: (touchedSpots) {
+                  return touchedSpots.map((spot) {
+                    return LineTooltipItem(
+                      '${spot.y.toInt()} gönderi',
+                      const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    );
+                  }).toList();
+                },
+              ),
             ),
           ),
         );

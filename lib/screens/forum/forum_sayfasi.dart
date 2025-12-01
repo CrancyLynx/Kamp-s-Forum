@@ -444,6 +444,7 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
                       }
 
                       Map<String, dynamic> data = document.data()! as Map<String, dynamic>;
+                      final List<String> imageUrls = List<String>.from(data['imageUrls'] ?? []);
 
                       String type = data['type'] ?? 'gonderi';
                       bool isPinned = isPinnedSection || (data['isPinned'] ?? false);
@@ -507,6 +508,7 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
                           isPinned: isPinned,
                           commentCount: (data['commentCount'] as int? ?? 0),
                           authorBadges: List<String>.from(data['authorBadges'] ?? []),
+                          imageUrls: imageUrls,
                         ),
                       );
                     },
@@ -688,6 +690,7 @@ class GonderiKarti extends StatefulWidget {
   final int commentCount;
   final List<String> authorBadges;
   final bool isPinned;
+  final List<String> imageUrls; // YENİ: Resim URL'leri
 
   const GonderiKarti({
     super.key,
@@ -711,6 +714,7 @@ class GonderiKarti extends StatefulWidget {
     required this.commentCount,
     required this.authorBadges,
     this.isPinned = false,
+    this.imageUrls = const [], // YENİ: Varsayılan boş liste
   });
 
   @override
@@ -990,6 +994,53 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                   ),
 
                   const SizedBox(height: 12),
+
+                  // YENİ: Resim Önizleme Alanı
+                  if (widget.imageUrls.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12.0),
+                      child: SizedBox(
+                        height: 150,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: widget.imageUrls.length,
+                          itemBuilder: (context, index) {
+                            final imageUrl = widget.imageUrls[index];
+                            return GestureDetector(
+                              onTap: () {
+                                // Resme tıklandığında tam ekran gösterme
+                                Navigator.push(context, MaterialPageRoute(builder: (_) {
+                                  return Scaffold(
+                                    backgroundColor: Colors.black,
+                                    appBar: AppBar(backgroundColor: Colors.black, elevation: 0),
+                                    body: Center(
+                                      child: InteractiveViewer(
+                                        child: CachedNetworkImage(
+                                          imageUrl: imageUrl,
+                                          fit: BoxFit.contain,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }));
+                              },
+                              child: Container(
+                                width: widget.imageUrls.length == 1 ? MediaQuery.of(context).size.width * 0.8 : 200,
+                                margin: const EdgeInsets.only(right: 10),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: CachedNetworkImage(
+                                    imageUrl: imageUrl,
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) => Container(color: Colors.grey[200]),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
 
                   Text(
                     widget.baslik,
