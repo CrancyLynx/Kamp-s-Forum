@@ -55,7 +55,7 @@ class _TypingIndicatorState extends State<TypingIndicator> with TickerProviderSt
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withAlpha(13),
             blurRadius: 5,
             offset: const Offset(0, 2),
           ),
@@ -75,7 +75,7 @@ class _TypingIndicatorState extends State<TypingIndicator> with TickerProviderSt
                   height: 6,
                   decoration: BoxDecoration(
                     color: (widget.isDark ? Colors.white : AppColors.primary)
-                        .withOpacity(0.6 + (0.4 * _animations[index].value)),
+                        .withAlpha((255 * (0.6 + (0.4 * _animations[index].value))).round()),
                     shape: BoxShape.circle,
                   ),
                 ),

@@ -5,11 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../../services/auth_service.dart';
 import '../../widgets/animated_list_item.dart';
 import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart';
 
-import '../admin/admin_panel_ekrani.dart';
+
 import 'gonderi_detay_ekrani.dart';
 import '../../models/badge_model.dart';
 
@@ -67,12 +68,9 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text("Kapat")),
           ElevatedButton(
-            onPressed: () {
-              final currentUser = FirebaseAuth.instance.currentUser;
-              if (currentUser != null && currentUser.isAnonymous) {
-                currentUser.delete();
-              }
+            onPressed: () async {
               Navigator.of(ctx).pop();
+              await AuthService().signOut(); // DÜZELTME: Merkezi signOut metodu kullanılıyor.
             },
             child: const Text("Giriş Yap"),
           ),
@@ -521,14 +519,16 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
       ),
 
       // DÜZELTME: heroTag eklendi
-      floatingActionButton: widget.isGuest ? null : FloatingActionButton.extended(
-        heroTag: 'forum_create_fab', // BENZERSİZ TAG
-        onPressed: () => _showCreateOptions(context),
-        backgroundColor: AppColors.primary,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text("Oluştur", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        elevation: 4,
-      ),
+      floatingActionButton: !widget.isGuest
+          ? FloatingActionButton.extended(
+              heroTag: 'forum_create_fab', // BENZERSİZ TAG
+              onPressed: () => _showCreateOptions(context),
+              backgroundColor: AppColors.primary,
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text("Oluştur", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              elevation: 4,
+            )
+          : null,
     );
   }
 
@@ -722,17 +722,16 @@ class GonderiKarti extends StatefulWidget {
 }
 
 class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderStateMixin {
-  late List<dynamic> _currentLikes;
   late bool _isLikedByCurrentUser;
   late AnimationController _likeController;
   late Animation<double> _likeScale;
+  bool _isLiking = false; // Spam koruması için
 
   @override
   void initState() {
     super.initState();
-    _currentLikes = List.from(widget.likes);
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-    _isLikedByCurrentUser = currentUserId != null && _currentLikes.contains(currentUserId);
+    _isLikedByCurrentUser = currentUserId != null && widget.likes.contains(currentUserId);
 
     _likeController = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
     _likeScale = Tween<double>(begin: 1.0, end: 1.4).animate(CurvedAnimation(parent: _likeController, curve: Curves.easeInOut));
@@ -745,41 +744,94 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
   }
 
   Future<void> _sendLikeNotification(String senderId, String senderName, String receiverId, String postId, String postTitle) async {
-    if (senderId == receiverId) return;
-    if (!mounted) return;
+    if (senderId == receiverId || !mounted) return;
 
-    await FirebaseFirestore.instance.collection('bildirimler').add({
-      'userId': receiverId,
-      'postId': postId,
-      'postTitle': postTitle,
-      'type': 'like',
-      'senders': [{'id': senderId, 'name': senderName}],
-      'message': '$senderName gönderini beğendi.',
-      'isRead': false,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
-  }
-
-
-  Future<void> _removeLikeNotification(String senderId, String receiverId, String postId) async {
-    if (senderId == receiverId) return;
-    if (!mounted) return;
-
-    final notificationsRef = FirebaseFirestore.instance.collection('bildirimler');
-    final query = await notificationsRef
-        .where('userId', isEqualTo: receiverId)
+    final notificationQuery = await FirebaseFirestore.instance
+        .collection('bildirimler')
         .where('postId', isEqualTo: postId)
         .where('type', isEqualTo: 'like')
+        .where('userId', isEqualTo: receiverId)
         .limit(1)
         .get();
 
-    if (query.docs.isNotEmpty) {
-      final docId = query.docs.first.id;
-      await notificationsRef.doc(docId).update({
-        'senders': FieldValue.arrayRemove([{'id': senderId, 'name': widget.currentUserTakmaAd}])
+    if (notificationQuery.docs.isNotEmpty) {
+      final docId = notificationQuery.docs.first.id;
+      await FirebaseFirestore.instance.collection('bildirimler').doc(docId).update({
+        'senderId': senderId,
+        'senderName': senderName,
+        'message': '$senderName ve diğerleri gönderini beğendi.',
+        'isRead': false,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } else {
+      await FirebaseFirestore.instance.collection('bildirimler').add({
+        'userId': receiverId,
+        'postId': postId,
+        'postTitle': postTitle,
+        'type': 'like',
+        'senderId': senderId,
+        'senderName': senderName,
+        'message': '$senderName gönderini beğendi.',
+        'isRead': false,
+        'timestamp': FieldValue.serverTimestamp(),
       });
     }
   }
+
+  Future<void> _toggleLike() async {
+    if (widget.isGuest) {
+      widget.onShowLoginRequired();
+      return;
+    }
+    if (_isLiking) return; // Zaten bir işlem varsa tekrar çalıştırma
+
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUserId == null) return;
+
+    setState(() {
+      _isLiking = true;
+      _isLikedByCurrentUser = !_isLikedByCurrentUser;
+      if (_isLikedByCurrentUser) {
+        _likeController.forward().then((_) => _likeController.reverse());
+      }
+    });
+
+    final postRef = FirebaseFirestore.instance.collection('gonderiler').doc(widget.postId);
+    final authorRef = FirebaseFirestore.instance.collection('kullanicilar').doc(widget.authorUserId);
+
+    try {
+      if (_isLikedByCurrentUser) {
+        // Beğen
+        await Future.wait([
+          postRef.update({'likes': FieldValue.arrayUnion([currentUserId])}),
+          authorRef.update({'likeCount': FieldValue.increment(1)}),
+        ]);
+        await _sendLikeNotification(currentUserId, widget.currentUserTakmaAd, widget.authorUserId, widget.postId, widget.baslik);
+        _checkAndAwardLikeBadges(authorRef); // Rozet kontrolünü burada yap
+      } else {
+        // Beğeniyi geri al
+        await Future.wait([
+          postRef.update({'likes': FieldValue.arrayRemove([currentUserId])}),
+          authorRef.update({'likeCount': FieldValue.increment(-1)}),
+        ]);
+        // Beğeni geri alınınca bildirim silme işlemi şimdilik kaldırıldı, çünkü karmaşık ve maliyetli olabilir.
+        // İstenirse eklenebilir: await _removeLikeNotification(currentUserId, widget.authorUserId, widget.postId);
+      }
+    } catch (e) {
+        // Hata durumunda UI'ı eski haline döndür
+        setState(() {
+          _isLikedByCurrentUser = !_isLikedByCurrentUser;
+        });
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bir hata oluştu.")));
+    } finally {
+        if(mounted) {
+          setState(() {
+            _isLiking = false;
+          });
+        }
+    }
+  }
+
 
   void _toggleSave(String? currentUserId, bool isSaved) {
     if (widget.isGuest || currentUserId == null) {
@@ -791,42 +843,10 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
 
     if (isSaved) {
       userRef.update({'savedPosts': FieldValue.arrayRemove([widget.postId])});
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Kaydedilenlerden kaldırıldı."), backgroundColor: AppColors.info));
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Kaydedilenlerden kaldırıldı."), backgroundColor: AppColors.info));
     } else {
       userRef.update({'savedPosts': FieldValue.arrayUnion([widget.postId])});
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gönderi kaydedildi!"), backgroundColor: AppColors.success));
-    }
-  }
-
-  void _toggleLike() {
-    if (widget.isGuest) {
-      widget.onShowLoginRequired();
-      return;
-    }
-
-    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-    if (currentUserId == null) return;
-
-    final postRef = FirebaseFirestore.instance.collection('gonderiler').doc(widget.postId);
-
-    if (_isLikedByCurrentUser) {
-      postRef.update({'likes': FieldValue.arrayRemove([currentUserId])});
-      _removeLikeNotification(currentUserId, widget.authorUserId, widget.postId);
-      FirebaseFirestore.instance.collection('kullanicilar').doc(widget.authorUserId).update({'likeCount': FieldValue.increment(-1)});
-      setState(() {
-        _currentLikes.remove(currentUserId);
-        _isLikedByCurrentUser = false;
-      });
-    } else {
-      _likeController.forward().then((_) => _likeController.reverse());
-      postRef.update({'likes': FieldValue.arrayUnion([currentUserId])});
-      _sendLikeNotification(currentUserId, widget.currentUserTakmaAd, widget.authorUserId, widget.postId, widget.baslik);
-      final authorRef = FirebaseFirestore.instance.collection('kullanicilar').doc(widget.authorUserId);
-      authorRef.update({'likeCount': FieldValue.increment(1)}).then((_) => _checkAndAwardLikeBadges(authorRef));
-      setState(() {
-        _currentLikes.add(currentUserId);
-        _isLikedByCurrentUser = true;
-      });
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Gönderi kaydedildi!"), backgroundColor: AppColors.success));
     }
   }
 
@@ -854,14 +874,16 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
     final newPinStatus = !widget.isPinned;
 
     postRef.update({'isPinned': newPinStatus}).then((_) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(newPinStatus ? "Gönderi sabitlendi." : "Gönderi sabitten kaldırıldı."),
-        backgroundColor: newPinStatus ? AppColors.success : AppColors.info,
-      ));
+      if(mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(newPinStatus ? "Gönderi sabitlendi." : "Gönderi sabitten kaldırıldı."),
+          backgroundColor: newPinStatus ? AppColors.success : AppColors.info,
+        ));
+      }
     });
   }
-
-  @override
+  
+    @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('gonderiler').doc(widget.postId).snapshots(),
@@ -874,6 +896,8 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
           final data = snapshot.data!.data() as Map<String, dynamic>;
           liveCommentCount = data['commentCount'] ?? 0;
           liveLikes = data['likes'] as List<dynamic>? ?? [];
+           final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+          _isLikedByCurrentUser = currentUserId != null && liveLikes.contains(currentUserId);
         }
 
         return Container(

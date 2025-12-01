@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import '../../utils/app_colors.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../utils/maskot_helper.dart';
+import '../forum/gonderi_detay_ekrani.dart';
+import '../profile/kullanici_profil_detay_ekrani.dart';
 
 class BildirimEkrani extends StatefulWidget {
   const BildirimEkrani({super.key});
@@ -128,10 +130,38 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
 
   void _handleNotificationTap(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
-    
+
+    // Önce okundu olarak işaretle
     if (data['isRead'] == false) {
       doc.reference.update({'isRead': true});
     }
+
+    final String? type = data['type'];
+    final String? postId = data['postId'];
+    final String? senderId = data['senderId'];
+    final String? senderName = data['senderName'];
+
+    // Yönlendirme yap
+    if ((type == 'like' || type == 'new_comment' || type == 'comment_reply') && postId != null) {
+      // Gönderi detayına git
+      FirebaseFirestore.instance.collection('gonderiler').doc(postId).get().then((postDoc) {
+        if (postDoc.exists && mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => GonderiDetayEkrani.fromDoc(postDoc)),
+          );
+        } else {
+           if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("İlgili gönderi bulunamadı veya silinmiş.")));
+        }
+      });
+    } else if ((type == 'new_follower' || type == 'follow') && senderId != null) {
+      // Takipçinin profiline git
+       Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => KullaniciProfilDetayEkrani(userId: senderId, userName: senderName ?? 'Kullanıcı')),
+      );
+    }
+    // Diğer bildirim türleri için de benzer yönlendirmeler eklenebilir
   }
 
   @override
@@ -216,7 +246,7 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
         margin: const EdgeInsets.symmetric(vertical: 5),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: isRead ? BorderSide.none : BorderSide(color: AppColors.primary.withOpacity(0.3), width: 1),
+          side: isRead ? BorderSide.none : BorderSide(color: AppColors.primary.withAlpha(77), width: 1),
         ),
         child: InkWell(
           onTap: () => _handleNotificationTap(doc),
@@ -296,7 +326,7 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withAlpha(26),
         shape: BoxShape.circle,
       ),
       child: Icon(icon, color: color, size: 20),

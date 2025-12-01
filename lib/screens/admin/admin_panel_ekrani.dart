@@ -321,7 +321,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
               indicatorColor: AppColors.primaryAccent,
               indicatorWeight: 4,
               labelColor: Colors.white,
-              unselectedLabelColor: Colors.white.withOpacity(0.7),
+              unselectedLabelColor: Colors.white.withAlpha((255 * 0.7).round()),
               isScrollable: true,
               tabs: [
                 const Tab(icon: Icon(Icons.person_add), text: "Onay"),
@@ -387,7 +387,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                       contentPadding: const EdgeInsets.all(12),
                       leading: Container(
                         padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(color: AppColors.warning.withOpacity(0.1), shape: BoxShape.circle),
+                        decoration: BoxDecoration(color: AppColors.warning.withAlpha((255 * 0.1).round()), shape: BoxShape.circle),
                         child: const Icon(Icons.priority_high, color: AppColors.warning),
                       ),
                       title: Text(sub['name'] ?? data['ad'] ?? 'İsimsiz', style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -556,7 +556,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: _getStatusColor(status).withOpacity(0.1),
+                              color: _getStatusColor(status).withAlpha((255 * 0.1).round()),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(status, style: TextStyle(color: _getStatusColor(status), fontSize: 12, fontWeight: FontWeight.bold)),

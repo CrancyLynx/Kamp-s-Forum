@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart'; 
 
@@ -84,7 +83,6 @@ class KullaniciListesiEkrani extends StatelessWidget {
               final user = users[index].data() as Map<String, dynamic>;
               final userId = users[index].id;
               final isVerified = user['verified'] == true;
-              final status = user['status'] ?? 'Bilinmiyor';
               final String takmaAd = user['takmaAd'] ?? 'Anonim';
               final String fullName = user['fullName'] ?? user['ad'] ?? 'İsimsiz';
 

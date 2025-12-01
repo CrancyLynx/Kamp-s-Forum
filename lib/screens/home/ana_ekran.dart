@@ -15,16 +15,18 @@ import '../../utils/app_colors.dart';
 
 class AnaEkran extends StatefulWidget {
   final bool isGuest;
+  final VoidCallback? showLoginPrompt;
   final bool isAdmin;
   final String userName;
   final String realName;
 
   const AnaEkran({
     super.key,
-    required this.isGuest,
-    required this.isAdmin,
-    required this.userName,
-    required this.realName,
+    this.isGuest = false,
+    this.showLoginPrompt,
+    this.isAdmin = false,
+    this.userName = 'Misafir',
+    this.realName = 'Misafir',
   });
 
   @override
@@ -116,6 +118,13 @@ class _AnaEkranState extends State<AnaEkran> {
   }
 
   void _onItemTapped(int index) {
+    // Misafir kullanıcı profil sekmesine tıklarsa işlem yapma
+    if (widget.isGuest && index == 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Profil alanını görmek için giriş yapmalısınız.")),
+      );
+      return;
+    }
     _pageController.animateToPage(
       index,
       duration: const Duration(milliseconds: 300),
@@ -125,8 +134,57 @@ class _AnaEkranState extends State<AnaEkran> {
 
   @override
   Widget build(BuildContext context) {
+
+    final List<Widget> pages = [
+      const KesfetSayfasi(),
+      const PazarSayfasi(),
+      ForumSayfasi(
+        isGuest: widget.isGuest,
+        isAdmin: widget.isAdmin,
+        userName: widget.userName,
+        realName: widget.realName,
+      ),
+      // Misafir değilse profil sayfasını ekle
+      if (!widget.isGuest) const ProfilEkrani(),
+    ];
+
+    final List<BottomNavigationBarItem> navBarItems = [
+      BottomNavigationBarItem(
+        icon: Icon(Icons.explore_outlined, key: keyKesfet),
+        activeIcon: const Icon(Icons.explore),
+        label: 'Keşfet',
+      ),
+      BottomNavigationBarItem(
+        icon: Icon(Icons.shopping_bag_outlined, key: keyPazar),
+        activeIcon: const Icon(Icons.shopping_bag),
+        label: 'Pazar',
+      ),
+      BottomNavigationBarItem(
+        icon: Icon(Icons.forum_outlined, key: keyForum),
+        activeIcon: const Icon(Icons.forum),
+        label: 'Forum',
+      ),
+      // Misafir değilse profil butonunu ekle
+      if (!widget.isGuest)
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person_outline, key: keyProfil),
+          activeIcon: const Icon(Icons.person),
+          label: 'Profil',
+        ),
+    ];
+
+
     return Scaffold(
       appBar: (_selectedIndex == 0) ? _buildKesfetAppBar() : null,
+      floatingActionButton: widget.isGuest && (_selectedIndex == 0 || _selectedIndex == 1 || _selectedIndex == 2)
+          ? FloatingActionButton.extended(
+              onPressed: widget.showLoginPrompt,
+              label: const Text("Giriş Yap"),
+              icon: const Icon(Icons.login),
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            )
+          : null,
       
       body: PageView(
         controller: _pageController,
@@ -134,17 +192,7 @@ class _AnaEkranState extends State<AnaEkran> {
           setState(() => _selectedIndex = index);
         },
         physics: const NeverScrollableScrollPhysics(),
-        children: [
-          const KesfetSayfasi(),
-          const PazarSayfasi(), 
-          ForumSayfasi(
-            isGuest: widget.isGuest,
-            isAdmin: widget.isAdmin,
-            userName: widget.userName,
-            realName: widget.realName,
-          ),
-          const ProfilEkrani(),
-        ],
+        children: pages, // Değiştirilen kısım
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
@@ -152,24 +200,7 @@ class _AnaEkranState extends State<AnaEkran> {
         selectedItemColor: AppColors.primary,
         unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
-        items: [
-          BottomNavigationBarItem(
-              icon: Icon(Icons.explore_outlined, key: keyKesfet),
-              activeIcon: const Icon(Icons.explore),
-              label: 'Keşfet'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.shopping_bag_outlined, key: keyPazar),
-              activeIcon: const Icon(Icons.shopping_bag),
-              label: 'Pazar'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.forum_outlined, key: keyForum),
-              activeIcon: const Icon(Icons.forum),
-              label: 'Forum'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline, key: keyProfil),
-              activeIcon: const Icon(Icons.person),
-              label: 'Profil'),
-        ],
+        items: navBarItems, // Değiştirilen kısım
       ),
     );
   }

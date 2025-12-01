@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,6 +13,7 @@ import '../../services/auth_service.dart';
 import '../../utils/maskot_helper.dart'; 
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../services/university_service.dart'; // YENİ: Servis importu
+import '../../widgets/animated_list_item.dart';
 
 class GirisEkrani extends StatefulWidget {
   const GirisEkrani({super.key});
@@ -30,13 +32,14 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
   final TextEditingController _confirmPasswordController = TextEditingController();
   final TextEditingController _takmaAdController = TextEditingController();
   final TextEditingController _adSoyadController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController(); 
+  final TextEditingController _phoneController = TextEditingController(text: '+90'); 
   final TextEditingController _smsCodeController = TextEditingController();
 
   // Seçilen Üniversite ve Bölüm
   String? _selectedUniversity;
   String? _selectedDepartment;
 
+  bool _agreedToTerms = false;
   // Durum Değişkenleri
   bool isLogin = true;
   bool _rememberMe = false;
@@ -193,6 +196,37 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     );
   }
 
+  // YENİ: Şartlar ve Koşullar Diyalog Penceresi
+  void _showTermsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Şartlar ve Koşullar"),
+        content: const SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Lütfen uygulamamızı kullanmadan önce bu şartları ve koşulları dikkatlice okuyun.",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 10),
+              Text(
+                "1. Hesap Güvenliği: Hesap bilgilerinizin güvenliğinden siz sorumlusunuz. Şifrenizi kimseyle paylaşmayınız.\n\n"
+                "2. Kullanım Koşulları: Uygulamayı yasa dışı veya yetkisiz amaçlarla kullanamazsınız. Diğer kullanıcıları taciz etmek, spam göndermek veya rahatsız etmek kesinlikle yasaktır.\n\n"
+                "3. İçerik: Paylaştığınız içeriklerden (mesajlar, fotoğraflar vb.) siz sorumlusunuz. Topluluk kurallarına aykırı içerik paylaşılamaz.\n\n"
+                "4. Gizlilik: Gizlilik politikamız, kişisel verilerinizi nasıl topladığımızı ve kullandığımızı açıklamaktadır. Kayıt olarak bu politikayı da kabul etmiş olursunuz.\n\n"
+                "Bu koşulları kabul ederek uygulamamızı kullanmaya başlayabilirsiniz.",
+              ),
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text("Kapat"))],
+      ),
+    );
+  }
+
   Future<void> _sendSmsCode(String phone) async {
     setState(() => _isLoading = true);
     await _authService.verifyPhone(
@@ -214,7 +248,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
 
   Future<void> _verifySmsCode() async {
     if (_smsCodeController.text.length < 6) {
-      showSnackBar("Lütfen kodu tam girin.", isError: true);
+      showSnackBar("Lütfen 6 haneli kodu tam girin.", isError: true);
       return;
     }
     setState(() => _isLoading = true);
@@ -228,32 +262,34 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       final user = FirebaseAuth.instance.currentUser;
       
       if (user != null) {
+        // User is already logged in, link the credential for MFA
         try {
-           await user.linkWithCredential(credential);
-           await user.reload();
+          await user.linkWithCredential(credential);
+          await user.reload();
+          showSnackBar("Telefon numaranız başarıyla doğrulandı.");
+           if (mounted) setState(() => _codeSent = false);
         } on FirebaseAuthException catch (e) {
-           if (e.code == 'credential-already-in-use' || e.code == 'provider-already-linked') {
-             debugPrint("Telefon zaten bağlı, devam ediliyor.");
-           } else {
-             rethrow; 
-           }
-        }
-        showSnackBar("Giriş Başarılı!");
-        if (mounted) {
-          setState(() {
-             _isLoading = false;
-             _codeSent = false;
-          });
+          if (e.code == 'credential-already-in-use' || e.code == 'provider-already-linked') {
+            showSnackBar("Bu telefon numarası zaten doğrulanmış.");
+            if (mounted) setState(() => _codeSent = false);
+          } else {
+            showSnackBar(_authService.publicHandleError(e), isError: true);
+          }
         }
       } else {
+        // User is not logged in (phone login flow)
         await FirebaseAuth.instance.signInWithCredential(credential);
-        showSnackBar("Giriş Başarılı!");
+        showSnackBar("Giriş başarılı!");
+        // No need to set _codeSent to false, as the user will navigate away.
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
-      showSnackBar("Doğrulama hatası: ${e.toString().replaceAll(RegExp(r'\[.*?\]'), '')}", isError: true);
+      showSnackBar(_authService.publicHandleError(e), isError: true);
     } finally {
-      if (mounted && _isLoading) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+           _isLoading = false;
+        });
+      }
     }
   }
 
@@ -271,20 +307,14 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       
       if (phone.isEmpty || phone.length < 10) return showSnackBar("Geçerli numara girin.", isError: true);
 
-      try {
-        setState(() => _isLoading = true);
-        final error = await _authService.validatePhonePassword(phone, password);
-        
-        if (error == 'permission_error') {
-           await _sendSmsCode(phone);
-        } else if (error != null) {
-           throw Exception(error);
-        } else {
-           await _sendSmsCode(phone);
-        }
-      } catch (e) {
-        if (mounted) setState(() => _isLoading = false);
-        showSnackBar(e.toString().replaceAll("Exception: ", ""), isError: true);
+      setState(() => _isLoading = true);
+      final error = await _authService.validatePhonePassword(phone, password);
+      
+      if (error == null) {
+         await _sendSmsCode(phone);
+      } else {
+         if (mounted) setState(() => _isLoading = false);
+         showSnackBar(error, isError: true);
       }
       return;
     }
@@ -303,6 +333,13 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       if (_selectedUniversity == null || _selectedDepartment == null) {
         if (mounted) setState(() => _isLoading = false);
         showSnackBar("Lütfen üniversite ve bölüm seçin.", isError: true);
+        return;
+      }
+
+      // YENİ: Şartlar ve Koşullar Kontrolü
+      if (!_agreedToTerms) {
+        if (mounted) setState(() => _isLoading = false);
+        showSnackBar("Lütfen Şartlar ve Koşulları kabul edin.", isError: true);
         return;
       }
       
@@ -345,7 +382,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
               await _sendSmsCode(phone);
               showSnackBar("2 Aşamalı Doğrulama: Kod gönderildi.");
             } else {
-              await FirebaseAuth.instance.signOut();
+              await AuthService().signOut();
               if (mounted) setState(() => _isLoading = false);
               showSnackBar("Hesabınızda 2FA açık ancak telefon numarası kayıtlı değil.", isError: true);
             }
@@ -456,10 +493,20 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
 
                           AnimatedSwitcher(
                             duration: const Duration(milliseconds: 500),
+                            // YENİ: Daha akıcı bir geçiş animasyonu
+                            transitionBuilder: (Widget child, Animation<double> animation) {
+                              final inAnimation = Tween<Offset>(begin: const Offset(1.0, 0.0), end: Offset.zero).animate(animation);
+                              final outAnimation = Tween<Offset>(begin: const Offset(-1.0, 0.0), end: Offset.zero).animate(animation);
+
+                              return SlideTransition(
+                                position: child.key == ValueKey(isLogin) ? inAnimation : outAnimation,
+                                child: FadeTransition(opacity: animation, child: child),
+                              );
+                            },
                             child: _isMfaVerification || (_isPhoneLoginMode && _codeSent)
                                 ? _buildSmsCodeForm(isDark, textColor) 
                                 : (!isLogin 
-                                    ? _buildRegisterForm(isDark) // BURASI GÜNCELLENDİ
+                                    ? _buildRegisterForm(isDark)
                                     : (_isPhoneLoginMode 
                                         ? _buildPhoneLoginForm(isDark) 
                                         : _buildEmailLoginForm(isDark, textColor))), 
@@ -560,59 +607,83 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     );
   }
 
-  // --- MODERN KAYIT FORMU (GÜNCELLENDİ) ---
+  // --- MODERN KAYIT FORMU (ANİMASYONLU) ---
   Widget _buildRegisterForm(bool isDark) {
+    final universityNames = UniversityService().getUniversityNames();
     return Column(
       key: const ValueKey('register'), 
       children: [
-        _buildModernTextField(controller: _adSoyadController, label: "Ad Soyad", icon: Icons.person_outline, isDark: isDark),
+        // YENİ: Kademeli animasyon için AnimatedListItem kullanıldı
+        AnimatedListItem(index: 0, child: _buildModernTextField(controller: _adSoyadController, label: "Ad Soyad", icon: Icons.person_outline, isDark: isDark)),
         const SizedBox(height: 16),
-        _buildModernTextField(controller: _takmaAdController, label: "Takma Ad", icon: Icons.alternate_email, isDark: isDark),
+        AnimatedListItem(index: 1, child: _buildModernTextField(controller: _takmaAdController, label: "Takma Ad", icon: Icons.alternate_email, isDark: isDark)),
         const SizedBox(height: 16),
-        _buildModernTextField(controller: _phoneController, label: "Telefon Numarası", icon: Icons.phone_android, isDark: isDark, inputType: TextInputType.phone),
+        AnimatedListItem(index: 2, child: _buildModernTextField(controller: _phoneController, label: "Telefon Numarası", icon: Icons.phone_android, isDark: isDark, inputType: TextInputType.phone)),
         const SizedBox(height: 16),
-        _buildModernTextField(controller: emailController, label: "Üniversite E-postası (.edu.tr)", icon: Icons.email_outlined, isDark: isDark, suffixIcon: _isEduEmail ? const Icon(Icons.check_circle, color: AppColors.success) : null),
+        AnimatedListItem(index: 3, child: _buildModernTextField(controller: emailController, label: "Üniversite E-postası (.edu.tr)", icon: Icons.email_outlined, isDark: isDark, suffixIcon: _isEduEmail ? const Icon(Icons.check_circle, color: AppColors.success) : null)),
         const SizedBox(height: 16),
 
-        // YENİ: Modern Üniversite Seçimi
-        _buildModernAutocomplete(
-          label: "Üniversite",
-          hint: "Üniversiteni ara...",
-          options: UniversityService().getUniversityNames(),
-          onSelected: (val) {
-            setState(() {
-              _selectedUniversity = val;
-              _selectedDepartment = null;
-            });
-          },
-          onChanged: (val) {
-            // Elle yazmayı destekle
-            if (UniversityService().getUniversityNames().contains(val)) {
-              setState(() {
-                _selectedUniversity = val;
-                _selectedDepartment = null;
-              });
-            }
-          },
-          isDark: isDark
+        // --- YENİ EKLENEN PANEL BUTONU (ÜNİVERSİTE) ---
+        AnimatedListItem(
+          index: 4,
+          child: _buildModernSelectionField(
+              label: "Üniversite",
+              value: _selectedUniversity,
+              hint: "Üniversiteni seçmek için tıkla...",
+              enabled: true,
+              icon: Icons.school,
+              onTap: () async {
+                final selected = await _showSelectionPanel(
+                  context: context,
+                  title: "Üniversite Seç",
+                  options: universityNames,
+                );
+                if (selected != null && mounted) {
+                  setState(() {
+                    _selectedUniversity = selected;
+                    _selectedDepartment = null; // Üniversite değişince bölüm sıfırlanır
+                  });
+                }
+              },
+              isDark: isDark),
         ),
         const SizedBox(height: 16),
 
-        // YENİ: Modern Bölüm Seçimi
-        _buildModernAutocomplete(
-          label: "Bölüm",
-          hint: _selectedUniversity == null ? "Önce üniversite seçin" : "Bölümünü ara...",
-          enabled: _selectedUniversity != null,
-          options: _selectedUniversity != null ? UniversityService().getDepartmentsForUniversity(_selectedUniversity!) : [],
-          onSelected: (val) => setState(() => _selectedDepartment = val),
-          key: ValueKey(_selectedUniversity),
-          isDark: isDark
+        // --- YENİ EKLENEN PANEL BUTONU (BÖLÜM) ---
+        AnimatedListItem(
+          index: 5,
+          child: _buildModernSelectionField(
+              label: "Bölüm",
+              value: _selectedDepartment,
+              hint: _selectedUniversity == null ? "Önce üniversiteni seç" : "Bölümünü seçmek için tıkla...",
+              enabled: _selectedUniversity != null,
+              icon: Icons.book,
+              onTap: () async {
+                if (_selectedUniversity == null) return;
+                final selected = await _showSelectionPanel(context: context, title: "Bölüm Seç", options: UniversityService().getDepartmentsForUniversity(_selectedUniversity!));
+                if (selected != null && mounted) {
+                  setState(() => _selectedDepartment = selected);
+                }
+              },
+              isDark: isDark),
         ),
         const SizedBox(height: 16),
 
-        _buildModernTextField(controller: passwordController, label: "Şifre", icon: Icons.lock_outline, isDark: isDark, isPassword: true),
+        AnimatedListItem(
+          index: 6,
+          child: _buildModernTextField(controller: passwordController, label: "Şifre", icon: Icons.lock_outline, isDark: isDark, isPassword: true),
+        ),
         const SizedBox(height: 16),
-        _buildModernTextField(controller: _confirmPasswordController, label: "Şifre Tekrar", icon: Icons.lock_outline, isDark: isDark, isPassword: true),
+        AnimatedListItem(
+          index: 7,
+          child: _buildModernTextField(controller: _confirmPasswordController, label: "Şifre Tekrar", icon: Icons.lock_outline, isDark: isDark, isPassword: true),
+        ),
+        const SizedBox(height: 16),
+
+        AnimatedListItem(
+          index: 8,
+          child: _buildTermsAndConditions(isDark, isDark ? Colors.white70: Colors.black87),
+        ),
       ],
     );
   }
@@ -656,97 +727,199 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     );
   }
 
-  // YENİ: Modern Autocomplete Widget (Login Ekranı Stiline Uygun)
-  Widget _buildModernAutocomplete({
-    required String label, 
+  // YENİ: Şartlar ve Koşullar Onay Kutusu
+  Widget _buildTermsAndConditions(bool isDark, Color textColor) {
+    return Row(
+      children: [
+        SizedBox(
+          height: 24,
+          width: 24,
+          child: Checkbox(
+            value: _agreedToTerms,
+            onChanged: (value) {
+              setState(() {
+                _agreedToTerms = value!;
+              });
+            },
+            activeColor: AppColors.primary,
+            side: BorderSide(color: isDark ? Colors.grey[600]! : Colors.grey[400]!),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: TextStyle(fontSize: 12, color: textColor.withOpacity(0.8)),
+              children: [
+                const TextSpan(text: "Kayıt olarak "),
+                TextSpan(text: "Şartlar ve Koşulları", style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, decoration: TextDecoration.underline), recognizer: TapGestureRecognizer()..onTap = _showTermsDialog),
+                const TextSpan(text: " kabul etmiş olursunuz."),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // --- EKLENEN EKSİK FONKSİYON 1: Modern Seçim Alanı Widget'ı (Panel Tetikleyici) ---
+  Widget _buildModernSelectionField({
+    required String label,
+    String? value,
     required String hint,
-    required List<String> options, 
-    required Function(String) onSelected, 
-    Function(String)? onChanged,
-    bool enabled = true,
+    required bool enabled,
+    required VoidCallback onTap,
     required bool isDark,
-    Key? key
+    required IconData icon,
   }) {
-    return LayoutBuilder(
-      key: key,
-      builder: (context, constraints) {
-        return Autocomplete<String>(
-          optionsBuilder: (TextEditingValue textEditingValue) {
-            if (textEditingValue.text == '') return const Iterable<String>.empty();
-            return options.where((String option) {
-              return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
-            });
-          },
-          onSelected: onSelected,
-          fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
-             if (onChanged != null) {
-               // Basitlik adına onChanged'i burada kullanmıyoruz, 
-               // TextField'ın kendi onChanged'i ile çakışabilir.
-               // Gerekirse controller listener eklenebilir.
-             }
-             
-             return Container(
-               decoration: BoxDecoration(color: isDark ? Colors.grey[850] : Colors.grey[100], borderRadius: BorderRadius.circular(16)),
-               child: TextField(
-                 controller: controller,
-                 focusNode: focusNode,
-                 enabled: enabled,
-                 style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-                 onChanged: onChanged, // Elle yazmayı desteklemek için
-                 decoration: InputDecoration(
-                   labelText: label,
-                   hintText: hint,
-                   labelStyle: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 14),
-                   prefixIcon: Icon(
-                      label == "Üniversite" ? Icons.school : Icons.book, 
-                      color: enabled ? AppColors.primary.withOpacity(0.7) : Colors.grey
-                   ),
-                   suffixIcon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
-                   border: InputBorder.none,
-                   contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                 ),
-               ),
-             );
-          },
-          optionsViewBuilder: (context, onSelected, options) {
-            return Align(
-              alignment: Alignment.topLeft,
-              child: Material(
-                elevation: 8.0,
-                borderRadius: BorderRadius.circular(12),
-                color: Colors.transparent,
-                child: Container(
-                  width: constraints.maxWidth,
-                  constraints: const BoxConstraints(maxHeight: 200),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.grey[900] : Colors.white,
-                    borderRadius: BorderRadius.circular(12),
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDark ? Colors.grey[850] : Colors.grey[100],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.transparent), 
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Row(
+          children: [
+            Icon(icon, color: enabled ? AppColors.primary.withOpacity(0.7) : Colors.grey),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      fontSize: 12,
+                    ),
                   ),
-                  child: ListView.separated(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    itemCount: options.length,
-                    separatorBuilder: (context, index) => Divider(height: 1, color: isDark ? Colors.grey[800] : Colors.grey[200]),
-                    itemBuilder: (BuildContext context, int index) {
-                      final String option = options.elementAt(index);
-                      return InkWell(
-                        onTap: () => onSelected(option),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          child: Text(
-                            option, 
-                            style: TextStyle(color: isDark ? Colors.white : Colors.black87)
+                  const SizedBox(height: 4),
+                  Text(
+                    value ?? hint,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: value != null 
+                          ? (isDark ? Colors.white : Colors.black87) 
+                          : Colors.grey,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_drop_down, color: Colors.grey),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- EKLENEN EKSİK FONKSİYON 2: ARAMA ÖZELLİKLİ ŞIK SEÇİM PANELİ ---
+  Future<String?> _showSelectionPanel({
+    required BuildContext context,
+    required String title,
+    required List<String> options,
+  }) async {
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        
+        // Arama işlemi için yerel state
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            // Arama filtresi için yerel değişkenler (Closure içinde)
+            // Not: Başlangıçta tüm listeyi gösterir.
+            List<String> filteredOptions = options;
+            
+            // Eğer arama yapılmışsa (yani TextField doluysa) filtreli listeyi kullanırız.
+            // *Basitleştirilmiş Yöntem*:
+            // Burada controller yerine, arama metnini tutacak bir değişken kullanmıyoruz,
+            // direkt TextField'ın onChanged'i ile listeyi filtreliyoruz.
+
+            return DraggableScrollableSheet(
+              initialChildSize: 0.8, // Ekranın %80'i kadar açıl
+              minChildSize: 0.5,
+              maxChildSize: 0.95,
+              builder: (_, scrollController) {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 12),
+                      Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[400], borderRadius: BorderRadius.circular(2))),
+                      
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      ),
+                      
+                      // Arama Barı
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                        child: TextField(
+                          autofocus: false,
+                          onChanged: (val) {
+                            setModalState(() {
+                              // Listeyi filtrele ve UI'ı güncelle
+                              if (val.isEmpty) {
+                                filteredOptions = options; // Orijinal liste
+                              } else {
+                                filteredOptions = options.where((o) => o.toLowerCase().contains(val.toLowerCase())).toList();
+                              }
+                            });
+                          },
+                          decoration: InputDecoration(
+                            hintText: "$title Ara...",
+                            prefixIcon: const Icon(Icons.search),
+                            filled: true,
+                            fillColor: isDark ? Colors.grey[800] : Colors.grey[200],
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
                           ),
                         ),
-                      );
-                    },
+                      ),
+
+                      const Divider(height: 1),
+                      
+                      Expanded(
+                        child: filteredOptions.isEmpty 
+                          ? const Center(child: Text("Sonuç bulunamadı.", style: TextStyle(color: Colors.grey)))
+                          : ListView.separated(
+                              controller: scrollController,
+                              itemCount: filteredOptions.length,
+                              separatorBuilder: (context, index) => const Divider(height: 1, indent: 16, endIndent: 16),
+                              itemBuilder: (context, index) {
+                                final option = filteredOptions[index];
+                                return ListTile(
+                                  title: Text(option, style: const TextStyle(fontSize: 16)),
+                                  onTap: () => Navigator.pop(context, option),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                                  trailing: const Icon(Icons.chevron_right, size: 18, color: Colors.grey),
+                                );
+                              },
+                            ),
+                      ),
+                    ],
                   ),
-                ),
-              ),
+                );
+              }
             );
-          },
+          }
         );
-      }
+      },
     );
   }
 

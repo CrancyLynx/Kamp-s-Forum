@@ -34,19 +34,19 @@ class InAppNotification extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.15),
+                    color: Colors.black.withAlpha(38),
                     blurRadius: 20,
                     offset: const Offset(0, 5),
                   )
                 ],
-                border: Border.all(color: AppColors.primary.withOpacity(0.1)),
+                border: Border.all(color: AppColors.primary.withAlpha(26)),
               ),
               child: Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
+                      color: AppColors.primary.withAlpha(26),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.notifications_active, color: AppColors.primary),

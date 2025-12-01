@@ -20,7 +20,8 @@ class AuthService {
         case 'requires-recent-login': return 'Güvenlik gereği bu işlem için tekrar giriş yapmalısınız.';
         case 'credential-already-in-use': return 'Bu hesap bilgileri zaten kullanımda.';
         case 'permission-denied': return 'Erişim reddedildi. Yetkiniz yok.';
-        default: return 'Bir hata oluştu: ${e.message}';
+        // YENİ: Diğer tüm Firebase hataları için genel bir mesaj
+        default: return e.message ?? 'Bilinmeyen bir Firebase hatası oluştu.';
       }
     }
     return msg;
@@ -216,5 +217,18 @@ class AuthService {
   Future<String?> getSavedEmail() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('saved_email');
+  }
+
+  Future<void> signOut() async {
+    final User? user = _auth.currentUser;
+    if (user != null && user.isAnonymous) {
+      await user.delete();
+    }
+    // Bu işlemin sonucunu beklemeye gerek yok.
+    await _auth.signOut();
+  }
+
+  String publicHandleError(Object e) {
+    return _handleError(e);
   }
 }

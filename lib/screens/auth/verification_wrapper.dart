@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../utils/app_colors.dart';
+import '../../services/auth_service.dart';
 import '../../main.dart'; 
 
 class VerificationWrapper extends StatefulWidget {
@@ -17,7 +18,7 @@ class _VerificationWrapperState extends State<VerificationWrapper> {
   bool canResendEmail = false;
   Timer? emailTimer;
 
-  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController(text: '+90');
   final TextEditingController _smsCodeController = TextEditingController();
   String? _verificationId;
   bool _isLoading = false;
@@ -164,13 +165,15 @@ class _VerificationWrapperState extends State<VerificationWrapper> {
         title: const Text("Hesap Doğrulama"),
         centerTitle: true,
         automaticallyImplyLeading: false,
-        actions: [
-           IconButton(
-             icon: const Icon(Icons.logout),
-             onPressed: () => FirebaseAuth.instance.signOut(),
-             tooltip: "Çıkış Yap",
-           )
-        ],
+        actions: FirebaseAuth.instance.currentUser != null
+            ? [
+                IconButton(
+                  icon: const Icon(Icons.logout),
+                  onPressed: () => AuthService().signOut(),
+                  tooltip: "Çıkış Yap",
+                )
+              ]
+            : null,
       ),
       body: SingleChildScrollView(
         child: Padding(

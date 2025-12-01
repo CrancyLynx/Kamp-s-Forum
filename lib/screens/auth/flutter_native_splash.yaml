@@ -1,0 +1,6 @@
+flutter_native_splash:
+  # Yükleme ekranının arka plan rengi. Uygulamanızın ana rengi olan mor.
+  color: "#673AB7"
+
+  # Yükleme ekranında gösterilecek logo.
+  image: assets/images/app_logo3.png

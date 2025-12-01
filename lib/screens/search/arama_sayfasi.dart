@@ -183,7 +183,7 @@ class _AramaSayfasiState extends State<AramaSayfasi> {
           key: _searchBarKey, // --- KEY EKLE ---
           height: 40,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.2),
+            color: Colors.white.withAlpha(51),
             borderRadius: BorderRadius.circular(20),
           ),
           child: TextField(
@@ -278,7 +278,7 @@ class _AramaSayfasiState extends State<AramaSayfasi> {
         else if (locType == 'kutuphane') { icon = Icons.menu_book; color = Colors.purple; }
         else if (locType == 'universite') { icon = Icons.school; color = Colors.red; }
         
-        leading = CircleAvatar(backgroundColor: color.withOpacity(0.1), child: Icon(icon, color: color));
+        leading = CircleAvatar(backgroundColor: color.withAlpha(26), child: Icon(icon, color: color));
         subtitle = item['subtitle'] ?? '';
         onTap = () {
           Navigator.push(context, MaterialPageRoute(builder: (_) => KampusHaritasiSayfasi(initialFilter: locType)));
@@ -306,7 +306,7 @@ class _AramaSayfasiState extends State<AramaSayfasi> {
               const SizedBox(height: 4),
               Text(
                 typeLabel, 
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: typeColor.withOpacity(0.7)),
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: typeColor.withAlpha(179)),
               )
             ],
           ),

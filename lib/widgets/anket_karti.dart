@@ -157,7 +157,7 @@ class _AnketKartiState extends State<AnketKarti> {
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(color: Colors.black.withAlpha(13), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
       child: Column(
@@ -171,7 +171,7 @@ class _AnketKartiState extends State<AnketKarti> {
                 backgroundImage: (widget.data['avatarUrl'] != null) 
                     ? CachedNetworkImageProvider(widget.data['avatarUrl'], cacheManager: ImageCacheManager.instance) 
                     : null,
-                backgroundColor: AppColors.primary.withOpacity(0.1),
+                backgroundColor: AppColors.primary.withAlpha(26),
                 child: widget.data['avatarUrl'] == null 
                     ? Text(displayName.isNotEmpty ? displayName[0] : '?', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold))
                     : null,
@@ -248,7 +248,7 @@ class _AnketKartiState extends State<AnketKarti> {
                              gradient: LinearGradient(
                                begin: Alignment.topCenter,
                                end: Alignment.bottomCenter,
-                               colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
+                               colors: [Colors.transparent, Colors.black.withAlpha(217)],
                                stops: const [0.5, 1.0],
                              ),
                            ),
@@ -263,8 +263,8 @@ class _AnketKartiState extends State<AnketKarti> {
                              alignment: Alignment.centerLeft,
                              child: Container(
                                color: isSelected
-                                   ? AppColors.primary.withOpacity(0.6) // Seçiliyse morumsu
-                                   : Colors.white.withOpacity(0.3), // Değilse beyazımsı
+                                   ? AppColors.primary.withAlpha(153) // Seçiliyse morumsu
+                                   : Colors.white.withAlpha(77), // Değilse beyazımsı
                              ),
                            ),
 
@@ -340,7 +340,7 @@ class _AnketKartiState extends State<AnketKarti> {
                             widthFactor: percent,
                             child: Container(
                               decoration: BoxDecoration(
-                                color: isSelected ? AppColors.primary.withOpacity(0.2) : Colors.grey.withOpacity(0.15),
+                                color: isSelected ? AppColors.primary.withAlpha(51) : Colors.grey.withAlpha(38),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                             ),
@@ -353,7 +353,7 @@ class _AnketKartiState extends State<AnketKarti> {
                       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
                       decoration: BoxDecoration(
                         border: Border.all(
-                          color: isSelected ? AppColors.primary : Colors.grey.withOpacity(0.3),
+                          color: isSelected ? AppColors.primary : Colors.grey.withAlpha(77),
                           width: isSelected ? 2 : 1,
                         ),
                         borderRadius: BorderRadius.circular(8),

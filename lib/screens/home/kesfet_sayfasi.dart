@@ -1,22 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:kampus_yardim_app/screens/search/arama_sayfasi.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 // EKLENDİ: Harita ve Servis Importları
-import 'package:google_maps_flutter/google_maps_flutter.dart'; 
 import '../../services/map_data_service.dart';
 import '../map/kampus_haritasi_sayfasi.dart';
 
-import '../search/arama_sayfasi.dart'; // Eski arama sayfası (Yedek)
 import '../forum/gonderi_detay_ekrani.dart';
 import '../../services/news_service.dart';
 import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart'; 
 import '../event/etkinlik_detay_ekrani.dart'; 
-import 'package:intl/intl.dart'; 
 import '../../services/image_cache_manager.dart'; // YENİ: Merkezi önbellek yöneticisi
-import 'dart:math'; 
 
 class KesfetSayfasi extends StatefulWidget {
   const KesfetSayfasi({super.key});

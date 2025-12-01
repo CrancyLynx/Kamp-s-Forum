@@ -33,6 +33,7 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
 
   // Favoriler için state
   final String? _userId = FirebaseAuth.instance.currentUser?.uid;
+  final bool _isGuest = FirebaseAuth.instance.currentUser?.isAnonymous ?? false;
   Set<String> _favoriteProductIds = {};
 
   // --- MASKOT İÇİN KEY'LER ---
@@ -271,16 +272,18 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        key: _fabKey,
-        heroTag: 'pazar_ilan_fab',
-        onPressed: () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const UrunEklemeEkrani()));
-        },
-        backgroundColor: AppColors.primary,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text("İlan Ver", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      ),
+      floatingActionButton: !_isGuest
+          ? FloatingActionButton.extended(
+              key: _fabKey,
+              heroTag: 'pazar_ilan_fab',
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const UrunEklemeEkrani()));
+              },
+              backgroundColor: AppColors.primary,
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text("İlan Ver", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            )
+          : null,
     );
   }
 

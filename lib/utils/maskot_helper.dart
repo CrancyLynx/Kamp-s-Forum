@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
-import 'app_colors.dart';
 
 class MaskotHelper {
   /// Belirtilen özellik için bir eğitim turunun gösterilip gösterilmeyeceğini kontrol eder.
@@ -45,19 +44,55 @@ class MaskotHelper {
     String skipText = "ATLA",
     String finishText = "ANLADIM",
   }) {
-    // DÜZELTME: TargetFocus özellikleri final olduğu için doğrudan değiştirilemez.
-    // Bunun yerine, varsayılan değerleri uygulayarak YENİ bir nesne oluşturuyoruz.
+    final screenSize = MediaQuery.of(context).size;
+
     final updatedTargets = targets.map((target) {
+      // --- AKILLI KONUMLANDIRMA MANTIĞI ---
+      RenderBox? renderBox;
+      try {
+        renderBox = target.keyTarget?.currentContext?.findRenderObject() as RenderBox?;
+      } catch (e) {
+        // Context/RenderObject anlık olarak mevcut olmayabilir, bu durumda null kalır ve orijinal hizalama kullanılır.
+      }
+
+      List<TargetContent>? updatedContents;
+
+      if (renderBox != null && target.contents != null) {
+        final targetPosition = renderBox.localToGlobal(Offset.zero);
+        final targetHeight = renderBox.size.height;
+
+        updatedContents = target.contents!.map((content) {
+          var newAlign = content.align;
+
+          // Eğer içerik YUKARIDA gösterilecekse ama hedef ekranın üst %40'ındaysa, AŞAĞIYA al.
+          if (content.align == ContentAlign.top && targetPosition.dy < screenSize.height * 0.4) {
+            newAlign = ContentAlign.bottom;
+          }
+          // Eğer içerik AŞAĞIDA gösterilecekse ama hedef ekranın alt %40'ındaysa, YUKARIYA al.
+          else if (content.align == ContentAlign.bottom && (targetPosition.dy + targetHeight) > screenSize.height * 0.6) {
+            newAlign = ContentAlign.top;
+          }
+
+          // Sadece hizalama değiştiyse yeni bir TargetContent oluştur, aksi halde orijinali kullan.
+          if (newAlign != content.align) {
+            return TargetContent(
+              align: newAlign,
+              builder: content.builder,
+              customPosition: content.customPosition,
+            );
+          }
+          return content;
+        }).toList();
+      }
+
+      // Orijinal TargetFocus'u yeni içeriklerle (eğer varsa) veya varsayılan değerlerle yeniden oluştur.
       return TargetFocus(
         identify: target.identify,
         keyTarget: target.keyTarget,
         targetPosition: target.targetPosition,
-        contents: target.contents,
-        // Eğer shape null ise varsayılan olarak RRect (Yuvarlak Köşeli Kare) kullan
+        contents: updatedContents ?? target.contents,
         shape: target.shape ?? ShapeLightFocus.RRect,
-        // Eğer radius null ise varsayılan olarak 12 kullan
         radius: target.radius ?? 12,
-        // Diğer özellikleri aynen kopyala
         color: target.color,
         enableOverlayTab: target.enableOverlayTab,
         enableTargetTab: target.enableTargetTab,
@@ -71,7 +106,7 @@ class MaskotHelper {
 
     TutorialCoachMark(
       targets: updatedTargets, // Güncellenmiş listeyi kullanıyoruz
-      colorShadow: Colors.black.withOpacity(0.85),
+      colorShadow: Colors.black.withAlpha(217),
       textSkip: skipText,
       textStyleSkip: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
       paddingFocus: 10,
@@ -93,11 +128,11 @@ class MaskotHelper {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.75),
+        color: Colors.black.withAlpha(191),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.2)),
+        border: Border.all(color: Colors.white.withAlpha(51)),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 15, spreadRadius: 5),
+          BoxShadow(color: Colors.black.withAlpha(128), blurRadius: 15, spreadRadius: 5),
         ],
       ),
       child: Column(

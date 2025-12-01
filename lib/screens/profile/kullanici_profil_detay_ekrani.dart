@@ -13,6 +13,7 @@ import '../../models/badge_model.dart';
 import '../../utils/maskot_helper.dart';
 import '../chat/sohbet_detay_ekrani.dart';
 import 'profil_duzenleme_ekrani.dart';
+import 'engellenen_kullanicilar_ekrani.dart';
 import '../forum/forum_sayfasi.dart';
 import '../../widgets/animated_list_item.dart';
 import 'rozetler_sayfasi.dart';
@@ -20,6 +21,7 @@ import '../admin/admin_panel_ekrani.dart';
 import '../auth/giris_ekrani.dart'; 
 import '../admin/kullanici_listesi_ekrani.dart';
 import '../../services/image_cache_manager.dart';
+import '../../services/auth_service.dart';
 import '../../main.dart'; // ThemeProvider için
 
 class KullaniciProfilDetayEkrani extends StatefulWidget {
@@ -767,11 +769,19 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                 },
               ),
               ListTile(
+                leading: const Icon(Icons.block, color: Colors.red),
+                title: const Text('Engellenen Kullanıcılar'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const EngellenenKullanicilarEkrani()));
+                },
+              ),
+              ListTile(
                 leading: const Icon(Icons.logout, color: AppColors.error),
                 title: const Text('Çıkış Yap', style: TextStyle(color: AppColors.error)),
                 onTap: () async {
                   Navigator.pop(context);
-                  await FirebaseAuth.instance.signOut();
+                  await AuthService().signOut();
                   if (mounted) {
                     Navigator.of(context).pushAndRemoveUntil(
                       MaterialPageRoute(builder: (context) => const GirisEkrani()),

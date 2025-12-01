@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 // Native Splash Paketi Importu
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-import '../../utils/app_colors.dart';
 import '../../main.dart'; 
 
 class SplashScreen extends StatefulWidget {
@@ -72,12 +71,12 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        // YENİ: Siyahtan griye doğru kayan gradyan arka plan
+        // DEĞİŞTİRİLDİ: Arka plan mora çevrildi.
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFF212121), Color.fromARGB(255, 41, 41, 41)], // Koyu griden -> Açık griye
+            colors: [Color(0xFF512DA8), Color(0xFF311B92)], // Koyu mordan -> daha koyu mora
           ),
         ),
         child: Center(
@@ -90,8 +89,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // Logo
-                    Opacity(
-                      opacity: _opacityAnimation.value,
+                    FadeTransition(
+                      opacity: _opacityAnimation,
                       child: Image.asset('assets/images/app_logo3.png', width: 150),
                     ),
                     const SizedBox(height: 24),
@@ -106,7 +105,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                           shaderCallback: (bounds) => const LinearGradient(
                             colors: [Color(0xFFE0E0E0), Color(0xFFBDBDBD)], // Açık griden -> Koyu griye
                             begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
+                            end: Alignment.bottomCenter, 
                           ).createShader(Rect.fromLTWH(0, 0, bounds.width, bounds.height)),
                           child: const Text(
                             "Kampüs Forum",

@@ -30,7 +30,7 @@ class AppLogo extends StatelessWidget {
             shape: BoxShape.circle,
             // İsteğe bağlı hafif çerçeve
             border: Border.all(
-              color: textColor.withOpacity(0.1), 
+              color: textColor.withAlpha(26), 
               width: 1
             ),
           ),
@@ -64,7 +64,7 @@ class AppLogo extends StatelessWidget {
             letterSpacing: 2,
             shadows: [
               Shadow(
-                color: textColor.withOpacity(0.2),
+                color: textColor.withAlpha(51),
                 blurRadius: 10,
                 offset: const Offset(0, 2),
               )

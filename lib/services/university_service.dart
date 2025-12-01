@@ -11,6 +11,7 @@ class UniversityService {
 
   // Uygulama açılınca veya ekran yüklenince çağrılmalı
   Future<void> loadData() async {
+    // Veri zaten yüklüyse tekrar yükleme
     if (_universities.isNotEmpty) return;
 
     try {
@@ -19,7 +20,7 @@ class UniversityService {
       
       _universities = data.map((e) => {
         "name": e['name'].toString(),
-        // HATA DÜZELTMESİ: Listeyi güvenli bir şekilde String listesine çeviriyoruz
+        // Listeyi güvenli bir şekilde String listesine çeviriyoruz
         "departments": (e['departments'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? <String>[]
       }).toList();
       
@@ -37,14 +38,18 @@ class UniversityService {
   // Seçilen üniversiteye göre bölümleri getir
   List<String> getDepartmentsForUniversity(String uniName) {
     try {
+      // DÜZELTME: orElse null değil, boş bir Map döndürmeli.
       final uni = _universities.firstWhere(
-        (e) => e['name'] == uniName, 
-        // HATA DÜZELTMESİ: Eğer bulunamazsa güvenli, boş bir String listesi döndür
-        orElse: () => {"name": "", "departments": <String>[]} 
+        (e) => e['name'].toString().toLowerCase() == uniName.toLowerCase(),
+        orElse: () => {"name": "", "departments": <String>[]}, 
       );
-      
+
+      // uni artık null olamaz, ancak departments içeriğini kontrol ediyoruz.
+      final departments = uni['departments'];
+      if (departments == null) return [];
+
       // Listeyi güvenli bir şekilde al ve sırala
-      List<String> depts = List<String>.from(uni['departments']);
+      List<String> depts = List<String>.from(departments);
       depts.sort();
       return depts;
     } catch (e) {

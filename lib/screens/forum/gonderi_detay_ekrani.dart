@@ -75,6 +75,7 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
   String? _replyingToCommentId;
   bool _isPosting = false;
   
+  bool _isLiking = false;
   bool _isLiked = false;
   int _likeCount = 0;
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
@@ -130,40 +131,89 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
     super.dispose();
   }
 
-  void _handleLike(List<dynamic> currentLikes) {
-    if (_currentUserId.isEmpty) return;
-    final postRef = FirebaseFirestore.instance.collection('gonderiler').doc(widget.postId);
-    final userRef = FirebaseFirestore.instance.collection('kullanicilar').doc(widget.authorUserId);
+  Future<void> _handleLike(List<dynamic> currentLikes) async {
+    if (_isLiking || _currentUserId.isEmpty) return;
 
     setState(() {
+      _isLiking = true;
       if (_isLiked) {
         _isLiked = false;
         _likeCount--;
-        postRef.update({'likes': FieldValue.arrayRemove([_currentUserId])});
-        userRef.update({'likeCount': FieldValue.increment(-1)});
       } else {
         _isLiked = true;
         _likeCount++;
         _likeAnimController.forward().then((_) => _likeAnimController.reverse());
-        postRef.update({'likes': FieldValue.arrayUnion([_currentUserId])});
-        userRef.update({'likeCount': FieldValue.increment(1)});
-        _sendLikeNotification();
       }
     });
+
+    final postRef = FirebaseFirestore.instance.collection('gonderiler').doc(widget.postId);
+    final userRef = FirebaseFirestore.instance.collection('kullanicilar').doc(widget.authorUserId);
+
+    try {
+      if (!_isLiked) { // Beğeniyi geri alıyorsa
+        await postRef.update({'likes': FieldValue.arrayRemove([_currentUserId])});
+        await userRef.update({'likeCount': FieldValue.increment(-1)});
+      } else { // Beğeniyorsa
+        await postRef.update({'likes': FieldValue.arrayUnion([_currentUserId])});
+        await userRef.update({'likeCount': FieldValue.increment(1)});
+        await _sendLikeNotification();
+      }
+    } catch (e) {
+      // Hata durumunda UI'ı eski haline getir
+      setState(() {
+        if (_isLiked) {
+          _isLiked = false;
+          _likeCount--;
+        } else {
+          _isLiked = true;
+          _likeCount++;
+        }
+      });
+       if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bir hata oluştu.")));
+    } finally {
+      if(mounted) {
+        setState(() {
+          _isLiking = false;
+        });
+      }
+    }
   }
 
   Future<void> _sendLikeNotification() async {
     if (_currentUserId == widget.authorUserId) return;
-    await FirebaseFirestore.instance.collection('bildirimler').add({
-      'userId': widget.authorUserId,
-      'postId': widget.postId,
-      'postTitle': widget.baslik,
-      'type': 'like',
-      'senders': [{'id': _currentUserId, 'name': widget.userName}],
-      'message': '${widget.userName} gönderini beğendi.',
-      'isRead': false,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
+    // Bildirimleri birleştirmek için gönderi ID'si ve beğenen kullanıcı ID'si ile eşleşen bir bildirim arayalım.
+    final notificationQuery = await FirebaseFirestore.instance
+        .collection('bildirimler')
+        .where('postId', isEqualTo: widget.postId)
+        .where('type', isEqualTo: 'like')
+        .where('userId', isEqualTo: widget.authorUserId)
+        .limit(1)
+        .get();
+
+    if (notificationQuery.docs.isNotEmpty) {
+      // Var olan bildirimi güncelle
+      final docId = notificationQuery.docs.first.id;
+      await FirebaseFirestore.instance.collection('bildirimler').doc(docId).update({
+        'senderId': _currentUserId, // Son beğenenin ID'si
+        'senderName': widget.userName, // Son beğenenin adı
+        'message': '${widget.userName} ve diğerleri gönderini beğendi.',
+        'isRead': false,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } else {
+      // Yeni bildirim oluştur
+       await FirebaseFirestore.instance.collection('bildirimler').add({
+        'userId': widget.authorUserId,
+        'postId': widget.postId,
+        'postTitle': widget.baslik,
+        'type': 'like',
+        'senderId': _currentUserId,
+        'senderName': widget.userName,
+        'message': '${widget.userName} gönderini beğendi.',
+        'isRead': false,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    }
   }
 
   Future<void> _pickCommentImage() async {
@@ -239,6 +289,7 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
       if (_currentUserId != widget.authorUserId) {
         await FirebaseFirestore.instance.collection('bildirimler').add({
           'userId': widget.authorUserId,
+          'senderId': _currentUserId, // EKLENDİ
           'senderName': myName,
           'type': 'new_comment',
           'postId': widget.postId,

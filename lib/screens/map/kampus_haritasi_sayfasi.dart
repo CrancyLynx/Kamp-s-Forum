@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' show cos, sqrt, atan2, pi, sin;
 import 'dart:ui' as ui;
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -82,6 +81,15 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   ''';
 
   @override
+  void dispose() {
+    _firestoreSubscription?.cancel();
+    _mapController?.dispose();
+    _searchController.dispose();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  @override
   void initState() {
     super.initState();
     _currentFilter = widget.initialFilter;
@@ -155,17 +163,9 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       if (mounted) { // mounted kontrolü önemli
         setState(() {
           _userLocation = LatLng(pos.latitude, pos.longitude);
-          // YENİ: Kullanıcı konumu için özel bir marker ekleyelim.
-          _markers.add(
-            Marker(
-              markerId: const MarkerId('user_location'),
-              position: _userLocation!,
-              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen), // Farklı bir renk
-              infoWindow: const InfoWindow(title: 'Konumun'),
-            ));
         });
         if (widget.initialFocus == null && _mapController != null) {
-          _mapController!.animateCamera(CameraUpdate.newLatLngZoom(_userLocation!, 16));
+          _mapController?.animateCamera(CameraUpdate.newLatLngZoom(_userLocation!, 16));
         }
       }
       return true; // İzin alındı ve konum mevcut.
@@ -241,6 +241,16 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
 
   void _rebuildMarkers() {
     Set<Marker> newMarkers = {};
+    if (_userLocation != null) {
+      newMarkers.add(
+        Marker(
+          markerId: const MarkerId('user_location'),
+          position: _userLocation!,
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          infoWindow: const InfoWindow(title: 'Konumun'),
+        ),
+      );
+    }
 
     for (var loc in _firestoreLocations) {
       newMarkers.add(Marker(
@@ -253,9 +263,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     }
 
     for (var loc in _googleLocations) {
-      // DÜZELTME: Sadece isme göre değil, konuma göre de filtrele.
-      // Eğer Firestore'da aynı isimde ve 100m'den daha yakın bir mekan yoksa Google mekanını ekle.
-      bool isDuplicate = _firestoreLocations.any((f) => f.title == loc.title && _calculateDistance(f.position, loc.position) < 0.1); // 0.1 km = 100 metre
+      bool isDuplicate = _firestoreLocations.any((f) => f.title == loc.title && _calculateDistance(f.position, loc.position) < 0.1);
       if (!isDuplicate) {
         newMarkers.add(Marker(
           markerId: MarkerId("g_${loc.id}"),
@@ -266,7 +274,11 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       }
     }
 
-    if (mounted) setState(() => _markers = newMarkers);
+    if (mounted) {
+      setState(() {
+        _markers = newMarkers;
+      });
+    }
   }
 
   // 4. Harita Oluştuğunda
@@ -300,7 +312,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () async {
       if (query.isEmpty) {
-        setState(() => _searchResults = []);
+        if (mounted) setState(() => _searchResults = []);
         return;
       }
       final results = await _mapDataService.getPlacePredictions(query, _userLocation);
@@ -315,7 +327,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
 
     final location = await _mapDataService.getPlaceDetails(placeId);
     if (location != null && _mapController != null) {
-      _mapController!.animateCamera(CameraUpdate.newLatLngZoom(location.position, 17));
+      _mapController?.animateCamera(CameraUpdate.newLatLngZoom(location.position, 17));
       _showLocationDetails(location);
       
       setState(() {
@@ -433,11 +445,13 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                   onPressed: () async {
                     final comment = _commentController.text.trim();
                     if (comment.isEmpty) {
+                      if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Yorum boş bırakılamaz.")));
                       return;
                     }
                     Navigator.pop(context); // Yorum gönderme dialogunu kapat
                     final error = await _mapDataService.addReview(location.id, _rating, comment);
+                    if (!mounted) return;
                     if (error != null) {
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Yorum eklenirken hata oluştu: $error"), backgroundColor: AppColors.error));
                     } else {
@@ -462,30 +476,38 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
         expand: false,
         initialChildSize: 0.8,
         maxChildSize: 0.9,
-        builder: (_, scrollController) => Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Text("${location.title} Yorumları", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const Divider(height: 20),
-              Expanded(
-                child: StreamBuilder<List<ReviewModel>>(
-                  stream: _mapDataService.getReviewsStream(location.id),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                      return const Center(child: Text("Henüz yorum yapılmamış."));
-                    }
-                    final reviews = snapshot.data!;
-                    return ListView.separated(
-                      controller: scrollController,
-                      itemCount: reviews.length,
-                      separatorBuilder: (c, i) => const Divider(),
-                      itemBuilder: (c, i) => _buildReviewTile(reviews[i]),
-                    );
-                  },
+        builder: (_, scrollController) => SafeArea(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Text("${location.title} Yorumları", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Divider(height: 20),
+                Expanded(
+                  child: StreamBuilder<List<ReviewModel>>(
+                    stream: _mapDataService.getReviewsStream(location.id),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snapshot.hasError) {
+                        return Center(child: Text("Yorumlar yüklenirken bir hata oluştu: ${snapshot.error}"));
+                      }
+                      if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                        return const Center(child: Text("Henüz yorum yapılmamış."));
+                      }
+                      final reviews = snapshot.data!;
+                      return ListView.separated(
+                        controller: scrollController,
+                        itemCount: reviews.length,
+                        separatorBuilder: (c, i) => const Divider(),
+                        itemBuilder: (c, i) => _buildReviewTile(reviews[i]),
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -503,9 +525,14 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
           CircleAvatar(
             radius: 20,
             backgroundImage: (review.userAvatar != null && review.userAvatar!.isNotEmpty)
-                ? CachedNetworkImageProvider(review.userAvatar!, cacheManager: ImageCacheManager.instance)
+                ? CachedNetworkImageProvider(
+                    review.userAvatar!,
+                    cacheManager: ImageCacheManager.instance,
+                  )
                 : null,
-            child: (review.userAvatar == null || review.userAvatar!.isEmpty) ? const Icon(Icons.person) : null,
+            child: (review.userAvatar == null || review.userAvatar!.isEmpty)
+                ? const Icon(Icons.person, size: 20)
+                : null,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -567,7 +594,8 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                               cacheManager: ImageCacheManager.instance, // YENİ: Merkezi önbellek yöneticisi kullanılıyor.
                               imageUrl: location.photoUrls[i],
                               fit: BoxFit.cover,
-                              placeholder: (c, u) => Container(color: Colors.grey[200]),
+                              placeholder: (c, u) => Container(color: Colors.grey[200], child: const Center(child: CircularProgressIndicator())),
+                              errorWidget: (c, u, e) => Container(color: Colors.grey[200], child: const Icon(Icons.error)),
                             ),
                           )
                         : Container(
@@ -648,10 +676,17 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                           ),
                           const SizedBox(width: 8),
                           IconButton.filledTonal( 
-                            onPressed: () {
-                                // DÜZELTME: Doğru URL formatı
+                            onPressed: () async {
                                 final url = 'https://www.google.com/maps/search/?api=1&query=${location.position.latitude},${location.position.longitude}';
-                                launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                                try {
+                                  await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                                } catch (e) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text("Harita uygulaması açılamadı.")),
+                                    );
+                                  }
+                                }
                             },
                             icon: const Icon(Icons.map),
                             tooltip: "Google Maps",
@@ -702,6 +737,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       child: InkWell(
         onTap: () {
           _mapDataService.voteForStatus(locId, text);
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Oylandı: $text"), duration: const Duration(seconds: 1)));
         },
         child: Container(
@@ -876,8 +912,8 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                   backgroundColor: AppColors.primary,
                   child: const Icon(Icons.my_location, color: Colors.white),
                   onPressed: () {
-                    if (_userLocation != null && _mapController != null) {
-                      _mapController!.animateCamera(CameraUpdate.newLatLngZoom(_userLocation!, 16));
+                    if (_userLocation != null) {
+                      _mapController?.animateCamera(CameraUpdate.newLatLngZoom(_userLocation!, 16));
                     } else {
                       _getUserLocation();
                     }
