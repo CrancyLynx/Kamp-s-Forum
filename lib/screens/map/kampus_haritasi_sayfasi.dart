@@ -155,9 +155,17 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       if (mounted) { // mounted kontrolü önemli
         setState(() {
           _userLocation = LatLng(pos.latitude, pos.longitude);
+          // YENİ: Kullanıcı konumu için özel bir marker ekleyelim.
+          _markers.add(
+            Marker(
+              markerId: const MarkerId('user_location'),
+              position: _userLocation!,
+              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen), // Farklı bir renk
+              infoWindow: const InfoWindow(title: 'Konumun'),
+            ));
         });
         if (widget.initialFocus == null && _mapController != null) {
-          _mapController!.animateCamera(CameraUpdate.newLatLngZoom(_userLocation!, 15));
+          _mapController!.animateCamera(CameraUpdate.newLatLngZoom(_userLocation!, 16));
         }
       }
       return true; // İzin alındı ve konum mevcut.
@@ -245,8 +253,10 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     }
 
     for (var loc in _googleLocations) {
-      bool exists = _firestoreLocations.any((f) => f.title == loc.title);
-      if (!exists) {
+      // DÜZELTME: Sadece isme göre değil, konuma göre de filtrele.
+      // Eğer Firestore'da aynı isimde ve 100m'den daha yakın bir mekan yoksa Google mekanını ekle.
+      bool isDuplicate = _firestoreLocations.any((f) => f.title == loc.title && _calculateDistance(f.position, loc.position) < 0.1); // 0.1 km = 100 metre
+      if (!isDuplicate) {
         newMarkers.add(Marker(
           markerId: MarkerId("g_${loc.id}"),
           position: loc.position,
@@ -426,12 +436,12 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Yorum boş bırakılamaz.")));
                       return;
                     }
-                    Navigator.pop(context); // Önce dialogu kapat
+                    Navigator.pop(context); // Yorum gönderme dialogunu kapat
                     final error = await _mapDataService.addReview(location.id, _rating, comment);
                     if (error != null) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: AppColors.error));
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Yorum eklenirken hata oluştu: $error"), backgroundColor: AppColors.error));
                     } else {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Yorumunuz eklendi!"), backgroundColor: AppColors.success));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Değerlendirmeniz için teşekkürler! Yorumunuz eklendi."), backgroundColor: AppColors.success));
                     }
                   },
                   child: const Text("Gönder"),
@@ -625,8 +635,8 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: () {
-                                 _mapDataService.addPhotoToLocation(location.id, "https://placehold.co/600x400/png?text=Yeni+Foto");
-                                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fotoğraf eklendi!')));
+                                 // TODO: Gerçek fotoğraf ekleme işlevi eklenecek.
+                                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fotoğraf ekleme özelliği yakında gelecek!')));
                               },
                               icon: const Icon(Icons.add_a_photo),
                               label: const Text("Foto Ekle"),

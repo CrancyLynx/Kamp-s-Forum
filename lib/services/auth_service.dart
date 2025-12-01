@@ -1,11 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // DEĞİŞTİ
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   // Hata Mesajlarını Türkçeleştirme
   String _handleError(Object e) {
@@ -38,15 +37,17 @@ class AuthService {
     }
   }
 
-  // --- 2. GİRİŞ YAPMA (MFA KONTROLLÜ) ---
+  // --- 2. GİRİŞ YAPMA ---
   Future<String> signInWithEmail(String email, String password, bool rememberMe) async {
     try {
       UserCredential cred = await _auth.signInWithEmailAndPassword(email: email, password: password);
       
+      // DEĞİŞTİ: SharedPreferences kullanımı
+      final prefs = await SharedPreferences.getInstance();
       if (rememberMe) {
-        await _storage.write(key: 'saved_email', value: email);
+        await prefs.setString('saved_email', email);
       } else {
-        await _storage.delete(key: 'saved_email');
+        await prefs.remove('saved_email');
       }
 
       // MFA Kontrolü
@@ -70,6 +71,8 @@ class AuthService {
     required String adSoyad,
     required String takmaAd,
     required String phone,
+    required String university,
+    required String department,
   }) async {
     try {
       final lowerEmail = email.toLowerCase();
@@ -84,7 +87,7 @@ class AuthService {
       final user = cred.user;
 
       if (user != null) {
-        await _createUserDocument(user, adSoyad, takmaAd, phone, email);
+        await _createUserDocument(user, adSoyad, takmaAd, phone, email, university, department);
       }
       return null;
     } catch (e) {
@@ -93,7 +96,7 @@ class AuthService {
   }
 
   // --- KULLANICI DOC OLUŞTURUCU ---
-  Future<void> _createUserDocument(User user, String adSoyad, String takmaAd, String phone, String email) async {
+  Future<void> _createUserDocument(User user, String adSoyad, String takmaAd, String phone, String email, String uni, String dept) async {
     final adSoyadParts = adSoyad.split(' ');
     final sadeceAd = adSoyadParts.isNotEmpty ? adSoyadParts.first : '';
     
@@ -103,6 +106,14 @@ class AuthService {
       'takmaAd': takmaAd,
       'ad': sadeceAd,
       'fullName': adSoyad,
+      'universite': uni,
+      'bolum': dept,
+      'submissionData': {
+        'university': uni,
+        'department': dept,
+        'name': sadeceAd,
+        'surname': adSoyad.replaceFirst(sadeceAd, '').trim(),
+      },
       'kayit_tarihi': FieldValue.serverTimestamp(),
       'verified': false,
       'status': 'Unverified',
@@ -118,7 +129,8 @@ class AuthService {
     }, SetOptions(merge: true)); 
   }
 
-  // --- 4. YENİDEN KİMLİK DOĞRULAMA ---
+  // --- DİĞER FONKSİYONLAR (MFA, Validate, Guest vb.) ---
+  
   Future<bool> reauthenticateUser(String password) async {
     User? user = _auth.currentUser;
     if (user == null || user.email == null) return false;
@@ -131,7 +143,6 @@ class AuthService {
     }
   }
 
-  // --- 5. TELEFON DOĞRULAMA (SMS) ---
   Future<void> verifyPhone({
     required String phoneNumber,
     required Function(String) onCodeSent,
@@ -166,24 +177,16 @@ class AuthService {
     );
   }
 
-  // --- 6. TELEFON + ŞİFRE KONTROLÜ (GÜVENLİ) ---
   Future<String?> validatePhonePassword(String phone, String password) async {
     try {
-      // DİKKAT: Firestore Rules'da "allow read: if true;" yoksa bu sorgu hata verir.
-      // Güvenli çözüm için Cloud Function önerilir.
       final query = await _firestore.collection('kullanicilar').where('phoneNumber', isEqualTo: phone).limit(1).get();
-      
       if (query.docs.isEmpty) return "Bu numara ile kayıtlı hesap bulunamadı.";
-      
       final email = query.docs.first['email'];
-      // Şifreyi doğrulamak için giriş yap
       await _auth.signInWithEmailAndPassword(email: email, password: password);
-      
-      return null; // Başarılı
+      return null;
     } on FirebaseException catch (e) {
       if (e.code == 'permission-denied') {
-        // Kullanıcıya özel hata mesajı
-        return "Sistem Hatası: Veritabanı okuma izni yok. (Lütfen geliştirici ile iletişime geçin: Rule Permission)"; 
+        return "Sistem Hatası: Veritabanı okuma izni yok."; 
       }
       return _handleError(e);
     } catch (e) {
@@ -191,16 +194,11 @@ class AuthService {
     }
   }
 
-  // --- 7. DİĞER YARDIMCILAR ---
   Future<String?> toggleMFA(bool enable) async {
     final user = _auth.currentUser;
-    if (user == null) {
-      return "Bu işlem için giriş yapmış olmalısınız.";
-    }
+    if (user == null) return "Bu işlem için giriş yapmış olmalısınız.";
     try {
-      await _firestore.collection('kullanicilar').doc(user.uid).update({
-        'isTwoFactorEnabled': enable,
-      });
+      await _firestore.collection('kullanicilar').doc(user.uid).update({'isTwoFactorEnabled': enable});
       return null;
     } catch (e) {
       return _handleError(e);
@@ -214,7 +212,9 @@ class AuthService {
     } catch (e) { return _handleError(e); }
   }
 
+  // DEĞİŞTİ: SharedPreferences kullanımı
   Future<String?> getSavedEmail() async {
-    return await _storage.read(key: 'saved_email');
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('saved_email');
   }
 }

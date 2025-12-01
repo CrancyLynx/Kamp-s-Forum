@@ -11,6 +11,7 @@ import '../../widgets/app_logo.dart';
 import '../../services/auth_service.dart';
 import '../../utils/maskot_helper.dart'; 
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import '../../services/university_service.dart'; // YENİ
 
 class GirisEkrani extends StatefulWidget {
   const GirisEkrani({super.key});
@@ -29,33 +30,38 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
   final TextEditingController _confirmPasswordController = TextEditingController();
   final TextEditingController _takmaAdController = TextEditingController();
   final TextEditingController _adSoyadController = TextEditingController();
-  
-  // Telefon/SMS Girişi
   final TextEditingController _phoneController = TextEditingController(); 
   final TextEditingController _smsCodeController = TextEditingController();
 
-  // Durum Değişkenleri
+  // YENİ: Seçilen Veriler
+  String? _selectedUniversity;
+  String? _selectedDepartment;
+
+  // Durumlar
   bool isLogin = true;
   bool _rememberMe = false;
   bool _isEduEmail = false;
   bool _isLoading = false;
-  
-  // 2FA ve Telefon Modu
   bool _isPhoneLoginMode = false; 
   bool _isMfaVerification = false; 
   bool _codeSent = false; 
   String? _verificationId; 
 
-  // --- YENİ SİSTEM İÇİN GLOBAL KEY'LER ---
+  // Key'ler
   final GlobalKey _loginButtonKey = GlobalKey();
   final GlobalKey _registerSwitchKey = GlobalKey();
-  final GlobalKey _loginFormKey = GlobalKey(); // YENİ: Giriş formu için key
-  final GlobalKey _logoKey = GlobalKey(); // YENİ: Logo için key
+  final GlobalKey _loginFormKey = GlobalKey(); 
+  final GlobalKey _logoKey = GlobalKey(); 
 
   @override
   void initState() {
     super.initState();
     _loadSavedEmail();
+
+    // YENİ: Üniversite verilerini yükle
+    UniversityService().loadData().then((_) {
+      if(mounted) setState(() {});
+    });
 
     _animationController = AnimationController(
       vsync: this,
@@ -67,29 +73,29 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       final isEdu = email.endsWith('.edu.tr') || email.endsWith('.edu');
       if (isEdu != _isEduEmail) setState(() => _isEduEmail = isEdu);
     });
-    // --- YENİ SİSTEM İLE MASKOT KODU ---
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       MaskotHelper.checkAndShow(context,
           featureKey: 'giris_tutorial_gosterildi',
           targets: [
             TargetFocus(
                 identify: "welcome-notification",
-                shape: ShapeLightFocus.Circle, // YENİ: Vurgu şeklini daire yapar
-                keyTarget: _logoKey, // Logoyu hedef alıyoruz
+                shape: ShapeLightFocus.Circle, 
+                keyTarget: _logoKey, 
                 alignSkip: Alignment.bottomRight,
                 contents: [
-                  TargetContent( // YENİ: Konum aşağıya alındı
+                  TargetContent( 
                       align: ContentAlign.top,
                       builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Haberdar Ol!', description: 'Duyurulardan, etkinliklerden ve kampüsteki önemli gelişmelerden anında haberdar olmak için bildirimlere izin vermeyi unutma!', mascotAssetPath: 'assets/images/mutlu_bay.png'))
                 ]),
             TargetFocus(
-                identify: "login-form", // YENİ: ID değiştirildi
-                keyTarget: _loginFormKey, // YENİ: Formu hedef al
-                shape: ShapeLightFocus.RRect, // YENİ: Şekil dikdörtgen
-                radius: 24, // YENİ: Köşe yuvarlaklığı
+                identify: "login-form", 
+                keyTarget: _loginFormKey, 
+                shape: ShapeLightFocus.RRect, 
+                radius: 24, 
                 contents: [
                   TargetContent(
-                    align: ContentAlign.bottom, builder: (context, controller) => // YENİ: Konum değiştirildi
+                    align: ContentAlign.bottom, builder: (context, controller) => 
                       MaskotHelper.buildTutorialContent(
                           context,
                           title: 'Seni Bekliyoruz!',
@@ -98,8 +104,8 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                 ]),
             TargetFocus(
                 identify: "register-switch",
-                shape: ShapeLightFocus.RRect, // YENİ: Şekil dikdörtgen
-                radius: 16, // YENİ: Köşe yuvarlaklığı
+                shape: ShapeLightFocus.RRect, 
+                radius: 16, 
                 keyTarget: _registerSwitchKey,
                 contents: [
                   TargetContent(align: ContentAlign.top, builder: (context, controller) => MaskotHelper.buildTutorialContent(
@@ -109,7 +115,6 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                 ])
           ]);
     });
-    // --- MASKOT KODU BİTİŞ ---
   }
 
   @override
@@ -207,7 +212,6 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     );
   }
 
-  // --- SMS KODU DOĞRULAMA (KRİTİK DÜZELTME) ---
   Future<void> _verifySmsCode() async {
     if (_smsCodeController.text.length < 6) {
       showSnackBar("Lütfen kodu tam girin.", isError: true);
@@ -223,42 +227,29 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
 
       final user = FirebaseAuth.instance.currentUser;
       
-      // Durum 1: Kullanıcı E-posta ile giriş yapmış, 2FA doğruluyor
       if (user != null) {
         try {
-           // Numarayı hesaba bağlamayı dene
            await user.linkWithCredential(credential);
            await user.reload();
         } on FirebaseAuthException catch (e) {
-           // EĞER ZATEN BAĞLIYSA (Credential Already In Use) -> BAŞARILI SAY!
-           // "2AD Kod hatalı" bug'ının çözümü budur.
            if (e.code == 'credential-already-in-use' || e.code == 'provider-already-linked') {
-             // Telefon zaten bu hesaba (veya başka hesaba) tanımlı.
-             // Güvenlik için 'reauthenticate' deneyebiliriz ama basitçe devam etmek çoğu durumda yeterlidir.
-             // Başarılı kabul et.
              debugPrint("Telefon zaten bağlı, devam ediliyor.");
            } else {
-             rethrow; // Diğer hataları fırlat
+             rethrow; 
            }
         }
-        
-        // Başarılı sayıp ana ekrana yönlendir (State Listener halleder ama biz de temizleyelim)
         showSnackBar("Giriş Başarılı!");
-        // Reset state
         if (mounted) {
           setState(() {
              _isLoading = false;
              _codeSent = false;
           });
         }
-        
       } else {
-        // Durum 2: Sıfırdan telefonla giriş
         await FirebaseAuth.instance.signInWithCredential(credential);
         showSnackBar("Giriş Başarılı!");
       }
     } catch (e) {
-      // Genel hata yakalama
       if (mounted) setState(() => _isLoading = false);
       showSnackBar("Doğrulama hatası: ${e.toString().replaceAll(RegExp(r'\[.*?\]'), '')}", isError: true);
     } finally {
@@ -266,39 +257,31 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     }
   }
 
-  // --- ANA AUTH BUTONU ---
   void handleAuth() async {
     FocusScope.of(context).unfocus();
 
-    // 1. KOD GİRME AŞAMASI
+    // 1. KOD GİRME
     if (_codeSent) {
       _verifySmsCode();
       return;
     }
 
-    // 2. TELEFON GİRİŞİ (YETKİ HATASI ÇÖZÜMÜ)
+    // 2. TELEFON GİRİŞİ
     if (isLogin && _isPhoneLoginMode) {
       final phone = _phoneController.text.trim();
       final password = passwordController.text; 
       
       if (phone.isEmpty || phone.length < 10) return showSnackBar("Geçerli numara girin.", isError: true);
-      // Şifre boşsa bile SMS ile devam edebiliriz (Güvenlik tercihi)
 
       try {
         setState(() => _isLoading = true);
-        
-        // Şifreyi doğrula (Permission hatası olursa pass geçecek)
         final error = await _authService.validatePhonePassword(phone, password);
         
         if (error == 'permission_error') {
-           // Yetki yoksa (giriş yapmadan okuyamıyorsak), şifre kontrolünü atla ve SMS gönder
-           debugPrint("Yetki hatası nedeniyle şifre kontrolü atlandı, SMS'e geçiliyor.");
            await _sendSmsCode(phone);
         } else if (error != null) {
-           // Şifre yanlış veya numara yok
            throw Exception(error);
         } else {
-           // Şifre doğru, SMS gönder
            await _sendSmsCode(phone);
         }
       } catch (e) {
@@ -318,6 +301,13 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
         showSnackBar("Şifreler eşleşmiyor.", isError: true);
         return;
       }
+
+      // YENİ: Üniversite ve Bölüm Kontrolü
+      if (_selectedUniversity == null || _selectedDepartment == null) {
+        if (mounted) setState(() => _isLoading = false);
+        showSnackBar("Lütfen üniversite ve bölüm seçin.", isError: true);
+        return;
+      }
       
       final error = await _authService.register(
         email: emailController.text.trim(),
@@ -325,6 +315,8 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
         adSoyad: _adSoyadController.text.trim(),
         takmaAd: _takmaAdController.text.trim(),
         phone: _phoneController.text.trim(),
+        university: _selectedUniversity!, // YENİ
+        department: _selectedDepartment!, // YENİ
       );
       
       if (mounted) setState(() => _isLoading = false);
@@ -342,7 +334,6 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       if (result == "success") {
         if (mounted) setState(() => _isLoading = false);
       } else if (result == "mfa_required") {
-        // MFA Gerekli: Kullanıcının telefon numarasını bul ve SMS gönder
         final user = FirebaseAuth.instance.currentUser;
         if (user != null) {
           try {
@@ -357,8 +348,6 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
               await _sendSmsCode(phone);
               showSnackBar("2 Aşamalı Doğrulama: Kod gönderildi.");
             } else {
-              // Telefon yoksa MFA'yı geçmek zorunda veya hata vermeli
-              // Güvenlik açığı olmaması için çıkış yap
               await FirebaseAuth.instance.signOut();
               if (mounted) setState(() => _isLoading = false);
               showSnackBar("Hesabınızda 2FA açık ancak telefon numarası kayıtlı değil.", isError: true);
@@ -417,7 +406,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const SizedBox(height: 60),
-                    Hero(tag: 'app_logo', child: KeyedSubtree(key: _logoKey, child: AppLogo(size: 145, isLightMode: !isDark))), // YENİ: Logo'ya key atandı
+                    Hero(tag: 'app_logo', child: KeyedSubtree(key: _logoKey, child: AppLogo(size: 145, isLightMode: !isDark))), 
                     const SizedBox(height: 30), 
                     
                     AnimatedContainer(
@@ -432,7 +421,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                           BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, 10)),
                         ], 
                       ),
-                      child: KeyedSubtree( // YENİ: Formu hedeflemek için KeyedSubtree
+                      child: KeyedSubtree( 
                         key: _loginFormKey,
                         child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -485,7 +474,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                             width: double.infinity,
                             height: 50,
                             child: ElevatedButton(
-                              key: _loginButtonKey, // --- KEY EKLE ---
+                              key: _loginButtonKey, 
                                 onPressed: _isLoading ? null : handleAuth, 
                               style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                               child: _isLoading 
@@ -518,7 +507,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                     const SizedBox(height: 24),
                     if (!_isMfaVerification) ...[
                       KeyedSubtree(
-                        key: _registerSwitchKey, // --- KEY EKLE ---
+                        key: _registerSwitchKey, 
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -564,7 +553,6 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     );
   }
 
-  // ... WIDGET BUILDER'LAR (AYNEN KORUNDU) ...
   Widget _buildSmsCodeForm(bool isDark, Color textColor) {
     return Column(
       children: [
@@ -587,6 +575,31 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
         const SizedBox(height: 16),
         _buildModernTextField(controller: emailController, label: "Üniversite E-postası (.edu.tr)", icon: Icons.email_outlined, isDark: isDark, suffixIcon: _isEduEmail ? const Icon(Icons.check_circle, color: AppColors.success) : null),
         const SizedBox(height: 16),
+
+        // YENİ: Üniversite Seçimi
+        _buildAutocomplete(
+          label: "Üniversite",
+          options: UniversityService().getUniversityNames(),
+          onSelected: (val) {
+            setState(() {
+              _selectedUniversity = val;
+              _selectedDepartment = null;
+            });
+          },
+          isDark: isDark
+        ),
+        const SizedBox(height: 16),
+        // YENİ: Bölüm Seçimi
+        _buildAutocomplete(
+          label: "Bölüm",
+          enabled: _selectedUniversity != null,
+          options: _selectedUniversity != null ? UniversityService().getDepartmentsForUniversity(_selectedUniversity!) : [],
+          onSelected: (val) => setState(() => _selectedDepartment = val),
+          isDark: isDark,
+          key: ValueKey(_selectedUniversity)
+        ),
+        const SizedBox(height: 16),
+
         _buildModernTextField(controller: passwordController, label: "Şifre", icon: Icons.lock_outline, isDark: isDark, isPassword: true),
         const SizedBox(height: 16),
         _buildModernTextField(controller: _confirmPasswordController, label: "Şifre Tekrar", icon: Icons.lock_outline, isDark: isDark, isPassword: true),
@@ -630,6 +643,78 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
         const SizedBox(height: 16),
         _buildModernTextField(controller: passwordController, label: "Şifre (Opsiyonel)", icon: Icons.lock_outline, isDark: isDark, isPassword: true),
       ],
+    );
+  }
+
+  // YENİ: Autocomplete Widget (Modern Stil)
+  Widget _buildAutocomplete({
+    required String label, 
+    required List<String> options, 
+    required Function(String) onSelected, 
+    bool enabled = true,
+    required bool isDark,
+    Key? key
+  }) {
+    return LayoutBuilder(
+      key: key,
+      builder: (context, constraints) {
+        return Autocomplete<String>(
+          optionsBuilder: (TextEditingValue textEditingValue) {
+            if (textEditingValue.text == '') return const Iterable<String>.empty();
+            return options.where((String option) {
+              return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+            });
+          },
+          onSelected: onSelected,
+          fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
+             // Stil ayarları _buildModernTextField ile aynı
+             return Container(
+               decoration: BoxDecoration(color: isDark ? Colors.grey[850] : Colors.grey[100], borderRadius: BorderRadius.circular(16)),
+               child: TextField(
+                 controller: controller,
+                 focusNode: focusNode,
+                 enabled: enabled,
+                 style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                 decoration: InputDecoration(
+                   labelText: label,
+                   hintText: enabled ? "Yazmaya başla..." : "Önce üniversite seçin",
+                   labelStyle: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 14),
+                   prefixIcon: Icon(enabled ? Icons.school : Icons.lock_outline, color: AppColors.primary.withOpacity(0.7)),
+                   suffixIcon: const Icon(Icons.arrow_drop_down),
+                   border: InputBorder.none,
+                   contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                 ),
+               ),
+             );
+          },
+          optionsViewBuilder: (context, onSelected, options) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 4.0,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  width: constraints.maxWidth,
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  color: isDark ? Colors.grey[800] : Colors.white,
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    itemBuilder: (BuildContext context, int index) {
+                      final String option = options.elementAt(index);
+                      return ListTile(
+                        title: Text(option, style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
+                        onTap: () => onSelected(option),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      }
     );
   }
 

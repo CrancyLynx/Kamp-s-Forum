@@ -1,42 +1,42 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; 
-import 'package:provider/provider.dart'; 
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart'; 
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:intl/intl.dart'; 
-import 'package:intl/date_symbol_data_local.dart'; 
+import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:timeago/timeago.dart' as timeago;
 // Native Splash Paketi Importu
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 // Servisler
-import 'services/push_notification_service.dart'; 
-import 'services/presence_service.dart'; 
+import 'services/push_notification_service.dart';
+import 'services/presence_service.dart';
 
 // Widgetlar
-import 'widgets/in_app_notification.dart'; 
+import 'widgets/in_app_notification.dart';
 
 // Sayfalar
 import 'screens/auth/dogrulama_ekrani.dart';
-import 'screens/home/ana_ekran.dart'; 
-import 'screens/auth/giris_ekrani.dart'; 
-import 'screens/auth/verification_wrapper.dart'; 
+import 'screens/home/ana_ekran.dart';
+import 'screens/auth/giris_ekrani.dart';
+import 'screens/auth/verification_wrapper.dart';
 // Onboarding importu
-import 'screens/auth/splash_screen.dart'; 
+import 'screens/auth/splash_screen.dart'; // SplashScreen importu gerekli
 
 @pragma('vm:entry-point')
 Future<void> firebaseBackgroundMessageHander(RemoteMessage message) async {
-  await Firebase.initializeApp(); 
+  await Firebase.initializeApp();
   print("Arka planda bir mesaj işleniyor: ${message.messageId}");
 }
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 class ThemeProvider extends ChangeNotifier {
-  ThemeMode _themeMode = ThemeMode.system; 
+  ThemeMode _themeMode = ThemeMode.system;
   ThemeProvider(this._themeMode);
   ThemeMode get themeMode => _themeMode;
 
@@ -49,22 +49,22 @@ class ThemeProvider extends ChangeNotifier {
 }
 
 Future<void> main() async {
-  // DÜZELTME: WidgetsBinding yerine WidgetsFlutterBinding kullanıldı.
+  // WidgetsBinding başlatılıyor
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
-  
-  // Native Splash ekranını koru
+
+  // Native Splash ekranını Flutter çizimine kadar koru (Logoda bekleme sağlar)
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
   await initializeDateFormatting('tr_TR', null);
   await Firebase.initializeApp();
-  
-  FirebaseMessaging.onBackgroundMessage(firebaseBackgroundMessageHander); 
-  
-  Intl.defaultLocale = 'tr_TR'; 
-  
+
+  FirebaseMessaging.onBackgroundMessage(firebaseBackgroundMessageHander);
+
+  Intl.defaultLocale = 'tr_TR';
+
   final prefs = await SharedPreferences.getInstance();
-  
-  ThemeMode initialThemeMode = ThemeMode.system; 
+
+  ThemeMode initialThemeMode = ThemeMode.system;
   try {
     final themeValue = prefs.get('themeMode');
     if (themeValue is int) {
@@ -72,16 +72,14 @@ Future<void> main() async {
     }
   } catch (_) {}
 
-  bool isFirstTime = prefs.getBool('isFirstTime') ?? true;
-
   // Timeago paketi için Türkçe yerelleştirme ayarı
   timeago.setLocaleMessages('tr', timeago.TrMessages());
   timeago.setDefaultLocale('tr');
 
   runApp(
-    ChangeNotifierProvider(create: (context) => ThemeProvider(initialThemeMode),
-      child: const BizimUygulama(),
-    )
+      ChangeNotifierProvider(create: (context) => ThemeProvider(initialThemeMode),
+        child: const BizimUygulama(),
+      )
   );
 }
 
@@ -114,8 +112,8 @@ class _BizimUygulamaState extends State<BizimUygulama> {
   @override
   void initState() {
     super.initState();
-    _notificationService.initialize(); 
-    
+    _notificationService.initialize();
+
     _notificationService.onMessage.listen((message) {
       if (message.notification != null) {
         _showInAppNotification(
@@ -170,24 +168,26 @@ class _BizimUygulamaState extends State<BizimUygulama> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-        debugShowCheckedModeBanner: false,
-        title: 'Kampüs Forum',
-        navigatorKey: navigatorKey,
-        themeMode: context.watch<ThemeProvider>().themeMode,
-        theme: ThemeData(
-          primarySwatch: Colors.deepPurple,
-          brightness: Brightness.light,
-          scaffoldBackgroundColor: Colors.grey[100],
-          useMaterial3: true,
-        ),
-        darkTheme: ThemeData(
-          primarySwatch: Colors.deepPurple,
-          brightness: Brightness.dark,
-          scaffoldBackgroundColor: const Color(0xFF121212),
-          useMaterial3: true,
-        ),
-        home: const AnaKontrolcu()
-      );
+      debugShowCheckedModeBanner: false,
+      title: 'Kampüs Forum',
+      navigatorKey: navigatorKey,
+      themeMode: context.watch<ThemeProvider>().themeMode,
+      theme: ThemeData(
+        primarySwatch: Colors.deepPurple,
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: Colors.grey[100],
+        useMaterial3: true,
+      ),
+      darkTheme: ThemeData(
+        primarySwatch: Colors.deepPurple,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF121212),
+        useMaterial3: true,
+      ),
+      // DÜZELTME BURADA: Uygulama artık SplashScreen ile başlıyor.
+      // Bu sayede FlutterNativeSplash.remove() komutu çalışabiliyor.
+      home: const SplashScreen(),
+    );
   }
 }
 
@@ -220,22 +220,12 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
           return const LoadingScreen();
         }
 
-        // 0. İlk Açılış Kontrolü (SplashScreen'den sonra)
-        return FutureBuilder<bool>(
-          future: BizimUygulama.isFirstTime(),
-          builder: (context, firstTimeSnapshot) {
-            if (firstTimeSnapshot.connectionState == ConnectionState.waiting) {
-              return const LoadingScreen();
-            }
-
-            // if (firstTimeSnapshot.data == true) { return const OnboardingScreen(); }
-        
         // 2. Kullanıcı Giriş Yapmışsa
         if (authSnapshot.hasData) {
           final user = authSnapshot.data!;
-          
+
           if (user.isAnonymous) {
-             return const AnaEkran(isGuest: true, isAdmin: false, userName: 'Misafir', realName: 'Misafir');
+            return const AnaEkran(isGuest: true, isAdmin: false, userName: 'Misafir', realName: 'Misafir');
           }
 
           if (!user.emailVerified && (user.phoneNumber == null || user.phoneNumber!.isEmpty)) {
@@ -247,7 +237,7 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
           // 3. Firestore Verisi
           return StreamBuilder<DocumentSnapshot>(
             stream: FirebaseFirestore.instance.collection('kullanicilar').doc(userId).snapshots(),
-            builder: (context, userSnapshot) { 
+            builder: (context, userSnapshot) {
               if (userSnapshot.hasError) {
                 return Scaffold(
                   body: Center(
@@ -272,53 +262,51 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> {
               if (userSnapshot.connectionState == ConnectionState.waiting) {
                 return const LoadingScreen();
               }
-              
+
               if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-                 return Scaffold(
-                   body: Center(
-                     child: Column(
-                       mainAxisAlignment: MainAxisAlignment.center,
-                       children: [
-                         const CircularProgressIndicator(),
-                         const SizedBox(height: 20),
-                         const Text("Profil hazırlanıyor..."),
-                         const SizedBox(height: 20),
-                         TextButton(
-                           onPressed: () => FirebaseAuth.instance.signOut(), 
-                           child: const Text("İptal Et ve Çıkış Yap")
-                         )
-                       ],
-                     ),
-                   ),
-                 );
+                return Scaffold(
+                  body: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: 20),
+                        const Text("Profil hazırlanıyor..."),
+                        const SizedBox(height: 20),
+                        TextButton(
+                            onPressed: () => FirebaseAuth.instance.signOut(),
+                            child: const Text("İptal Et ve Çıkış Yap")
+                        )
+                      ],
+                    ),
+                  ),
+                );
               }
 
               final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
               final status = userData?['status'] ?? 'Unverified';
-              final String userName = userData?['takmaAd'] ?? userData?['ad'] ?? 'Anonim'; 
-              final String realName = userData?['ad'] ?? 'Anonim'; 
+              final String userName = userData?['takmaAd'] ?? userData?['ad'] ?? 'Anonim';
+              final String realName = userData?['ad'] ?? 'Anonim';
               final String role = userData?['role'] ?? 'user';
               final bool isAdministrator = (role == 'admin');
 
               if (isAdministrator || status == 'Verified') {
                 return AnaEkran(
                   isGuest: false,
-                  isAdmin: isAdministrator, 
-                  userName: userName, 
-                  realName: realName, 
-                ); 
+                  isAdmin: isAdministrator,
+                  userName: userName,
+                  realName: realName,
+                );
               } else {
-                return const DogrulamaEkrani(); 
+                return const DogrulamaEkrani();
               }
-            }, 
-          ); 
-        } 
+            },
+          );
+        }
 
         // 4. Kullanıcı Yoksa (Giriş Ekranı)
-        return const GirisEkrani(); 
-          },
-        );
-      }, 
+        return const GirisEkrani();
+      },
     );
   }
 }

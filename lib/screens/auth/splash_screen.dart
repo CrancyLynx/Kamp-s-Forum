@@ -96,13 +96,20 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     position: _slideAnimation,
                     child: FadeTransition(
                       opacity: CurvedAnimation(parent: _controller, curve: const Interval(0.5, 1.0)),
-                      child: const Text(
+                      child: Text(
                         "Kampüs Forum",
                         style: TextStyle(
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
                           color: Colors.white, // Arka plan koyu olduğu için yazı beyaz
                           letterSpacing: 1.5,
+                          shadows: [
+                            Shadow(
+                              blurRadius: 8.0,
+                              color: Colors.black.withOpacity(0.4),
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
                       ),
                     ),
