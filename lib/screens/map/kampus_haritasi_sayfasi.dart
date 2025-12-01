@@ -9,6 +9,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../services/map_data_service.dart';
 import '../../utils/app_colors.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart'; // HATA DÜZELTMESİ: Eksik import
+import '../../utils/maskot_helper.dart'; // EKLENDİ: Maskot Helper
 
 class KampusHaritasiSayfasi extends StatefulWidget {
   final String initialFilter;
@@ -48,6 +50,11 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   List<Map<String, dynamic>> _searchResults = [];
   Timer? _debounce;
 
+  // --- YENİ SİSTEM İÇİN GLOBAL KEY'LER ---
+  final GlobalKey _searchBarKey = GlobalKey();
+  final GlobalKey _filterChipKey = GlobalKey();
+  final GlobalKey _myLocationButtonKey = GlobalKey();
+
   // Harita Stili (Dark Mode için)
   final String _darkMapStyle = '''
     [
@@ -75,6 +82,46 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     super.initState();
     _currentFilter = widget.initialFilter;
     _initializeMap();
+
+    // --- YENİ SİSTEM İLE MASKOT KODU ---
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      MaskotHelper.checkAndShow(context,
+          featureKey: 'harita_tutorial_gosterildi',
+          targets: [
+            TargetFocus(
+                identify: "search-bar",
+                keyTarget: _searchBarKey,
+                alignSkip: Alignment.bottomRight,
+                contents: [
+                  TargetContent(
+                      align: ContentAlign.bottom,
+                      builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Kampüsü Keşfet!', description: 'Fakülteler, kafeler, kütüphane... Aradığın her yeri buradan arayarak kolayca bulabilirsin.', mascotAssetPath: 'assets/images/düsünceli_bay.png'))
+                ]),
+            TargetFocus(
+                identify: "filter-chips",
+                keyTarget: _filterChipKey,
+                alignSkip: Alignment.bottomRight,
+                contents: [
+                  TargetContent(
+                      align: ContentAlign.bottom,
+                      builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Kategorilere Göz At', description: 'İstersen mekanları kategorilerine göre filtreleyerek de haritada görebilirsin.', mascotAssetPath: 'assets/images/mutlu_bay.png'))
+                ]),
+            TargetFocus(
+                identify: "my-location-button",
+                keyTarget: _myLocationButtonKey,
+                alignSkip: Alignment.topLeft,
+                contents: [
+                  TargetContent(
+                    align: ContentAlign.top,
+                    builder: (context, controller) => MaskotHelper.buildTutorialContent(
+                      context,
+                      title: 'Konumunu Bul',
+                      description: 'Haritada kaybolursan bu butona basarak anında kendi konumuna dönebilirsin.',
+                    ),
+                  )
+                ])
+          ]);
+    });
   }
 
   Future<void> _initializeMap() async {
@@ -548,6 +595,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                 children: [
                   // Arama Çubuğu
                   Container(
+                    key: _searchBarKey, // --- KEY EKLE ---
                     decoration: BoxDecoration(
                       color: Theme.of(context).cardColor,
                       borderRadius: BorderRadius.circular(30),
@@ -615,6 +663,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
+                        key: _filterChipKey, // --- KEY EKLE ---
                         children: [
                           _buildFilterChip('Tümü', 'all', Icons.map),
                           _buildFilterChip('Üniversiteler', 'universite', Icons.school),
@@ -668,6 +717,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                   ),
                 const SizedBox(height: 12),
                 FloatingActionButton(
+                  key: _myLocationButtonKey, // --- KEY EKLE ---
                   heroTag: 'myLoc',
                   backgroundColor: AppColors.primary,
                   child: const Icon(Icons.my_location, color: Colors.white),

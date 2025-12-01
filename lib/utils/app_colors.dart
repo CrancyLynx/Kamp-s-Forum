@@ -43,5 +43,7 @@ class AppColors {
   static const Color blueGrey = Colors.blueGrey;
   static const Color like = Color(0xFFF44336); // Colors.red
   static const Color chatBubbleMe = Color(0xFF673AB7); // Colors.deepPurple
-  static const Color chatBubbleOther = Color(0xFFE0E0E0); // Colors.grey.shade300
+  static const Color chatBubbleOther = Color(0xFFE0E0E0);
+
+  static Color? get textDark => null; // Colors.grey.shade300
 }

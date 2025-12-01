@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:kampus_yardim_app/main.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../utils/app_colors.dart';
 import '../../models/badge_model.dart';
@@ -33,6 +35,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
   late String _targetUserId;
   bool _isOwnProfile = false;
+  Map<String, dynamic>? _myUserData; // HATA DÜZELTMESİ: Mevcut kullanıcı verisi için state değişkeni
 
   @override
   void initState() {
@@ -65,7 +68,9 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
       child: FutureBuilder<DocumentSnapshot>(
         future: FirebaseFirestore.instance.collection('kullanicilar').doc(_currentUserId).get(),
         builder: (context, mySnapshot) {
-          final myData = mySnapshot.data?.data() as Map<String, dynamic>?;
+          // HATA DÜZELTMESİ: Veriyi state değişkenine ata
+          _myUserData = mySnapshot.data?.data() as Map<String, dynamic>?;
+          final myData = _myUserData;
           final bool amIAdmin = (myData?['role'] == 'admin');
 
           return StreamBuilder<DocumentSnapshot>(
@@ -146,7 +151,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     final bool hasSocial = (github?.isNotEmpty ?? false) || (linkedin?.isNotEmpty ?? false) || (instagram?.isNotEmpty ?? false) || (xPlatform?.isNotEmpty ?? false);
 
     return SliverAppBar(
-      expandedHeight: 560, // Yükseklik sosyal medya ikonları için biraz artırıldı
+      expandedHeight: 580, // Yükseklik sosyal medya ikonları için biraz artırıldı
       pinned: true,
       stretch: true,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -183,20 +188,21 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
             ),
             // İçerik Alanı
             Positioned.fill(
-              top: 80,
+              top: 0,
+              bottom: 0,
               child: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Theme.of(context).scaffoldBackgroundColor],
-                    stops: const [0.0, 0.3], 
+                    colors: [Colors.transparent, Theme.of(context).scaffoldBackgroundColor.withOpacity(0.8), Theme.of(context).scaffoldBackgroundColor],
+                    stops: const [0.0, 0.4, 0.6], 
                   ),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 60), // Alt boşluk artırıldı
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       // Avatar
                       Container(
@@ -470,6 +476,11 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
   }
 
   Widget _buildPostItem(DocumentSnapshot doc, Map<String, dynamic> data) {
+    // HATA DÜZELTMESİ: Gönderinin kaydedilme durumu, mevcut kullanıcının
+    // 'savedPosts' listesi kontrol edilerek doğru bir şekilde belirleniyor.
+    // Bu, başka bir kullanıcının profiline bakarken yaşanan çökme sorununu çözer.
+    final bool isSaved = (_myUserData?['savedPosts'] as List<dynamic>? ?? []).contains(doc.id);
+
     String formattedTime = '...';
     if (data['zaman'] is Timestamp) {
       final diff = DateTime.now().difference((data['zaman'] as Timestamp).toDate());
@@ -495,7 +506,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
         onShowLoginRequired: () {},
         currentUserTakmaAd: '', 
         currentUserRealName: '',
-        isSaved: true, 
+        isSaved: isSaved,
         likes: (data['likes'] as List<dynamic>? ?? []),
         commentCount: (data['commentCount'] as int? ?? 0),
         authorBadges: List<String>.from(data['authorBadges'] ?? []),
@@ -560,6 +571,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
       builder: (context) {
         return SafeArea(
           child: Column(
+            // YENİ: Tema Değiştirme Butonu Eklendi
             mainAxisSize: MainAxisSize.min,
             children: [
               const SizedBox(height: 8),
@@ -580,6 +592,19 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilDuzenlemeEkrani()));
+                },
+              ),
+              Consumer<ThemeProvider>(
+                builder: (context, themeProvider, child) {
+                  final isDark = themeProvider.themeMode == ThemeMode.dark || (themeProvider.themeMode == ThemeMode.system && MediaQuery.of(context).platformBrightness == Brightness.dark);
+                  return ListTile(
+                    leading: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, color: Colors.orangeAccent),
+                    title: Text(isDark ? 'Aydınlık Tema' : 'Karanlık Tema'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      themeProvider.setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark);
+                    },
+                  );
                 },
               ),
               ListTile(

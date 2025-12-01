@@ -1,13 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Karanlık tema için açılış ekranı -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- GÜNCELLEME: Arka plan rengi olarak özel koyu rengimizi kullanıyoruz -->
-    <item android:drawable="@color/splash_background_dark" />
+    <!-- Arka plan rengini colors.xml'den al -->
+    <item android:drawable="@color/splash_background_light" />
 
-    <!-- YENİ: Uygulama logosunu ortalanmış şekilde ekliyoruz -->
+    <!-- Logoyu ortaya yerleştir -->
     <item>
-        <bitmap
-            android:gravity="center"
-            android:src="@mipmap/ic_launcher_foreground" />
+        <bitmap android:gravity="center" android:src="@mipmap/launch_image" />
     </item>
 </layer-list>

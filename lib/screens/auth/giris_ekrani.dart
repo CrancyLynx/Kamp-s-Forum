@@ -9,6 +9,8 @@ import '../../utils/app_colors.dart';
 import '../../main.dart';
 import '../../widgets/app_logo.dart';
 import '../../services/auth_service.dart';
+import '../../utils/maskot_helper.dart'; 
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 class GirisEkrani extends StatefulWidget {
   const GirisEkrani({super.key});
@@ -44,6 +46,10 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
   bool _codeSent = false; 
   String? _verificationId; 
 
+  // --- YENİ SİSTEM İÇİN GLOBAL KEY'LER ---
+  final GlobalKey _loginButtonKey = GlobalKey();
+  final GlobalKey _registerSwitchKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -59,6 +65,36 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       final isEdu = email.endsWith('.edu.tr') || email.endsWith('.edu');
       if (isEdu != _isEduEmail) setState(() => _isEduEmail = isEdu);
     });
+    // --- YENİ SİSTEM İLE MASKOT KODU ---
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      MaskotHelper.checkAndShow(context,
+          featureKey: 'giris_tutorial_gosterildi',
+          targets: [
+            TargetFocus(
+                identify: "login-button",
+                keyTarget: _loginButtonKey,
+                contents: [
+                  TargetContent(
+                    align: ContentAlign.top, builder: (context, controller) =>
+                      MaskotHelper.buildTutorialContent(
+                          context,
+                          title: 'Seni Bekliyoruz!',
+                          description: 'Eğer bir hesabın varsa buradan giriş yapabilirsin.'),
+                          
+                  )
+                ]),
+            TargetFocus(
+                identify: "register-switch",
+                keyTarget: _registerSwitchKey,
+                contents: [
+                  TargetContent(align: ContentAlign.top, builder: (context, controller) => MaskotHelper.buildTutorialContent(
+                    context,
+                    title: 'Aramıza Katıl!',
+                    description: 'Henüz bir hesabın yoksa buradan kolayca öğrenci kaydı oluşturabilirsin.'))
+                ])
+          ]);
+    });
+    // --- MASKOT KODU BİTİŞ ---
   }
 
   @override
@@ -150,7 +186,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
         showSnackBar("Doğrulama kodu gönderildi.");
       },
       onError: (msg) {
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
         showSnackBar(msg, isError: true);
       },
     );
@@ -208,7 +244,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       }
     } catch (e) {
       // Genel hata yakalama
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
       showSnackBar("Doğrulama hatası: ${e.toString().replaceAll(RegExp(r'\[.*?\]'), '')}", isError: true);
     } finally {
       if (mounted && _isLoading) setState(() => _isLoading = false);
@@ -251,7 +287,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
            await _sendSmsCode(phone);
         }
       } catch (e) {
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
         showSnackBar(e.toString().replaceAll("Exception: ", ""), isError: true);
       }
       return;
@@ -263,7 +299,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     if (!isLogin) {
       // --- KAYIT OL ---
       if (passwordController.text != _confirmPasswordController.text) {
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
         showSnackBar("Şifreler eşleşmiyor.", isError: true);
         return;
       }
@@ -276,7 +312,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
         phone: _phoneController.text.trim(),
       );
       
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
       if (error == null) showSnackBar("Kayıt başarılı! Yönlendiriliyorsunuz...");
       else showSnackBar(error, isError: true);
 
@@ -289,7 +325,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       );
 
       if (result == "success") {
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
       } else if (result == "mfa_required") {
         // MFA Gerekli: Kullanıcının telefon numarasını bul ve SMS gönder
         final user = FirebaseAuth.instance.currentUser;
@@ -309,16 +345,16 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
               // Telefon yoksa MFA'yı geçmek zorunda veya hata vermeli
               // Güvenlik açığı olmaması için çıkış yap
               await FirebaseAuth.instance.signOut();
-              setState(() => _isLoading = false);
+              if (mounted) setState(() => _isLoading = false);
               showSnackBar("Hesabınızda 2FA açık ancak telefon numarası kayıtlı değil.", isError: true);
             }
           } catch (e) {
-             setState(() => _isLoading = false);
+             if (mounted) setState(() => _isLoading = false);
              showSnackBar("MFA bilgisi alınamadı: $e", isError: true);
           }
         }
       } else {
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
         showSnackBar(result, isError: true);
       }
     }
@@ -432,6 +468,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                             width: double.infinity,
                             height: 50,
                             child: ElevatedButton(
+                              key: _loginButtonKey, // --- KEY EKLE ---
                               onPressed: _isLoading ? null : handleAuth,
                               style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                               child: _isLoading 
@@ -462,15 +499,18 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                     
                     const SizedBox(height: 24),
                     if (!_isMfaVerification) ...[
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(isLogin ? "Hesabın yok mu?" : "Zaten hesabın var mı?", style: TextStyle(color: textColor.withOpacity(0.7))),
-                          TextButton(
-                            onPressed: () => setState(() { isLogin = !isLogin; _isPhoneLoginMode = false; _codeSent = false; }),
-                            child: Text(isLogin ? "Kayıt Ol" : "Giriş Yap", style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
-                          ),
-                        ],
+                      KeyedSubtree(
+                        key: _registerSwitchKey, // --- KEY EKLE ---
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(isLogin ? "Hesabın yok mu?" : "Zaten hesabın var mı?", style: TextStyle(color: textColor.withOpacity(0.7))),
+                            TextButton(
+                              onPressed: () => setState(() { isLogin = !isLogin; _isPhoneLoginMode = false; _codeSent = false; }),
+                              child: Text(isLogin ? "Kayıt Ol" : "Giriş Yap", style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
                       ),
                       if (isLogin)
                         TextButton.icon(
@@ -487,8 +527,13 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                     const SizedBox(height: 20),
                     Consumer<ThemeProvider>(
                       builder: (context, themeProvider, child) {
-                        final isDarkTheme = themeProvider.themeMode == ThemeMode.dark || (themeProvider.themeMode == ThemeMode.system && MediaQuery.of(context).platformBrightness == Brightness.dark);
-                        return IconButton(icon: Icon(isDarkTheme ? Icons.light_mode : Icons.dark_mode, color: textColor.withOpacity(0.5)), onPressed: () => themeProvider.setThemeMode(isDarkTheme ? ThemeMode.light : ThemeMode.dark));
+                        final isDarkTheme = themeProvider.themeMode == ThemeMode.dark ||
+                            (themeProvider.themeMode == ThemeMode.system &&
+                                MediaQuery.of(context).platformBrightness == Brightness.dark);
+                        return IconButton(
+                            icon: Icon(isDarkTheme ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                                color: textColor.withOpacity(0.6)),
+                            onPressed: () => themeProvider.setThemeMode(isDarkTheme ? ThemeMode.light : ThemeMode.dark));
                       },
                     ),
                   ],

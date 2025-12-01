@@ -5,6 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import '../../utils/app_colors.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import '../../utils/maskot_helper.dart';
 
 class EtkinlikDetayEkrani extends StatefulWidget {
   final DocumentSnapshot eventDoc;
@@ -19,6 +21,9 @@ class _EtkinlikDetayEkraniState extends State<EtkinlikDetayEkrani> {
   final String? _currentUserId = FirebaseAuth.instance.currentUser?.uid;
   bool _isAttending = false;
   int _attendeeCount = 0;
+
+  // --- YENİ SİSTEM İÇİN GLOBAL KEY ---
+  final GlobalKey _rsvpButtonKey = GlobalKey();
   
   // Etkinlik güncellemelerini dinlemek için Stream
   late Stream<DocumentSnapshot> _eventStream;
@@ -28,6 +33,31 @@ class _EtkinlikDetayEkraniState extends State<EtkinlikDetayEkrani> {
     super.initState();
     Intl.defaultLocale = 'tr_TR';
     _eventStream = widget.eventDoc.reference.snapshots();
+
+    // --- MASKOT KODU BAŞLANGIÇ ---
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      MaskotHelper.checkAndShow(context,
+          featureKey: 'etkinlik_detay_tutorial_gosterildi',
+          targets: [
+            TargetFocus(
+                identify: "rsvp-button",
+                keyTarget: _rsvpButtonKey,
+                alignSkip: Alignment.topRight,
+                contents: [
+                  TargetContent(align: ContentAlign.top, builder: (context, controller) {
+                    return MaskotHelper.buildTutorialContent(
+                      context,
+                      title: 'Etkinliğe Katıl!',
+                      description:
+                          'Bu butonu kullanarak etkinliğe katıldığını belirtebilir ve kimlerin geldiğini görebilirsin. Unutma, bazı etkinlikler için kayıt linki olabilir!',
+                      mascotAssetPath:
+                          'assets/images/mutlu_bay.png', // Uygun bir maskot seçin
+                    );
+                  })
+                ])
+          ]);
+    });
+    // --- MASKOT KODU BİTİŞ ---
   }
 
   // RSVP (Kayıt) işlemini yönetir
@@ -210,6 +240,7 @@ class _EtkinlikDetayEkraniState extends State<EtkinlikDetayEkrani> {
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
+                          key: _rsvpButtonKey, // --- BUTONA KEY EKLE ---
                           onPressed: isPastEvent ? null : () => _toggleRsvp(attendees, registrationLink),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: isPastEvent ? Colors.grey : (_isAttending ? AppColors.error : AppColors.success),

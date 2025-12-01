@@ -7,6 +7,8 @@ import '../profile/kullanici_profil_detay_ekrani.dart';
 import '../forum/gonderi_detay_ekrani.dart';
 import '../map/kampus_haritasi_sayfasi.dart';
 import '../../widgets/animated_list_item.dart';
+import '../../utils/maskot_helper.dart'; // EKLENDİ
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart'; // HATA DÜZELTMESİ: Eksik import
 
 class AramaSayfasi extends StatefulWidget {
   const AramaSayfasi({super.key});
@@ -20,6 +22,9 @@ class _AramaSayfasiState extends State<AramaSayfasi> {
   String _query = "";
   Timer? _debounce;
   Future<List<Map<String, dynamic>>>? _searchResultsFuture;
+
+  // --- YENİ SİSTEM İÇİN GLOBAL KEY ---
+  final GlobalKey _searchBarKey = GlobalKey();
 
   // HARİTA VERİLERİNİN AYNISI (Arama için yerel liste)
   final List<Map<String, dynamic>> _allLocations = [
@@ -37,6 +42,28 @@ class _AramaSayfasiState extends State<AramaSayfasi> {
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchChanged);
+
+    // --- YENİ SİSTEM İLE MASKOT KODU ---
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      MaskotHelper.checkAndShow(context,
+          featureKey: 'arama_tutorial_gosterildi',
+          targets: [
+            TargetFocus(
+                identify: "search-bar",
+                keyTarget: _searchBarKey,
+                alignSkip: Alignment.bottomRight,
+                contents: [
+                  TargetContent(
+                    align: ContentAlign.top, builder: (context, controller) =>
+                      MaskotHelper.buildTutorialContent(
+                          context,
+                          title: 'Ne Aramıştın?',
+                          description: 'Öğrenciler, etkinlikler, ders notları veya topluluklar... Aklına ne geliyorsa buradan kolayca bulabilirsin.',
+                          mascotAssetPath: 'assets/images/mutlu_bay.png'),
+                  )
+                ])
+          ]);
+    });
   }
 
   @override
@@ -153,6 +180,7 @@ class _AramaSayfasiState extends State<AramaSayfasi> {
       appBar: AppBar(
         backgroundColor: AppColors.primary,
         title: Container(
+          key: _searchBarKey, // --- KEY EKLE ---
           height: 40,
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.2),

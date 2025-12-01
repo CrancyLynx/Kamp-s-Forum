@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart'; // Tarih formatı için
 import '../../utils/app_colors.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import '../../utils/maskot_helper.dart'; // EKLENDİ
 
 class BildirimEkrani extends StatefulWidget {
   const BildirimEkrani({super.key});
@@ -14,11 +16,64 @@ class BildirimEkrani extends StatefulWidget {
 class _BildirimEkraniState extends State<BildirimEkrani> {
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
+  // --- YENİ SİSTEM İÇİN GLOBAL KEY'LER ---
+  final GlobalKey _markAllReadButtonKey = GlobalKey();
+  final GlobalKey _firstNotificationKey = GlobalKey();
+  final GlobalKey _emptyStateKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
     // Ekran açıldığında eski bildirimleri temizle
     _cleanupOldNotifications();
+    
+    // --- YENİ SİSTEM İLE MASKOT KODU ---
+    FirebaseFirestore.instance
+        .collection('bildirimler')
+        .where('userId', isEqualTo: _currentUserId)
+        .limit(1)
+        .get()
+        .then((snapshot) {
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          List<TargetFocus> targets = [];
+          targets.add(TargetFocus(
+              identify: "mark-all-read",
+              keyTarget: _markAllReadButtonKey,
+              alignSkip: Alignment.bottomRight,
+              contents: [
+                TargetContent(
+                  align: ContentAlign.top,
+                  builder: (context, controller) =>
+                      MaskotHelper.buildTutorialContent(context,
+                          title: 'Bildirimlerini Yönet',
+                          description:
+                              'Bu butonla tüm bildirimlerini tek seferde okundu olarak işaretleyebilirsin.',
+                          mascotAssetPath: 'assets/images/duyuru_bay.png'),
+                )
+              ]));
+
+          // Eğer hiç bildirim yoksa boş ekranı, varsa ilk bildirimi vurgula
+          bool hasNotifications = snapshot.docs.isNotEmpty;
+          targets.add(TargetFocus(
+              identify: hasNotifications ? "first-notification" : "empty-state",
+              keyTarget: hasNotifications ? _firstNotificationKey : _emptyStateKey,
+              contents: [
+                TargetContent(
+                  align: ContentAlign.top,
+                  builder: (context, controller) =>
+                      MaskotHelper.buildTutorialContent(context,
+                          title: 'Gözün Burada Olsun',
+                          description:
+                              'Biri gönderini beğendiğinde, yorum yaptığında veya takip ettiğinde buradan haberin olacak.',
+                          mascotAssetPath: 'assets/images/duyuru_bay.png'),
+                )
+              ]));
+
+          MaskotHelper.checkAndShow(context, featureKey: 'bildirim_tutorial_gosterildi', targets: targets);
+        });
+      }
+    });
   }
 
   /// 7 günden eski ve OKUNMUŞ bildirimleri otomatik siler
@@ -88,6 +143,7 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            key: _markAllReadButtonKey, // --- KEY EKLE ---
             icon: const Icon(Icons.done_all),
             tooltip: "Tümünü Okundu Say",
             onPressed: _markAllAsRead,
@@ -116,7 +172,10 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
             padding: const EdgeInsets.all(10),
             itemBuilder: (context, index) {
               final doc = docs[index];
-              return _buildNotificationItem(doc, context);
+              return KeyedSubtree(
+                key: index == 0 ? _firstNotificationKey : null, // --- İLK ELEMANA KEY EKLE ---
+                child: _buildNotificationItem(doc, context),
+              );
             },
           );
         },
@@ -250,6 +309,7 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
 
   Widget _buildEmptyState() {
     return Center(
+      key: _emptyStateKey, // --- KEY EKLE ---
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [

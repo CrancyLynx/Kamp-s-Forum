@@ -1,13 +1,11 @@
-import 'package:flutter/material.dart' hide Badge; // DÜZELTME: Material'ın Badge widget'ı ile çakışmayı önle.
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-// DÜZELTME: Tekrar eden tanımlamalar kaldırıldı, merkezi model dosyası import edildi.
-import 'package:kampus_yardim_app/widgets/badge_widget.dart';
+import 'package:flutter/material.dart' hide Badge;
+import 'package:font_awesome_flutter/font_awesome_flutter.dart'; 
 import '../../models/badge_model.dart';
-// Düzeltilmiş Importlar
 import '../../utils/app_colors.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import '../../utils/maskot_helper.dart'; // EKLENDİ
 
-
-class RozetlerSayfasi extends StatelessWidget {
+class RozetlerSayfasi extends StatefulWidget {
   final Set<String> earnedBadgeIds;
   final bool isAdmin;
   final Map<String, dynamic> userData; 
@@ -20,10 +18,66 @@ class RozetlerSayfasi extends StatelessWidget {
   });
 
   @override
+  State<RozetlerSayfasi> createState() => _RozetlerSayfasiState();
+}
+
+class _RozetlerSayfasiState extends State<RozetlerSayfasi> {
+  // --- YENİ SİSTEM İÇİN GLOBAL KEY'LER ---
+  final Map<String, GlobalKey> _badgeKeys = {};
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Her rozet için bir GlobalKey oluştur
+    for (var badge in allBadges) {
+      _badgeKeys[badge.id] = GlobalKey();
+    }
+
+    // --- YENİ SİSTEM İLE MASKOT KODU ---
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Vurgulanacak rozeti bul: Ya kazanılan ilk rozet ya da en yakın olunan rozet
+      String? targetBadgeId;
+      if (widget.earnedBadgeIds.isNotEmpty) {
+        targetBadgeId = widget.earnedBadgeIds.first;
+      } else {
+        // En yüksek ilerlemeye sahip rozeti bul
+        double maxProgress = 0;
+        for (var badge in allBadges) {
+          final progressData = _getBadgeProgress(badge.id);
+          if (progressData['progress'] > maxProgress) {
+            maxProgress = progressData['progress'];
+            targetBadgeId = badge.id;
+          }
+        }
+      }
+
+      if (targetBadgeId != null && _badgeKeys[targetBadgeId] != null) {
+        MaskotHelper.checkAndShow(context,
+            featureKey: 'rozetler_tutorial_gosterildi',
+            targets: [
+              TargetFocus(
+                  identify: "badge-focus",
+                  keyTarget: _badgeKeys[targetBadgeId],
+                  contents: [
+                    TargetContent(
+                      align: ContentAlign.top, builder: (context, controller) =>
+                        MaskotHelper.buildTutorialContent(
+                            context,
+                            title: 'Rozet Koleksiyonun',
+                            description: 'Kampüsteki aktifliğine göre kazandığın rozetler burada sergilenir. Hepsini toplamaya çalış!'),
+                    )
+                  ])
+            ]);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     // Admin rozetini, kullanıcının admin olup olmamasına göre dinamik olarak ekle
-    final userBadges = Set<String>.from(earnedBadgeIds);
-    if (isAdmin) {
+    final userBadges = Set<String>.from(widget.earnedBadgeIds);
+    if (widget.isAdmin) {
       userBadges.add('admin');
     }
 
@@ -40,7 +94,10 @@ class RozetlerSayfasi extends StatelessWidget {
           final badge = allBadges[index];
           final bool isEarned = userBadges.contains(badge.id);
 
-          return _buildBadgeCard(context, badge, isEarned);
+          return KeyedSubtree(
+            key: _badgeKeys[badge.id], // --- HER KARTA KEY EKLE ---
+            child: _buildBadgeCard(context, badge, isEarned),
+          );
         },
       ),
     );
@@ -82,7 +139,6 @@ class RozetlerSayfasi extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [ 
-                        // DÜZELTME: Rozet adını göstermek için basit bir Text kullanıldı
                         Text(
                           badge.name,
                           style: TextStyle(
@@ -137,9 +193,9 @@ class RozetlerSayfasi extends StatelessWidget {
 
   // YENİ: Rozet ID'sine göre ilerleme durumunu hesaplayan fonksiyon
   Map<String, dynamic> _getBadgeProgress(String badgeId) {
-    final int postCount = userData['postCount'] ?? 0;
-    final int commentCount = userData['commentCount'] ?? 0;
-    final int likeCount = userData['likeCount'] ?? 0;
+    final int postCount = widget.userData['postCount'] ?? 0;
+    final int commentCount = widget.userData['commentCount'] ?? 0;
+    final int likeCount = widget.userData['likeCount'] ?? 0;
 
     switch (badgeId) {
       case 'pioneer':
@@ -173,7 +229,7 @@ class RozetlerSayfasi extends StatelessWidget {
         final int remaining = target - current;
         return {'progress': current / target, 'text': remaining > 0 ? 'Kalan $remaining gönderi' : 'Hedef tamamlandı!'};
       case 'admin':
-        return {'progress': isAdmin ? 1.0 : 0.0, 'text': isAdmin ? 'Yetkili kullanıcı.' : 'Yönetici yetkisi gerekli.'};
+        return {'progress': widget.isAdmin ? 1.0 : 0.0, 'text': widget.isAdmin ? 'Yetkili kullanıcı.' : 'Yönetici yetkisi gerekli.'};
       default:
         return {'progress': 0.0, 'text': 'İlerleme hesaplanamadı'};
     }

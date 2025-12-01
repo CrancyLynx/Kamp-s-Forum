@@ -5,6 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart'; 
 import 'package:firebase_storage/firebase_storage.dart'; 
 import '../../utils/app_colors.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import '../../utils/maskot_helper.dart';
 
 class AnketEklemeEkrani extends StatefulWidget {
   final String userName;
@@ -22,6 +24,11 @@ class _AnketEklemeEkraniState extends State<AnketEklemeEkrani> {
   // Her seçenek için bir resim dosyası tutacak liste
   final List<File?> _optionImages = [null, null]; 
 
+  // --- Tanıtım için Global Key'ler ---
+  final GlobalKey _questionKey = GlobalKey();
+  final GlobalKey _firstOptionKey = GlobalKey();
+  final GlobalKey _shareButtonKey = GlobalKey();
+
   final ImagePicker _picker = ImagePicker();
   bool _isLoading = false;
 
@@ -34,6 +41,43 @@ class _AnketEklemeEkraniState extends State<AnketEklemeEkrani> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("En fazla 5 seçenek ekleyebilirsiniz.")));
     }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      MaskotHelper.checkAndShow(
+        context,
+        featureKey: 'anket_ekleme_tutorial_gosterildi',
+        targets: [
+          TargetFocus(
+            identify: "anket-sorusu",
+            keyTarget: _questionKey,
+            alignSkip: Alignment.bottomRight,
+            contents: [
+              TargetContent(
+                  align: ContentAlign.bottom,
+                  builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Ne Merak Ediyorsun?', description: 'Topluluğa sormak istediğin soruyu buraya yazarak anketini başlat.', mascotAssetPath: 'assets/images/düsünceli_bay.png'))
+            ],
+          ),
+          TargetFocus(
+            identify: "anket-secenekleri",
+            keyTarget: _firstOptionKey,
+            alignSkip: Alignment.bottomRight,
+            contents: [
+              TargetContent(align: ContentAlign.bottom, builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Seçenekleri Belirle', description: 'Anketine en az iki seçenek eklemelisin. İstersen yandaki ikona tıklayarak seçeneklere resim de ekleyebilirsin!', mascotAssetPath: 'assets/images/mutlu_bay.png'))
+            ],
+          ),
+          TargetFocus(
+            identify: "anket-paylas",
+            keyTarget: _shareButtonKey,
+            alignSkip: Alignment.bottomLeft,
+            contents: [TargetContent(align: ContentAlign.bottom, builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Fikirleri Topla!', description: 'Hazır olduğunda anketini buradan paylaşarak topluluğun fikrini alabilirsin.', mascotAssetPath: 'assets/images/duyuru_bay.png'))],
+          ),
+        ],
+      );
+    });
   }
 
   void _removeOption(int index) {
@@ -142,7 +186,8 @@ class _AnketEklemeEkraniState extends State<AnketEklemeEkrani> {
         actions: [
           _isLoading 
             ? const Center(child: Padding(padding: EdgeInsets.only(right: 16), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))))
-            : TextButton(
+            : TextButton( // --- KEY EKLE ---
+                key: _shareButtonKey,
                 onPressed: _createPoll,
                 child: const Text("Paylaş", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
               )
@@ -156,6 +201,7 @@ class _AnketEklemeEkraniState extends State<AnketEklemeEkrani> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               TextFormField(
+                key: _questionKey, // --- KEY EKLE ---
                 controller: _questionController,
                 maxLength: 100,
                 maxLines: 2,
@@ -176,7 +222,10 @@ class _AnketEklemeEkraniState extends State<AnketEklemeEkrani> {
               ...List.generate(_optionControllers.length, (index) {
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: Row(
+                  child: KeyedSubtree(
+                    // --- İLK ELEMANA KEY EKLE ---
+                    key: index == 0 ? _firstOptionKey : null,
+                    child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center, 
                     children: [
                       // Resim Ekleme/Gösterme Alanı
@@ -235,6 +284,7 @@ class _AnketEklemeEkraniState extends State<AnketEklemeEkrani> {
                           onPressed: () => _removeOption(index),
                         ),
                     ],
+                  ),
                   ),
                 );
               }),

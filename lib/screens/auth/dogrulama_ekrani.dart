@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:kampus_yardim_app/main.dart';
 import '../../utils/app_colors.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import '../../utils/maskot_helper.dart';
 
 class DogrulamaEkrani extends StatefulWidget {
   const DogrulamaEkrani({super.key}); 
@@ -17,6 +20,9 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
   final TextEditingController _uniController = TextEditingController();
   final TextEditingController _deptController = TextEditingController();
   
+  // --- YENİ SİSTEM İÇİN GLOBAL KEY ---
+  final GlobalKey _submitButtonKey = GlobalKey();
+
   bool _isSending = false;
   late Stream<DocumentSnapshot> _userStatusStream;
   
@@ -27,6 +33,39 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
     if (userId != null) {
       _userStatusStream = FirebaseFirestore.instance.collection('kullanicilar').doc(userId).snapshots();
     }
+
+    // --- MASKOT KODU BAŞLANGIÇ ---
+    // HATA DÜZELTMESİ: Stream'den gelen veriyi doğru okumak için asenkron yapı kullanıldı.
+    _userStatusStream.first.then((snapshot) {
+      if (mounted) {
+        final userData = snapshot.data() as Map<String, dynamic>?;
+        final status = userData?['status'] ?? 'Unverified';
+        
+        if (status == 'Unverified') {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            MaskotHelper.checkAndShow(context,
+                featureKey: 'dogrulama_tutorial_gosterildi',
+                targets: [
+                  TargetFocus(
+                      identify: "submit-button",
+                      keyTarget: _submitButtonKey,
+                      contents: [
+                        TargetContent(
+                          align: ContentAlign.bottom,
+                          builder: (context, controller) =>
+                              MaskotHelper.buildTutorialContent(context,
+                                  title: 'Profilini Tamamla',
+                                  description:
+                                      'Topluluğun güvenliği için öğrenci olduğunu doğrulamamız gerekiyor. Bilgilerini doldur, biz de hızla onaylayalım!',
+                                  mascotAssetPath: 'assets/images/dedektif_bay.png'),
+                        )
+                      ])
+                ]);
+          });
+        }
+      }
+    });
+    // --- MASKOT KODU BİTİŞ ---
   }
 
   void _submitVerificationForm(String userId) async {
@@ -101,7 +140,16 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
           final status = userData['status'] ?? 'Unverified';
 
           if (status == 'Verified') {
-            return const Center(child: Text("Yönlendiriliyor..."));
+            // HATA DÜZELTMESİ: Kullanıcı durumu 'Verified' olduğunda sadece metin göstermek yerine
+            // ana ekrana yönlendirme işlemi yapılıyor. Bu, kullanıcının doğrulama ekranında
+            // takılı kalmasını engeller.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (context) => const AnaKontrolcu()), (route) => false);
+              }
+            });
+            return const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [CircularProgressIndicator(), SizedBox(height: 16), Text("Hesabınız Onaylandı!\nYönlendiriliyorsunuz...")]));
           } else if (status == 'Pending') {
             return _buildPendingView();
           } else if (status == 'Rejected') {
@@ -141,6 +189,7 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
                 _isSending
                     ? const Center(child: CircularProgressIndicator())
                     : ElevatedButton(
+                        key: _submitButtonKey, // --- BUTONA KEY EKLE ---
                         onPressed: () => _submitVerificationForm(userId!),
                         style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                         child: const Text("Kaydet ve Onaya Gönder", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),

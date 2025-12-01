@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_functions/cloud_functions.dart'; 
-import 'package:shared_preferences/shared_preferences.dart'; 
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart'; 
 
 import '../forum/forum_sayfasi.dart';
@@ -11,6 +10,7 @@ import '../market/pazar_sayfasi.dart';
 import '../chat/sohbet_listesi_ekrani.dart'; 
 import '../notification/bildirim_ekrani.dart'; 
 import '../profile/profil_ekrani.dart'; 
+import '../../utils/maskot_helper.dart';
 import '../../utils/app_colors.dart';
 
 class AnaEkran extends StatefulWidget {
@@ -51,140 +51,46 @@ class _AnaEkranState extends State<AnaEkran> {
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkAndShowTutorial();
+      // YENİ SİSTEM: MaskotHelper ile tanıtımı göster
+      MaskotHelper.checkAndShow(
+        context,
+        featureKey: 'ana_ekran_tutorial_gosterildi',
+        targets: [
+          // 1. PAZAR
+          TargetFocus(
+            identify: "Pazar",
+            keyTarget: keyPazar,
+            alignSkip: Alignment.topRight,
+            shape: ShapeLightFocus.RRect,
+            radius: 15,
+            contents: [
+              TargetContent(
+                align: ContentAlign.top,
+                builder: (context, controller) => MaskotHelper.buildTutorialContent(context,
+                    title: 'Kampüs Pazarı 🛍️',
+                    description: 'Ders notlarını sat, ikinci el eşya bul. Burası senin ticaret merkezin!',
+                    mascotAssetPath: 'assets/images/düsünceli_bay.png'),
+              ),
+            ],
+          ),
+          // 2. FORUM
+          TargetFocus(
+            identify: "Forum",
+            keyTarget: keyForum,
+            alignSkip: Alignment.topRight,
+            contents: [
+              TargetContent(
+                align: ContentAlign.top,
+                builder: (context, controller) => MaskotHelper.buildTutorialContent(context,
+                    title: 'Forum & İtiraflar 📢',
+                    description: 'Kampüste neler oluyor? Tartışmalara katıl, istersen anonim içini dök.',
+                    mascotAssetPath: 'assets/images/duyuru_bay.png'),
+              ),
+            ],
+          ),
+        ],
+      );
     });
-  }
-  
-  Future<void> _checkAndShowTutorial() async {
-    final prefs = await SharedPreferences.getInstance();
-    bool isShown = prefs.getBool('isTutorialShown') ?? false;
-
-    if (!isShown) {
-      await Future.delayed(const Duration(seconds: 1));
-      if (!mounted) return;
-      _createTutorial();
-      await prefs.setBool('isTutorialShown', true);
-    }
-  }
-
-  void _createTutorial() {
-    TutorialCoachMark(
-      targets: _createTargets(),
-      colorShadow: Colors.black,
-      textSkip: "ATLA",
-      paddingFocus: 10,
-      opacityShadow: 0.85,
-      onFinish: () => debugPrint("Tanıtım bitti"),
-      onClickTarget: (target) => debugPrint("Hedefe tıklandı: $target"),
-      onSkip: () {
-        debugPrint("Tanıtım geçildi");
-        return true; 
-      },
-    ).show(context: context);
-  }
-
-  List<TargetFocus> _createTargets() {
-    List<TargetFocus> targets = [];
-
-    // 1. PAZAR (Mutlu Bay)
-    targets.add(
-      TargetFocus(
-        identify: "Pazar",
-        keyTarget: keyPazar,
-        alignSkip: Alignment.topRight,
-        shape: ShapeLightFocus.RRect,
-        radius: 15,
-        contents: [
-          TargetContent(
-            align: ContentAlign.top,
-            builder: (context, controller) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Image.asset('assets/images/mutlu_bay.png', height: 160),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-                    child: const Column(
-                      children: [
-                        Text("Kampüs Pazarı 🛍️", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primary)),
-                        SizedBox(height: 8),
-                        Text("Ders notlarını sat, ikinci el eşya bul. Burası senin ticaret merkezin!", style: TextStyle(color: Colors.black87), textAlign: TextAlign.center),
-                      ],
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-
-    // 2. FORUM (Duyuru Bay)
-    targets.add(
-      TargetFocus(
-        identify: "Forum",
-        keyTarget: keyForum,
-        alignSkip: Alignment.topRight,
-        contents: [
-          TargetContent(
-            align: ContentAlign.top,
-            builder: (context, controller) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Image.asset('assets/images/duyuru_bay.png', height: 160),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-                    child: const Column(
-                      children: [
-                        Text("Forum & İtiraflar 📢", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primary)),
-                        SizedBox(height: 8),
-                        Text("Kampüste neler oluyor? Tartışmalara katıl, istersen anonim içini dök.", style: TextStyle(color: Colors.black87), textAlign: TextAlign.center),
-                      ],
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-
-    // 3. PROFIL (Mutlu Bay)
-    targets.add(
-      TargetFocus(
-        identify: "Profil",
-        keyTarget: keyProfil,
-        alignSkip: Alignment.topRight,
-        contents: [
-          TargetContent(
-            align: ContentAlign.top,
-            builder: (context, controller) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Image.asset('assets/images/mutlu_bay.png', height: 160),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-                    child: const Text("Burası senin alanın. Rozetlerini incele, ayarlarını yap. İyi eğlenceler!", style: TextStyle(color: Colors.black87), textAlign: TextAlign.center),
-                  ),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-
-    return targets;
   }
   
   Future<void> _verifyCounters() async {

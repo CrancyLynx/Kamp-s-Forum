@@ -9,7 +9,9 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../utils/app_colors.dart';
 import '../auth/giris_ekrani.dart'; 
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../services/auth_service.dart';
+import '../../utils/maskot_helper.dart'; // EKLENDİ
 
 Future<File> _compressImage(File file) async {
   // İleride buraya resim sıkıştırma kütüphanesi eklenebilir.
@@ -37,6 +39,10 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   final _instagramController = TextEditingController();
   final _xPlatformController = TextEditingController();
   final _phoneController = TextEditingController();
+
+  // --- YENİ SİSTEM İÇİN GLOBAL KEY'LER ---
+  final GlobalKey _coverAvatarKey = GlobalKey();
+  final GlobalKey _saveButtonKey = GlobalKey();
 
   // State Değişkenleri
   String? _university;
@@ -71,6 +77,35 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   void initState() {
     super.initState();
     _loadUserData();
+
+    // --- YENİ SİSTEM İLE MASKOT KODU ---
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      MaskotHelper.checkAndShow(context,
+          featureKey: 'profil_duzenle_tutorial_gosterildi',
+          targets: [
+            TargetFocus(
+                identify: "cover-avatar-area",
+                keyTarget: _coverAvatarKey,
+                alignSkip: Alignment.topRight,
+                contents: [
+                  TargetContent(
+                    align: ContentAlign.top, builder: (context, controller) =>
+                      MaskotHelper.buildTutorialContent(
+                          context,
+                          title: 'Görünümünü Özelleştir',
+                          description: 'Buraya tıklayarak kapak fotoğrafını ve avatarını değiştirebilirsin. İstersen hazır avatarlardan birini de seçebilirsin!'),
+                  )
+                ]),
+            TargetFocus(
+                identify: "save-button",
+                keyTarget: _saveButtonKey,
+                alignSkip: Alignment.topRight,
+                contents: [TargetContent(align: ContentAlign.top, builder: (context, controller) => MaskotHelper.buildTutorialContent(
+                  context,
+                  title: 'Değişiklikleri Kaydet',
+                  description: 'Yaptığın tüm değişiklikleri profilinde göstermek için bu butona basmayı unutma.'))])
+          ]);
+    });
   }
 
   Future<void> _loadUserData() async {
@@ -502,6 +537,7 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
             SizedBox(
               height: 240, // Toplam yükseklik
               child: Stack(
+                key: _coverAvatarKey, // --- KEY EKLE ---
                 children: [
                   // A. Kapak Fotoğrafı
                   GestureDetector(
@@ -645,6 +681,7 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton(
+                        key: _saveButtonKey, // --- KEY EKLE ---
                         onPressed: _isLoading ? null : _saveProfile,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.success,

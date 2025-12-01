@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../utils/app_colors.dart';
 import '../../main.dart'; 
-import '../../widgets/app_logo.dart'; // Düzelttiğimiz AppLogo
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -56,11 +55,11 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF121212) : AppColors.primary;
+    // ÇÖZÜM: Arka plan rengini, logonun kendi rengiyle aynı yapıyoruz.
+    const logoBackgroundColor = Color(0xFF436850);
 
     return Scaffold(
-      backgroundColor: bgColor,
+      backgroundColor: logoBackgroundColor,
       body: Center(
         child: AnimatedBuilder(
           animation: _controller,
@@ -69,10 +68,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               scale: _scaleAnimation.value,
               child: Opacity(
                 opacity: _opacityAnimation.value,
-                child: AppLogo(
-                  size: 80, 
-                  isLightMode: false, 
-                ),
+                // İSTEK: AppLogo widget'ı yerine doğrudan istenen logo kullanıldı.
+                child: Image.asset('assets/images/app_logo3.png', width: 150),
               ),
             );
           },

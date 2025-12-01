@@ -1,66 +1,211 @@
 import 'package:flutter/material.dart';
-import 'package:introduction_screen/introduction_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../utils/app_colors.dart';
 import 'giris_ekrani.dart';
 
-class OnboardingScreen extends StatelessWidget {
-  const OnboardingScreen({super.key});
+class OnboardingScreen extends StatefulWidget {
+  const OnboardingScreen({Key? key}) : super(key: key);
 
-  Future<void> _completeOnboarding(BuildContext context) async {
+  @override
+  State<OnboardingScreen> createState() => _OnboardingScreenState();
+}
+
+class _OnboardingScreenState extends State<OnboardingScreen> {
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+
+  final List<OnboardingContent> _contents = [
+    OnboardingContent(
+      title: "Kampüsün Sosyal Ağına\nHoş Geldin!",
+      description:
+          "Sadece üniversite öğrencilerine özel bu platformda okulun nabzını tutmaya hazır mısın?",
+      imagePath: "assets/images/hosgeldin_bay.png",
+    ),
+    OnboardingContent(
+      title: "Duyurular ve Etkinlikler\nCebinde",
+      description:
+          "Okuldaki son dakika gelişmelerinden, etkinliklerden ve öğrenci kulüplerinden anında haberdar ol.",
+      imagePath: "assets/images/duyuru_bay.png",
+    ),
+    OnboardingContent(
+      title: "Notlarını Paylaş\nEşyalarını Değerlendir",
+      description:
+          "Ders notlarını paylaş, ikinci el eşyalarını güvenle sat veya ihtiyacın olanı bul.",
+      imagePath: "assets/images/calıskan_bay.png",
+    ),
+  ];
+
+  Future<void> _completeOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isFirstTime', false);
-    if (context.mounted) {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GirisEkrani()));
-    }
+    await prefs.setBool('onboarding_complete', true);
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const GirisEkrani()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return IntroductionScreen(
-      pages: [
-        PageViewModel(
-          title: "Kampüsüne Hoş Geldin",
-          body: "Üniversite hayatındaki her şey tek bir uygulamada. Duyurular, etkinlikler ve daha fazlası.",
-          image: const Icon(Icons.school_rounded, size: 100, color: AppColors.primary),
-          decoration: const PageDecoration(
-            titleTextStyle: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            bodyTextStyle: TextStyle(fontSize: 16),
-          ),
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              flex: 3,
+              child: PageView.builder(
+                controller: _pageController,
+                onPageChanged: (value) {
+                  setState(() {
+                    _currentPage = value;
+                  });
+                },
+                itemCount: _contents.length,
+                itemBuilder: (context, index) {
+                  return Padding(
+                    padding: const EdgeInsets.all(30.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Maskot Görseli (Daha şık çerçeve)
+                        Container(
+                          height: 300,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppColors.primary.withOpacity(0.1),
+                          ),
+                          padding: const EdgeInsets.all(20),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 10),
+                                ),
+                              ],
+                              image: DecorationImage(
+                                image: AssetImage(_contents[index].imagePath),
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 40),
+                        // Başlık
+                        Text(
+                          _contents[index].title,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textDark,
+                            height: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        // Açıklama
+                        Text(
+                          _contents[index].description,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                            height: 1.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            Expanded(
+              flex: 1,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 30),
+                child: Column(
+                  children: [
+                    // Sayfa Göstergesi (Dots)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(
+                        _contents.length,
+                        (index) => buildDot(index),
+                      ),
+                    ),
+                    const Spacer(),
+                    // Buton
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          if (_currentPage == _contents.length - 1) {
+                            _completeOnboarding();
+                          } else {
+                            _pageController.nextPage(
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeIn,
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          _currentPage == _contents.length - 1
+                              ? "Başlayalım"
+                              : "Devam Et",
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-        PageViewModel(
-          title: "Pazar Yeri",
-          body: "Ders kitaplarını sat, ihtiyacın olan notları bul veya ikinci el eşyalarını değerlendir.",
-          image: const Icon(Icons.shopping_bag_rounded, size: 100, color: Colors.orange),
-          decoration: const PageDecoration(
-            titleTextStyle: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            bodyTextStyle: TextStyle(fontSize: 16),
-          ),
-        ),
-        PageViewModel(
-          title: "Forum ve İtiraflar",
-          body: "Kampüs gündemini takip et, anonim itiraflar yap veya sorularına cevap bul.",
-          image: const Icon(Icons.forum_rounded, size: 100, color: Colors.blue),
-          decoration: const PageDecoration(
-            titleTextStyle: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            bodyTextStyle: TextStyle(fontSize: 16),
-          ),
-        ),
-      ],
-      onDone: () => _completeOnboarding(context),
-      onSkip: () => _completeOnboarding(context),
-      showSkipButton: true,
-      skip: const Text("Atla", style: TextStyle(fontWeight: FontWeight.bold)),
-      next: const Icon(Icons.arrow_forward),
-      done: const Text("Başla", style: TextStyle(fontWeight: FontWeight.bold)),
-      dotsDecorator: DotsDecorator(
-        size: const Size.square(10.0),
-        activeSize: const Size(20.0, 10.0),
-        activeColor: AppColors.primary,
-        color: Colors.black26,
-        spacing: const EdgeInsets.symmetric(horizontal: 3.0),
-        activeShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25.0)),
       ),
     );
   }
+
+  AnimatedContainer buildDot(int index) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      margin: const EdgeInsets.only(right: 5),
+      height: 6,
+      width: _currentPage == index ? 20 : 6,
+      decoration: BoxDecoration(
+        color: _currentPage == index
+            ? AppColors.primary
+            : const Color(0xFFD8D8D8),
+        borderRadius: BorderRadius.circular(3),
+      ),
+    );
+  }
+}
+
+class OnboardingContent {
+  final String title;
+  final String description;
+  final String imagePath;
+
+  OnboardingContent({
+    required this.title,
+    required this.description,
+    required this.imagePath,
+  });
 }

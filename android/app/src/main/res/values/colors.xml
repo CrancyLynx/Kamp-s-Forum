@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="splash_background_light">#EDE7F6</color> <!-- AppColors.primaryLighter -->
-    <color name="splash_background_dark">#212121</color>  <!-- Koyu tema için uygun bir renk -->
+    <color name="splash_background_light">#436850</color> <!-- Logonun yeşil rengi -->
+    <color name="splash_background_dark">#436850</color>  <!-- Karanlık modda da aynı yeşil rengi kullanıyoruz -->
 </resources>

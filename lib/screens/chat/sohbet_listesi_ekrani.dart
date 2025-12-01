@@ -7,6 +7,8 @@ import 'package:timeago/timeago.dart' as timeago;
 import 'sohbet_detay_ekrani.dart';
 import '../../widgets/animated_list_item.dart';
 // Düzeltilmiş Importlar
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import '../../utils/maskot_helper.dart';
 import '../../utils/app_colors.dart';
 
 
@@ -20,6 +22,9 @@ class SohbetListesiEkrani extends StatefulWidget {
 class _SohbetListesiEkraniState extends State<SohbetListesiEkrani> {
   final String _currentUserId = FirebaseAuth.instance.currentUser!.uid;
   
+  // --- YENİ SİSTEM İÇİN GLOBAL KEY ---
+  final GlobalKey _emptyStateKey = GlobalKey();
+
   // PERFORMANS: Stream'i sakla
   late Stream<QuerySnapshot> _chatListStream;
 
@@ -34,6 +39,32 @@ class _SohbetListesiEkraniState extends State<SohbetListesiEkrani> {
             .where('participants', arrayContains: _currentUserId)
             .orderBy('lastMessageTimestamp', descending: true)
             .snapshots();
+
+    // --- YENİ SİSTEM İLE MASKOT KODU ---
+    // Sadece hiç sohbet yoksa tutorial'ı göster
+    _chatListStream.first.then((snapshot) {
+      if (snapshot.docs.isEmpty && mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          MaskotHelper.checkAndShow(context,
+              featureKey: 'sohbet_listesi_tutorial_gosterildi',
+              targets: [
+                TargetFocus(
+                    identify: "empty-state",
+                    keyTarget: _emptyStateKey,
+                    alignSkip: Alignment.topRight,
+                    contents: [
+                      TargetContent(
+                        align: ContentAlign.bottom,
+                        builder: (context, controller) => MaskotHelper.buildTutorialContent(context,
+                            title: 'Mesajlaşmaya Başla!',
+                            description: 'Arkadaşlarının profillerine giderek onlarla sohbet başlatabilirsin. Tüm mesajların burada listelenecek.',
+                            mascotAssetPath: 'assets/images/mutlu_bay.png'),
+                      )
+                    ])
+              ]);
+        });
+      }
+    });
   }
 
   @override
@@ -56,6 +87,7 @@ class _SohbetListesiEkraniState extends State<SohbetListesiEkrani> {
           }
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return Center(
+              key: _emptyStateKey, // --- KEY EKLE ---
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
