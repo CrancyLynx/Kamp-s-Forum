@@ -5,7 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart';
 
-// Arka plan mesaj işleyicisi (Main.dart içinde tanımlı olmalı)
+// Arka plan mesaj işleyicisi
 @pragma('vm:entry-point')
 Future<void> firebaseBackgroundMessageHander(RemoteMessage message) async {
   if (kDebugMode) {
@@ -20,7 +20,6 @@ class PushNotificationService {
   final _messageStreamController = StreamController<RemoteMessage>.broadcast();
   Stream<RemoteMessage> get onMessage => _messageStreamController.stream; 
 
-  // --- DÜZELTİLMİŞ INITIALIZE FONKSİYONU ---
   Future<void> initialize() async {
     await _requestPermission();
     _handleForegroundMessages();
@@ -33,36 +32,56 @@ class PushNotificationService {
     }
 
     // 2. Kullanıcı oturum durumunu dinliyoruz
-    FirebaseAuth.instance.authStateChanges().listen((User? user) {
-      // HATA BURADAYDI: token değişkeni aşağıda güncellendiği için Dart null olabilir sanıyordu.
-      // ÇÖZÜM: 'token!' kullanarak null olmadığını garanti ettik.
+    FirebaseAuth.instance.authStateChanges().listen((User? user) async {
       if (user != null && token != null) {
-        _saveTokenToFirestore(user.uid, token!); 
+        // KRİTİK DÜZELTME: Hemen yazmaya çalışma. Profilin oluşmasını bekle.
+        // Yeni kayıt sırasında AuthService profil oluştururken çakışma olmaması için
+        // veritabanında dokümanın varlığını kontrol ediyoruz.
+        await _safeSaveToken(user.uid, token!);
       }
     });
 
-    // 3. Token yenilenirse (Uygulama silinip yüklenirse vs.)
-    _firebaseMessaging.onTokenRefresh.listen((newToken) {
-      token = newToken; // Local değişkeni güncelliyoruz
+    // 3. Token yenilenirse
+    _firebaseMessaging.onTokenRefresh.listen((newToken) async {
+      token = newToken;
       if (kDebugMode) print("FCM Token Yenilendi: $newToken");
       
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser != null) {
-        _saveTokenToFirestore(currentUser.uid, newToken);
+        await _safeSaveToken(currentUser.uid, newToken);
       }
     });
   }
   
-  // Firestore'a kaydetme fonksiyonu
-  Future<void> _saveTokenToFirestore(String userId, String token) async {
+  // GÜVENLİ TOKEN KAYDETME
+  Future<void> _safeSaveToken(String userId, String token) async {
     try {
-      await FirebaseFirestore.instance.collection('kullanicilar').doc(userId).set(
-        {'fcmTokens': FieldValue.arrayUnion([token])}, 
-        SetOptions(merge: true),
-      );
-      if (kDebugMode) print("Token başarıyla kullanıcıya eklendi: $userId");
+      final docRef = FirebaseFirestore.instance.collection('kullanicilar').doc(userId);
+      
+      // Dokümanın var olup olmadığını kontrol et (Retry mekanizması ile)
+      // Yeni kayıtlarda profilin yazılması 1-2 saniye sürebilir.
+      bool docExists = false;
+      for (int i = 0; i < 5; i++) {
+        final doc = await docRef.get();
+        if (doc.exists) {
+          docExists = true;
+          break;
+        }
+        await Future.delayed(const Duration(seconds: 1));
+      }
+
+      if (docExists) {
+        await docRef.update({
+          'fcmTokens': FieldValue.arrayUnion([token])
+        });
+        if (kDebugMode) print("Token başarıyla kullanıcıya eklendi: $userId");
+      } else {
+        // Doküman hala yoksa, AuthService henüz oluşturmamış olabilir veya misafir kullanıcısıdır.
+        // Bu durumda yazma yapmıyoruz ki 'PERMISSION_DENIED' hatası alıp auth akışını bozmayalım.
+        if (kDebugMode) print("Kullanıcı profili bulunamadı, token yazılmadı (Güvenli çıkış).");
+      }
     } catch (e) {
-      if (kDebugMode) print("Token kaydetme hatası: $e");
+      if (kDebugMode) print("Token kaydetme hatası (Önemsiz): $e");
     }
   }
 
@@ -121,12 +140,14 @@ class PushNotificationService {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
 
-    final currentToken = await _firebaseMessaging.getToken();
-    if (currentToken != null) {
-      await FirebaseFirestore.instance.collection('kullanicilar').doc(currentUser.uid).update(
-        {'fcmTokens': FieldValue.arrayRemove([currentToken])},
-      );
-    }
+    try {
+      final currentToken = await _firebaseMessaging.getToken();
+      if (currentToken != null) {
+        await FirebaseFirestore.instance.collection('kullanicilar').doc(currentUser.uid).update(
+          {'fcmTokens': FieldValue.arrayRemove([currentToken])},
+        );
+      }
+    } catch (_) {}
   }
   
   void dispose() {

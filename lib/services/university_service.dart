@@ -11,14 +11,14 @@ class UniversityService {
 
   // Uygulama açılınca veya ekran yüklenince çağrılmalı
   Future<void> loadData() async {
-    // Veri zaten yüklüyse tekrar yükleme
     if (_universities.isNotEmpty) return;
 
     try {
       final String response = await rootBundle.loadString('assets/json/universities.json');
       final List<dynamic> data = json.decode(response);
       
-      _universities = data.map((e) => {
+      // DÜZELTME: Harita türünü <String, dynamic> olarak açıkça belirttik.
+      _universities = data.map((e) => <String, dynamic>{
         "name": e['name'].toString(),
         // Listeyi güvenli bir şekilde String listesine çeviriyoruz
         "departments": (e['departments'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? <String>[]
@@ -38,18 +38,17 @@ class UniversityService {
   // Seçilen üniversiteye göre bölümleri getir
   List<String> getDepartmentsForUniversity(String uniName) {
     try {
-      // DÜZELTME: orElse null değil, boş bir Map döndürmeli.
+      // DÜZELTME 1: toLowerCase() kaldırıldı, tam eşleşme yapıldı (Türkçe karakter sorunu için)
+      // DÜZELTME 2: orElse dönüş tipi <String, dynamic>{} olarak belirtildi (Type hatası için)
       final uni = _universities.firstWhere(
-        (e) => e['name'].toString().toLowerCase() == uniName.toLowerCase(),
-        orElse: () => {"name": "", "departments": <String>[]}, 
+        (e) => e['name'] == uniName,
+        orElse: () => <String, dynamic>{}, 
       );
 
-      // uni artık null olamaz, ancak departments içeriğini kontrol ediyoruz.
-      final departments = uni['departments'];
-      if (departments == null) return [];
+      if (uni.isEmpty || uni['departments'] == null) return [];
 
       // Listeyi güvenli bir şekilde al ve sırala
-      List<String> depts = List<String>.from(departments);
+      List<String> depts = List<String>.from(uni['departments']);
       depts.sort();
       return depts;
     } catch (e) {

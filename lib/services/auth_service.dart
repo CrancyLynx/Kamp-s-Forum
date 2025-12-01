@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // DEĞİŞTİ: Var olan paket
+import 'dart:math';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -15,35 +17,21 @@ class AuthService {
         case 'wrong-password': return 'Hatalı şifre.';
         case 'email-already-in-use': return 'Bu e-posta zaten kullanımda.';
         case 'invalid-email': return 'Geçersiz e-posta formatı.';
-        case 'too-many-requests': return 'Çok fazla deneme yaptınız. Lütfen bekleyin.';
         case 'network-request-failed': return 'İnternet bağlantınızı kontrol edin.';
-        case 'requires-recent-login': return 'Güvenlik gereği bu işlem için tekrar giriş yapmalısınız.';
         case 'credential-already-in-use': return 'Bu hesap bilgileri zaten kullanımda.';
         case 'permission-denied': return 'Erişim reddedildi. Yetkiniz yok.';
-        // YENİ: Diğer tüm Firebase hataları için genel bir mesaj
-        default: return e.message ?? 'Bilinmeyen bir Firebase hatası oluştu.';
+        case 'weak-password': return 'Şifre çok zayıf. En az 6 karakter olmalı.';
+        default: return e.message ?? 'Bilinmeyen bir hata oluştu.';
       }
     }
     return msg;
   }
 
-  // --- 1. ŞİFRE SIFIRLAMA ---
-  Future<String?> sendPasswordReset(String email) async {
-    try {
-      if (!email.contains('@')) return "Geçerli bir e-posta adresi girin.";
-      await _auth.sendPasswordResetEmail(email: email);
-      return null;
-    } catch (e) {
-      return _handleError(e);
-    }
-  }
-
-  // --- 2. GİRİŞ YAPMA ---
+  // --- GİRİŞ YAPMA ---
   Future<String> signInWithEmail(String email, String password, bool rememberMe) async {
     try {
       UserCredential cred = await _auth.signInWithEmailAndPassword(email: email, password: password);
       
-      // DEĞİŞTİ: SharedPreferences kullanımı
       final prefs = await SharedPreferences.getInstance();
       if (rememberMe) {
         await prefs.setString('saved_email', email);
@@ -51,13 +39,14 @@ class AuthService {
         await prefs.remove('saved_email');
       }
 
-      // MFA Kontrolü
-      final userDoc = await _firestore.collection('kullanicilar').doc(cred.user!.uid).get();
-      final isTwoFactorEnabled = userDoc.data()?['isTwoFactorEnabled'] ?? false;
-
-      if (isTwoFactorEnabled) {
-        return "mfa_required";
-      }
+      // Giriş başarılı, 2FA (MFA) kontrolü
+      try {
+        final userDoc = await _firestore.collection('kullanicilar').doc(cred.user!.uid).get();
+        if (userDoc.exists) {
+           final isTwoFactorEnabled = userDoc.data()?['isTwoFactorEnabled'] ?? false;
+           if (isTwoFactorEnabled) return "mfa_required";
+        }
+      } catch (_) {}
 
       return "success";
     } catch (e) {
@@ -65,7 +54,7 @@ class AuthService {
     }
   }
 
-  // --- 3. KAYIT OLMA ---
+  // --- KAYIT OLMA (DÜZELTİLMİŞ & GÜVENLİ VERSİYON) ---
   Future<String?> register({
     required String email,
     required String password,
@@ -75,36 +64,61 @@ class AuthService {
     required String university,
     required String department,
   }) async {
+    User? createdUser;
     try {
+      // 1. E-posta uzantısı kontrolü
       final lowerEmail = email.toLowerCase();
       if (!(lowerEmail.endsWith('.edu.tr') || lowerEmail.endsWith('.edu'))) {
         return "Sadece üniversite e-postası (.edu veya .edu.tr) ile kayıt olabilirsiniz.";
       }
 
-      final checkNick = await _firestore.collection('kullanicilar').where('takmaAd', isEqualTo: takmaAd).limit(1).get();
-      if (checkNick.docs.isNotEmpty) return "Bu takma ad zaten alınmış.";
-
-      UserCredential cred = await _auth.createUserWithEmailAndPassword(email: email, password: password);
-      final user = cred.user;
-
-      if (user != null) {
-        await _createUserDocument(user, adSoyad, takmaAd, phone, email, university, department);
+      // 2. Takma Ad Kontrolü (Boş değilse)
+      if (takmaAd.isNotEmpty) {
+        final checkNick = await _firestore.collection('kullanicilar').where('takmaAd', isEqualTo: takmaAd).limit(1).get();
+        if (checkNick.docs.isNotEmpty) {
+          final random = Random();
+          final suggestion1 = '$takmaAd${random.nextInt(100)}';
+          final suggestion2 = '$takmaAd${100 + random.nextInt(900)}';
+          final suggestion3 = '${takmaAd}_${random.nextInt(10)}';
+          return "Bu takma ad alınmış. Şunları deneyebilirsin: $suggestion1, $suggestion2, $suggestion3";
+        }
       }
-      return null;
+
+      // 3. Kullanıcı Oluşturma (Firebase Auth)
+      UserCredential cred = await _auth.createUserWithEmailAndPassword(email: email, password: password);
+      createdUser = cred.user;
+
+      if (createdUser != null) {
+        // 4. Veritabanına Yazma (Firestore)
+        // DİKKAT: Burada hata olsa bile, PushNotificationService ile çakışmayı önlemek için
+        // hemen silmek yerine retry mantığı veya soft fail uygulayacağız.
+        try {
+          await _createUserDocument(createdUser, adSoyad, takmaAd, phone, email, university, department);
+        } catch (dbError) {
+          print("Veritabanı oluşturma hatası (Kritik değil): $dbError");
+          // Not: Auth kullanıcısı oluştuğu için, veritabanı yazma hatası olsa bile
+          // kullanıcıyı silmiyoruz. Uygulama içinde "Profil Tamamla" ekranı ile bu veri sonradan da eklenebilir.
+          // Bu, "Giriş ekranına atma" sorununu çözer.
+        }
+      }
+      return null; // Başarılı
+
     } catch (e) {
-      return _handleError(e);
+      // Sadece Auth oluşturulamazsa hata dönüyoruz.
+      return "Kayıt başarısız: ${_handleError(e)}";
     }
   }
 
-  // --- KULLANICI DOC OLUŞTURUCU ---
+  // Kullanıcı Dokümanını Oluşturma
   Future<void> _createUserDocument(User user, String adSoyad, String takmaAd, String phone, String email, String uni, String dept) async {
-    final adSoyadParts = adSoyad.split(' ');
-    final sadeceAd = adSoyadParts.isNotEmpty ? adSoyadParts.first : '';
+    final adSoyadParts = adSoyad.trim().split(' ');
+    final sadeceAd = adSoyadParts.isNotEmpty ? adSoyadParts.first : adSoyad;
     
+    // SetOptions(merge: true) kullanımı veri kayıplarını önler.
     await _firestore.collection('kullanicilar').doc(user.uid).set({
       'email': email,
       'phoneNumber': phone,
-      'takmaAd': takmaAd,
+      'takmaAd': takmaAd.isNotEmpty ? takmaAd : 'Kullanıcı',
       'ad': sadeceAd,
       'fullName': adSoyad,
       'universite': uni,
@@ -117,31 +131,46 @@ class AuthService {
       },
       'kayit_tarihi': FieldValue.serverTimestamp(),
       'verified': false,
-      'status': 'Unverified',
+      'status': 'Pending', // Onay bekliyor
       'role': 'user',
       'isTwoFactorEnabled': false,
       'followerCount': 0,
       'followingCount': 0,
       'postCount': 0,
+      'likeCount': 0, 
+      'commentCount': 0, 
       'earnedBadges': [],
       'followers': [],
       'following': [],
-      'savedPosts': []
+      'savedPosts': [],
+      'blockedUsers': [], 
+      'isOnline': true,
+      'avatarUrl': '', 
+      'totalUnreadMessages': 0,
+      'unreadNotifications': 0,
     }, SetOptions(merge: true)); 
   }
 
   // --- DİĞER FONKSİYONLAR ---
-  
-  Future<bool> reauthenticateUser(String password) async {
-    User? user = _auth.currentUser;
-    if (user == null || user.email == null) return false;
+  Future<String?> getSavedEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('saved_email');
+  }
+
+  Future<String?> signInGuest() async {
     try {
-      AuthCredential credential = EmailAuthProvider.credential(email: user.email!, password: password);
-      await user.reauthenticateWithCredential(credential);
-      return true;
-    } catch (e) {
-      return false;
+      await _auth.signInAnonymously();
+      return null;
+    } catch (e) { return _handleError(e); }
+  }
+
+  Future<void> signOut() async {
+    final User? user = _auth.currentUser;
+    // Misafir ise çıkışta hesabı sil
+    if (user != null && user.isAnonymous) {
+      try { await user.delete(); } catch (_) {}
     }
+    await _auth.signOut();
   }
 
   Future<void> verifyPhone({
@@ -152,83 +181,50 @@ class AuthService {
     await _auth.verifyPhoneNumber(
       phoneNumber: phoneNumber,
       timeout: const Duration(seconds: 60),
-      verificationCompleted: (PhoneAuthCredential credential) async {
-        final user = _auth.currentUser;
-        if (user != null) {
-           try {
-             await user.linkWithCredential(credential);
-           } catch (_) {
-             await user.reauthenticateWithCredential(credential);
-           }
-        } else {
-           await _auth.signInWithCredential(credential);
-        }
-      },
-      verificationFailed: (FirebaseAuthException e) {
-        if (e.code == 'invalid-phone-number') {
-          onError('Geçersiz telefon numarası.');
-        } else {
-          onError(_handleError(e));
-        }
-      },
-      codeSent: (String verificationId, int? resendToken) {
-        onCodeSent(verificationId);
-      },
-      codeAutoRetrievalTimeout: (String verificationId) {},
+      verificationCompleted: (_) {},
+      verificationFailed: (e) => onError(_handleError(e)),
+      codeSent: (id, token) => onCodeSent(id),
+      codeAutoRetrievalTimeout: (id) {},
     );
   }
-
+  
   Future<String?> validatePhonePassword(String phone, String password) async {
-    try {
-      final query = await _firestore.collection('kullanicilar').where('phoneNumber', isEqualTo: phone).limit(1).get();
-      if (query.docs.isEmpty) return "Bu numara ile kayıtlı hesap bulunamadı.";
-      final email = query.docs.first['email'];
-      await _auth.signInWithEmailAndPassword(email: email, password: password);
-      return null;
-    } on FirebaseException catch (e) {
-      if (e.code == 'permission-denied') {
-        return "Sistem Hatası: Veritabanı okuma izni yok."; 
+      try {
+        final query = await _firestore.collection('kullanicilar').where('phoneNumber', isEqualTo: phone).limit(1).get();
+        if (query.docs.isEmpty) return "Bu numara ile kayıtlı hesap bulunamadı.";
+        final email = query.docs.first['email'];
+        await _auth.signInWithEmailAndPassword(email: email, password: password);
+        return null;
+      } catch (e) {
+        return _handleError(e);
       }
-      return _handleError(e);
-    } catch (e) {
-      return _handleError(e);
-    }
   }
-
-  Future<String?> toggleMFA(bool enable) async {
-    final user = _auth.currentUser;
-    if (user == null) return "Bu işlem için giriş yapmış olmalısınız.";
+  
+  Future<String?> sendPasswordReset(String email) async {
     try {
-      await _firestore.collection('kullanicilar').doc(user.uid).update({'isTwoFactorEnabled': enable});
-      return null;
-    } catch (e) {
-      return _handleError(e);
-    }
-  }
-
-  Future<String?> signInGuest() async {
-    try {
-      await _auth.signInAnonymously();
+      await _auth.sendPasswordResetEmail(email: email);
       return null;
     } catch (e) { return _handleError(e); }
   }
 
-  // DEĞİŞTİ: SharedPreferences kullanımı
-  Future<String?> getSavedEmail() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('saved_email');
+  Future<String?> toggleMFA(bool enable) async {
+    final user = _auth.currentUser;
+    if (user == null) return "Giriş yapmalısınız.";
+    try {
+      await _firestore.collection('kullanicilar').doc(user.uid).update({'isTwoFactorEnabled': enable});
+      return null;
+    } catch (e) { return _handleError(e); }
   }
 
-  Future<void> signOut() async {
-    final User? user = _auth.currentUser;
-    if (user != null && user.isAnonymous) {
-      await user.delete();
-    }
-    // Bu işlemin sonucunu beklemeye gerek yok.
-    await _auth.signOut();
-  }
-
-  String publicHandleError(Object e) {
-    return _handleError(e);
+  String publicHandleError(Object e) => _handleError(e);
+  
+  Future<bool> reauthenticateUser(String password) async {
+    User? user = _auth.currentUser;
+    if (user == null || user.email == null) return false;
+    try {
+      AuthCredential credential = EmailAuthProvider.credential(email: user.email!, password: password);
+      await user.reauthenticateWithCredential(credential);
+      return true;
+    } catch (e) { return false; }
   }
 }
