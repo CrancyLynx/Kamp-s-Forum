@@ -77,7 +77,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFF212121), Color(0xFF424242)], // Koyu griden -> Açık griye
+            colors: [Color(0xFF212121), Color.fromARGB(255, 41, 41, 41)], // Koyu griden -> Açık griye
           ),
         ),
         child: Center(
