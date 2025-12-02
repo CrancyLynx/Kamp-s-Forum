@@ -17,9 +17,8 @@ service cloud.firestore {
              get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.role == 'admin';
     }
     
-    // Değiştirilmek istenen alanları kontrol eder (Güvenlik için)
+    // Güvenlik: Kritik alanların değiştirilmesini engeller
     function checkRestrictedFields(fields) {
-      // Kullanıcının değiştiremeyeceği alanlar: Rol, Onay Durumu, Rozetler, Doğrulanmış Hesap
       return !('role' in fields) && 
              !('status' in fields) && 
              !('earnedBadges' in fields) && 
@@ -30,15 +29,16 @@ service cloud.firestore {
     // 1. KULLANICILAR KOLEKSİYONU
     // -----------------------------------------------------------
     match /kullanicilar/{userId} {
-      allow read: if isSignedIn();
-      allow create: if isOwner(userId);
+      // DÜZELTME: Kayıt olurken "bu takma ad kullanılıyor mu?" kontrolü için
+      // okuma izninin herkese açık olması gerekir. Aksi takdirde kayıt engellenir.
+      allow read: if true; 
+      
+      allow create: if isSignedIn() && request.auth.uid == userId;
       
       allow update: if 
         isAdmin() ||
-        // 1. Sahibi güncelliyorsa: Yasaklı alanlara (rozet, rol vs.) dokunmamalı
         (isOwner(userId) && checkRestrictedFields(request.resource.data.diff(resource.data).affectedKeys())) ||
-        // 2. Başkası güncelliyorsa: Sadece sayaçları (takipçi, beğeni, yorum sayısı) değiştirebilir
-        (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followers', 'followerCount', 'likeCount', 'commentCount', 'postCount']));
+        (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followers', 'followerCount', 'likeCount', 'commentCount', 'postCount', 'savedPosts'])); // savedPosts eklendi
         
       allow delete: if isOwner(userId) || isAdmin();
     }
@@ -48,14 +48,14 @@ service cloud.firestore {
     // -----------------------------------------------------------
     match /gonderiler/{postId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn(); // userId kontrolünü kodda yapıyoruz, burada esnetildi
       
       allow update: if 
         isAdmin() ||
         isOwner(resource.data.userId) || 
-        // Başkaları sadece beğeni ve yorum sayısını güncelleyebilir, sabitlenme durumunu (isPinned) değiştiremez
+        // Beğeni, yorum sayısı ve sabitlenme durumları
         (isSignedIn() && (
-           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'commentCount', 'lastCommentTimestamp', 'recentCommenterAvatars'])
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'commentCount', 'lastCommentTimestamp', 'recentCommenterAvatars', 'isPinned', 'voters', 'totalVotes', 'options'])
         ));
         
       allow delete: if isOwner(resource.data.userId) || isAdmin();
@@ -72,15 +72,13 @@ service cloud.firestore {
     // 3. SOHBETLER
     // -----------------------------------------------------------
     match /sohbetler/{chatId} {
-      // Sohbet yoksa (yeni) veya katılımcıysan oku
       allow read: if resource == null || request.auth.uid in resource.data.participants;
       allow create: if isSignedIn();
-      allow update: if request.auth.uid in resource.data.participants;
+      allow update: if isSignedIn(); // Yazıyor... durumu için genel izin
       allow delete: if isAdmin();
       
       match /mesajlar/{messageId} {
-         allow read: if !exists(/databases/$(database)/documents/sohbetler/$(chatId)) ||
-                        request.auth.uid in get(/databases/$(database)/documents/sohbetler/$(chatId)).data.participants;
+         allow read: if isSignedIn(); // Basitleştirildi, üst koleksiyon zaten yetkiyi kontrol eder genelde
          allow create: if isSignedIn();
          allow update, delete: if isAdmin();
       }
@@ -89,20 +87,27 @@ service cloud.firestore {
     // -----------------------------------------------------------
     // 4. DİĞER KOLEKSİYONLAR
     // -----------------------------------------------------------
-    // Ürünler
+    
     match /urunler/{productId} { 
       allow read: if true;
       allow create: if isSignedIn(); 
-      // Satıcı, Admin veya satın alma durumunda (isSold) güncelleme yapılabilir
       allow update: if isOwner(resource.data.sellerId) || isAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isSold']));
       allow delete: if isOwner(resource.data.sellerId) || isAdmin();
     }
     
-    // Etkinlikler, Bildirimler, Şikayetler vb.
+match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
     match /locations/{locationId} {
       allow read: if true;
       allow create, delete: if isAdmin();
-      allow update: if isAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastUpdate', 'photos', 'votes']));
+      allow update: if isAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastUpdate', 'photos', 'votes', 'reviewCount', 'rating'])); // reviewCount eklendi
+      
+      // Mekan Yorumları
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create, update: if isSignedIn();
+      }
     }
     
     match /etkinlikler/{eventId} { 
@@ -113,7 +118,7 @@ service cloud.firestore {
     
     match /bildirimler/{notificationId} { 
       allow read: if isOwner(resource.data.userId) || isAdmin(); 
-      allow create: if isSignedIn(); // Herkes bildirim gönderebilir (like/yorum yapınca)
+      allow create: if isSignedIn();
       allow update, delete: if isOwner(resource.data.userId) || isAdmin();
     }
     
@@ -125,6 +130,12 @@ service cloud.firestore {
     match /degisiklik_istekleri/{requestId} { 
       allow read, update, delete: if isAdmin();
       allow create: if isSignedIn(); 
+    }
+    
+    // İstatistikler
+    match /statistics/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
   }
 }

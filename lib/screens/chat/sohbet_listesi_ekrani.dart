@@ -6,6 +6,8 @@ import 'package:timeago/timeago.dart' as timeago;
 
 import 'sohbet_detay_ekrani.dart';
 import '../../widgets/animated_list_item.dart';
+import 'package:provider/provider.dart';
+import '../../providers/blocked_users_provider.dart';
 // Düzeltilmiş Importlar
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../utils/maskot_helper.dart';
@@ -85,6 +87,10 @@ class _SohbetListesiEkraniState extends State<SohbetListesiEkrani> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           }
+
+          final blockedUsersProvider = Provider.of<BlockedUsersProvider>(context);
+          final blockedIds = blockedUsersProvider.blockedUserIds;
+
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return Center(
               key: _emptyStateKey, // --- KEY EKLE ---
@@ -111,11 +117,43 @@ class _SohbetListesiEkraniState extends State<SohbetListesiEkrani> {
             );
           }
 
+          final filteredDocs = snapshot.data!.docs.where((doc) {
+            final chatData = doc.data() as Map<String, dynamic>;
+            final List<dynamic> participants = chatData['participants'] ?? [];
+            final String otherUserId = participants.firstWhere((id) => id != _currentUserId, orElse: () => '');
+            return !blockedIds.contains(otherUserId);
+          }).toList();
+          
+          if (filteredDocs.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.grey[800] : Colors.grey[200],
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.chat_bubble_outline_rounded, size: 50, color: Colors.grey[500]),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    "Henüz mesajın yok",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 8),
+                  Text("Tüm sohbetlerin engellenen kullanıcılarla.", style: TextStyle(color: Colors.grey[500])),
+                ],
+              ),
+            );
+          }
+
           return ListView.builder(
             padding: const EdgeInsets.symmetric(vertical: 10),
-            itemCount: snapshot.data!.docs.length,
+            itemCount: filteredDocs.length,
             itemBuilder: (context, index) {
-              final chatDoc = snapshot.data!.docs[index];
+              final chatDoc = filteredDocs[index];
               final chatData = chatDoc.data() as Map<String, dynamic>;
               
               final List<dynamic> participants = chatData['participants'] ?? [];

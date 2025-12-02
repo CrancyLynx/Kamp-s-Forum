@@ -206,12 +206,27 @@ class _AnaEkranState extends State<AnaEkran> {
   }
 
   AppBar _buildKesfetAppBar() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    Widget logo = Image.asset('assets/images/app_logo3.png', height: 40);
+
+    if (isDarkMode) {
+      logo = ColorFiltered(
+        colorFilter: const ColorFilter.matrix([
+          -1, 0, 0, 0, 255,
+           0, -1, 0, 0, 255,
+           0, 0, -1, 0, 255,
+           0, 0, 0, 1, 0,
+        ]),
+        child: logo,
+      );
+    }
+
     return AppBar(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       elevation: 0,
       title: Row(
         children: [
-          Image.asset('assets/images/app_logo3.png', height: 40),
+          logo,
           const SizedBox(width: 8),
           Text(
             "Kampüs Forum", 

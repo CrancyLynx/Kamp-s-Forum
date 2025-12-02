@@ -14,7 +14,7 @@ import '../../utils/maskot_helper.dart';
 import '../chat/sohbet_detay_ekrani.dart';
 import 'profil_duzenleme_ekrani.dart';
 import 'engellenen_kullanicilar_ekrani.dart';
-import '../forum/forum_sayfasi.dart';
+import '../forum/forum_sayfasi.dart'; // GonderiKarti için
 import '../../widgets/animated_list_item.dart';
 import 'rozetler_sayfasi.dart';
 import '../admin/admin_panel_ekrani.dart';
@@ -68,7 +68,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
         targets: [
           TargetFocus(
             identify: "profil-badges",
-            keyTarget: _badgesKey,
+            keyTarget: _badgesKey, 
             alignSkip: Alignment.bottomCenter,
             shape: ShapeLightFocus.RRect,
             radius: 12,
@@ -78,7 +78,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                 builder: (context, controller) => MaskotHelper.buildTutorialContent(
                   context,
                   title: 'Rozetlerin',
-                  description: 'Kazandığın başarı rozetleri burada listelenir. Sağa kaydırarak hepsini görebilirsin!',
+                  description: 'Kazandığın başarı rozetleri burada listelenir. Yukarıdaki madalya ikonuna tıklayarak tüm hedefleri görebilirsin!',
                   mascotAssetPath: 'assets/images/mutlu_bay.png',
                 ),
               ),
@@ -169,14 +169,14 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
               }
 
               final userData = snapshot.data!.data() as Map<String, dynamic>;
-              
+              final List<String> earnedBadges = List<String>.from(userData['earnedBadges'] ?? []);
+              final bool isUserAdmin = (userData['role'] == 'admin');
+
               return Scaffold(
                 backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                // NestedScrollView maskotun kaydırma yapabilmesi için daha stabildir.
                 body: NestedScrollView(
                   headerSliverBuilder: (context, innerBoxIsScrolled) {
                     return [
-                      // Modern AppBar (Geri tuşu ve Ayarlar için)
                       SliverAppBar(
                         pinned: true,
                         floating: true,
@@ -187,32 +187,49 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                           onPressed: () => Navigator.pop(context),
                         ) : null,
                         actions: [
+                          // YENİ: ROZETLER İKONU
+                          IconButton(
+                            icon: const Icon(Icons.military_tech, color: AppColors.primaryAccent, size: 28),
+                            tooltip: 'Rozet Koleksiyonu',
+                            onPressed: () {
+                              Navigator.push(context, MaterialPageRoute(builder: (context) => RozetlerSayfasi(
+                                earnedBadgeIds: Set<String>.from(earnedBadges),
+                                isAdmin: isUserAdmin,
+                                userData: userData,
+                              )));
+                            },
+                          ),
+                          
                           if (_isOwnProfile)
                             IconButton(
                               icon: const Icon(Icons.settings),
                               color: Theme.of(context).textTheme.bodyLarge?.color,
                               onPressed: () => _showSettingsModal(context, userData['role'] == 'admin'),
                             ),
-                          // Tema Değiştirme
+                          
+                          // DÜZELTİLMİŞ TEMA BUTONU
                           Consumer<ThemeProvider>(
                             builder: (context, themeProvider, child) {
-                              final isDark = themeProvider.themeMode == ThemeMode.dark;
+                              final isSystemDark = MediaQuery.of(context).platformBrightness == Brightness.dark;
+                              final isDark = themeProvider.themeMode == ThemeMode.dark || 
+                                            (themeProvider.themeMode == ThemeMode.system && isSystemDark);
+                              
                               return IconButton(
                                 icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
                                 color: Theme.of(context).textTheme.bodyLarge?.color,
-                                onPressed: () => themeProvider.setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark),
+                                onPressed: () {
+                                  themeProvider.setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark);
+                                },
                               );
                             },
                           ),
                         ],
                       ),
                       
-                      // PROFİL İÇERİĞİ (Header)
                       SliverToBoxAdapter(
                         child: _buildProfileHeader(userData, amIAdmin),
                       ),
 
-                      // TAB BAR (Sabitlenen kısım)
                       SliverPersistentHeader(
                         delegate: _SliverAppBarDelegate(
                           TabBar(
@@ -247,7 +264,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     );
   }
 
-  // --- MODERN PROFİL HEADER TASARIMI ---
   Widget _buildProfileHeader(Map<String, dynamic> data, bool amIAdmin) {
     final String avatarUrl = data['avatarUrl'] ?? '';
     final String name = data['takmaAd'] ?? 'Anonim';
@@ -271,7 +287,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
       children: [
         const SizedBox(height: 10),
         
-        // 1. AVATAR (Gölge Efektli)
         Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
@@ -282,8 +297,13 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
           child: CircleAvatar(
             radius: 60,
             backgroundColor: Colors.white,
-            backgroundImage: avatarUrl.isNotEmpty 
-                ? CachedNetworkImageProvider(avatarUrl, cacheManager: ImageCacheManager.instance) 
+            backgroundImage: avatarUrl.isNotEmpty
+                ? CachedNetworkImageProvider(
+                    avatarUrl,
+                    cacheManager: ImageCacheManager.instance,
+                    maxWidth: 240,
+                    maxHeight: 240,
+                  )
                 : null,
             child: avatarUrl.isEmpty 
                 ? Text(name[0].toUpperCase(), style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: AppColors.primary)) 
@@ -293,7 +313,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
         
         const SizedBox(height: 16),
 
-        // 2. İSİM VE ADMİN ROZETİ
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -318,31 +337,24 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
 
         const SizedBox(height: 12),
 
-        // 3. ŞAŞALI ÜNİVERSİTE BİLGİSİ (Flashy Badge)
         if (university.isNotEmpty)
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 40),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.primary, Color(0xFF9C27B0)], // Mor - Pembe Gradyan
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(30),
-              boxShadow: [
-                BoxShadow(color: AppColors.primary.withOpacity(0.4), blurRadius: 10, offset: const Offset(0, 4)),
-              ],
+              color: AppColors.primary.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.primary.withOpacity(0.2)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(FontAwesomeIcons.graduationCap, color: Colors.white, size: 16),
+                const Icon(FontAwesomeIcons.graduationCap, color: AppColors.primary, size: 14),
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
                     "$university ${department.isNotEmpty ? '| $department' : ''}",
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                    style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13),
                     textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -354,43 +366,30 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
 
         const SizedBox(height: 16),
 
-        // 4. KAYDIRILABİLİR ROZETLER (Sağ Kayan Tasarım)
         if (badges.isNotEmpty)
           SizedBox(
             key: _badgesKey,
-            height: 50,
+            height: 60, 
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              // Ortadan başlaması için padding
-              padding: EdgeInsets.symmetric(horizontal: MediaQuery.of(context).size.width * 0.1), 
+              padding: const EdgeInsets.symmetric(horizontal: 20), 
               itemCount: badges.length,
               itemBuilder: (context, index) {
                 final badgeId = badges[index];
                 final badge = allBadges.firstWhere((b) => b.id == badgeId, orElse: () => allBadges[0]);
                 
-                return GestureDetector(
-                  onTap: () {
-                     Navigator.push(context, MaterialPageRoute(builder: (context) => RozetlerSayfasi(
-                       earnedBadgeIds: Set<String>.from(badges),
-                       isAdmin: isUserAdmin,
-                       userData: data,
-                     )));
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.only(right: 10),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).cardColor,
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(color: badge.color.withOpacity(0.3)),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 5)],
-                    ),
-                    child: Row(
-                      children: [
-                        FaIcon(badge.icon, size: 16, color: badge.color),
-                        const SizedBox(width: 6),
-                        Text(badge.name, style: TextStyle(color: badge.color, fontWeight: FontWeight.bold, fontSize: 12)),
-                      ],
+                return Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: Tooltip(
+                    message: badge.name,
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: badge.color.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: badge.color.withOpacity(0.3)),
+                      ),
+                      child: FaIcon(badge.icon, size: 20, color: badge.color),
                     ),
                   ),
                 );
@@ -400,7 +399,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
 
         const SizedBox(height: 16),
 
-        // 5. BİYOGRAFİ
         if (bio.isNotEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -413,7 +411,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
 
         const SizedBox(height: 20),
 
-        // 6. İSTATİSTİKLER (Kart İçinde)
         Container(
           key: _statsKey,
           margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -441,7 +438,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
 
         const SizedBox(height: 20),
 
-        // 7. SOSYAL MEDYA
         if (hasSocial)
           Padding(
             padding: const EdgeInsets.only(bottom: 20.0),
@@ -456,7 +452,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
             ),
           ),
 
-        // 8. BUTONLAR
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: _isOwnProfile
@@ -517,7 +512,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
               ),
         ),
         
-        // ADMIN BUTONU
         if (amIAdmin && !_isOwnProfile)
           Padding(
             padding: const EdgeInsets.only(top: 12.0),
@@ -578,7 +572,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
             shape: BoxShape.circle,
             boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)],
           ),
-          child: FaIcon(icon, size: 20, color: Colors.grey[800]),
+          child: FaIcon(icon, size: 20, color: Theme.of(context).iconTheme.color),
         ),
       ),
     );
@@ -690,8 +684,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     );
   }
 
-  // --- LOGIC ---
-
   Future<void> _toggleFollow(bool isFollowing) async {
     final targetRef = FirebaseFirestore.instance.collection('kullanicilar').doc(_targetUserId);
     final myRef = FirebaseFirestore.instance.collection('kullanicilar').doc(_currentUserId);
@@ -800,7 +792,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
   }
 }
 
-// Sticky Header Delegate
 class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   final TabBar _tabBar;
   _SliverAppBarDelegate(this._tabBar);

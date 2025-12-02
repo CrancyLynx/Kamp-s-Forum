@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:kampus_yardim_app/providers/blocked_users_provider.dart';
 import 'package:kampus_yardim_app/services/presence_service.dart';
 import 'package:kampus_yardim_app/services/push_notification_service.dart'; 
 import 'package:provider/provider.dart'; 
@@ -23,8 +24,6 @@ import 'widgets/in_app_notification.dart';
 import 'screens/home/ana_ekran.dart'; 
 import 'screens/auth/giris_ekrani.dart'; 
 import 'screens/auth/verification_wrapper.dart'; 
-// Onboarding importu
-// import 'screens/auth/onboarding_screen.dart'; // Kullanılmıyorsa kaldırılabilir
 import 'screens/auth/splash_screen.dart'; 
 
 @pragma('vm:entry-point')
@@ -71,11 +70,12 @@ Future<void> main() async {
     }
   } catch (_) {}
 
-  bool isFirstTime = prefs.getBool('isFirstTime') ?? true;
-
-  runApp( 
-    ChangeNotifierProvider(
-      create: (context) => ThemeProvider(initialThemeMode),
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => ThemeProvider(initialThemeMode)),
+        ChangeNotifierProvider(create: (context) => BlockedUsersProvider()),
+      ],
       child: const BizimUygulama(),
     ),
   );
@@ -219,8 +219,8 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> with WidgetsBindingObserver
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: () {
-                  Navigator.of(context).pop(); // Paneli kapat
-                  AuthService().signOut(); // Misafir oturumunu sonlandır ve giriş ekranına yönlendir
+                  Navigator.of(context).pop(); 
+                  AuthService().signOut(); 
                 },
                 style: ElevatedButton.styleFrom(
                     minimumSize: const Size.fromHeight(50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
@@ -256,16 +256,15 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> with WidgetsBindingObserver
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, authSnapshot) { 
-        // 1. Auth Durumu Bekleniyor
         if (authSnapshot.connectionState == ConnectionState.waiting) {
           return const LoadingScreen();
         }
         
-        // 2. Kullanıcı Giriş Yapmışsa
         if (authSnapshot.hasData) {
           final user = authSnapshot.data!;
           
           if (user.isAnonymous) {
+             Provider.of<BlockedUsersProvider>(context, listen: false).startListening(null);
              return AnaEkran(
                  isGuest: true,
                  showLoginPrompt: () => _showLoginPrompt(context),
@@ -276,72 +275,110 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> with WidgetsBindingObserver
             return const VerificationWrapper();
           }
 
-          final userId = user.uid;
-
-          // 3. Firestore Verisi
-          return StreamBuilder<DocumentSnapshot>(
-            stream: FirebaseFirestore.instance.collection('kullanicilar').doc(userId).snapshots(),
-            builder: (context, userSnapshot) { 
-              if (userSnapshot.hasError) {
-                return Scaffold(
-                  body: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.error_outline, color: Colors.red, size: 50),
-                        const SizedBox(height: 16),
-                        const Text("Veri yüklenirken hata oluştu."),
-                        Text("Hata: ${userSnapshot.error}", textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                        const SizedBox(height: 20),
-                        ElevatedButton(
-                          onPressed: () => AuthService().signOut(),
-                          child: const Text("Çıkış Yap ve Tekrar Dene"),
-                        )
-                      ],
-                    ),
-                  ),
-                );
-              }
-
-              if (userSnapshot.connectionState == ConnectionState.waiting) {
-                return const LoadingScreen();
-              }
-              
-              if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-                 return Scaffold(
-                   body: Center(
-                     child: Column(
-                       mainAxisAlignment: MainAxisAlignment.center,
-                       children: [
-                         const CircularProgressIndicator(),
-                         const SizedBox(height: 20),
-                         const Text("Profil hazırlanıyor..."),
-                         const SizedBox(height: 20),
-                         TextButton(
-                           onPressed: () => AuthService().signOut(), 
-                           child: const Text("İptal Et ve Çıkış Yap")
-                         )
-                       ],
-                     ),
-                   ),
-                 );
-              }
-
-              final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
-              final String userName = userData?['takmaAd'] ?? userData?['ad'] ?? 'Anonim'; 
-              final String realName = userData?['ad'] ?? 'Anonim'; 
-              final String role = userData?['role'] ?? 'user';
-              final bool isAdministrator = (role == 'admin');
-
-              // DÜZELTME: Statü kontrolü kaldırıldı. Doğrudan Ana Ekran'a yönlendiriliyor.
-              return AnaEkran(isAdmin: isAdministrator, userName: userName, realName: realName);
-            }, 
-          ); 
+          // ÖNEMLİ: Veri akışını sabitleyen ara widget kullanımı
+          return _KullaniciVerisiYukleyici(user: user);
         } 
 
-        // 4. Kullanıcı Yoksa (Giriş Ekranı)
+        Provider.of<BlockedUsersProvider>(context, listen: false).startListening(null);
         return const GirisEkrani(); 
       }, 
+    );
+  }
+}
+
+// YENİ: Firestore Stream'ini koruyan ve rebuild sırasında sıfırlanmasını önleyen widget
+class _KullaniciVerisiYukleyici extends StatefulWidget {
+  final User user;
+  const _KullaniciVerisiYukleyici({required this.user});
+
+  @override
+  State<_KullaniciVerisiYukleyici> createState() => _KullaniciVerisiYukleyiciState();
+}
+
+class _KullaniciVerisiYukleyiciState extends State<_KullaniciVerisiYukleyici> {
+  late Stream<DocumentSnapshot> _userStream;
+
+  @override
+  void initState() {
+    super.initState();
+    Provider.of<BlockedUsersProvider>(context, listen: false).startListening(widget.user.uid);
+    // Stream'i sadece bir kez oluşturuyoruz. Tema değişse bile burası tekrar çalışmaz.
+    _userStream = FirebaseFirestore.instance.collection('kullanicilar').doc(widget.user.uid).snapshots();
+  }
+
+  @override
+  void didUpdateWidget(covariant _KullaniciVerisiYukleyici oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.user.uid != widget.user.uid) {
+      Provider.of<BlockedUsersProvider>(context, listen: false).startListening(widget.user.uid);
+      _userStream = FirebaseFirestore.instance.collection('kullanicilar').doc(widget.user.uid).snapshots();
+    }
+  }
+
+  @override
+  void dispose() {
+    Provider.of<BlockedUsersProvider>(context, listen: false).stopListening();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: _userStream,
+      builder: (context, userSnapshot) {
+        if (userSnapshot.hasError) {
+          return Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 50),
+                  const SizedBox(height: 16),
+                  const Text("Veri yüklenirken hata oluştu."),
+                  Text("Hata: ${userSnapshot.error}", textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: () => AuthService().signOut(),
+                    child: const Text("Çıkış Yap ve Tekrar Dene"),
+                  )
+                ],
+              ),
+            ),
+          );
+        }
+
+        if (userSnapshot.connectionState == ConnectionState.waiting) {
+          return const LoadingScreen();
+        }
+
+        if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
+          return Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 20),
+                  const Text("Profil hazırlanıyor..."),
+                  const SizedBox(height: 20),
+                  TextButton(
+                    onPressed: () => AuthService().signOut(), 
+                    child: const Text("İptal Et ve Çıkış Yap")
+                  )
+                ],
+              ),
+            ),
+          );
+        }
+
+        final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
+        final String userName = userData?['takmaAd'] ?? userData?['ad'] ?? 'Anonim'; 
+        final String realName = userData?['ad'] ?? 'Anonim'; 
+        final String role = userData?['role'] ?? 'user';
+        final bool isAdministrator = (role == 'admin');
+
+        return AnaEkran(isAdmin: isAdministrator, userName: userName, realName: realName);
+      },
     );
   }
 }

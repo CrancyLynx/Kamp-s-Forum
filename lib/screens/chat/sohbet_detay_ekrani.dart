@@ -7,6 +7,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart'; 
 import 'package:image_picker/image_picker.dart'; 
 import 'package:firebase_storage/firebase_storage.dart'; 
+import 'package:provider/provider.dart';
+import '../../providers/blocked_users_provider.dart';
 import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart';
 import '../../widgets/typing_indicator.dart'; 
@@ -239,6 +241,42 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
 
   @override
   Widget build(BuildContext context) {
+    final blockedUsersProvider = Provider.of<BlockedUsersProvider>(context);
+    if (blockedUsersProvider.isUserBlocked(widget.receiverId)) {
+      return Scaffold(
+        appBar: AppBar(
+          backgroundColor: AppColors.primary,
+          title: Text(widget.receiverName, style: const TextStyle(color: Colors.white)),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.block_flipped, size: 80, color: Colors.grey),
+                const SizedBox(height: 20),
+                Text(
+                  "'${widget.receiverName}' kullanıcısını engellediniz.",
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  "Bu kullanıcıyla mesajlaşmak için engelini kaldırmanız gerekir.",
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final chatBackgroundColor = isDark ? const Color(0xFF1E272C) : Colors.grey.shade100;
 

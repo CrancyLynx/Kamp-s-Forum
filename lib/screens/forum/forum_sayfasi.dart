@@ -22,6 +22,8 @@ import '../../widgets/badge_widget.dart';
 import '../chat/sohbet_listesi_ekrani.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
+import '../../providers/blocked_users_provider.dart';
 
 const List<String> kCategories = ['Eğitim', 'Okul', 'Dersler', 'Sınavlar', 'Etkinlikler', 'Sosyal', 'Diğer'];
 const List<String> kFilterCategories = ['Tümü', ...kCategories];
@@ -265,7 +267,24 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
         automaticallyImplyLeading: false,
         title: Row(
           children: [
-          Image.asset('assets/images/app_logo3.png', height: 40),
+            Builder(
+              builder: (context) {
+                final isDark = Theme.of(context).brightness == Brightness.dark;
+                if (isDark) {
+                  Widget logo = Image.asset('assets/images/app_logo3.png', height: 40);
+                  return ColorFiltered(
+                    colorFilter: const ColorFilter.matrix([
+                      -1, 0, 0, 0, 255,
+                       0, -1, 0, 0, 255,
+                       0, 0, -1, 0, 255,
+                       0, 0, 0, 1, 0,
+                    ]),
+                    child: logo,
+                  );
+                }
+                return Image.asset('assets/images/app_icon2.png', height: 40);
+              }
+            ),
             const SizedBox(width: 10),
             const Text(
               "Kampüs Forum",
@@ -883,8 +902,27 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
     });
   }
   
-    @override
+  @override
   Widget build(BuildContext context) {
+    final blockedUsersProvider = Provider.of<BlockedUsersProvider>(context);
+    if (blockedUsersProvider.isUserBlocked(widget.authorUserId)) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).disabledColor.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.block_flipped, color: Colors.grey),
+            SizedBox(width: 16),
+            Expanded(child: Text("Engellenen bir kullanıcının gönderisi gizlendi.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic))),
+          ],
+        ),
+      );
+    }
+
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('gonderiler').doc(widget.postId).snapshots(),
       builder: (context, snapshot) {
@@ -963,7 +1001,11 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                           radius: 20,
                           backgroundColor: AppColors.primary.withOpacity(0.1),
                           backgroundImage: (widget.avatarUrl != null && widget.avatarUrl!.isNotEmpty)
-                              ? CachedNetworkImageProvider(widget.avatarUrl!)
+                              ? CachedNetworkImageProvider(
+                                  widget.avatarUrl!,
+                                  maxWidth: 80,
+                                  maxHeight: 80,
+                                )
                               : null,
                           child: (widget.avatarUrl == null || widget.avatarUrl!.isEmpty)
                               ? Text(widget.adSoyad.isNotEmpty ? widget.adSoyad[0].toUpperCase() : '?', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold))
@@ -1042,6 +1084,7 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                                         child: CachedNetworkImage(
                                           imageUrl: imageUrl,
                                           fit: BoxFit.contain,
+                                          memCacheWidth: 1080,
                                         ),
                                       ),
                                     ),
@@ -1056,6 +1099,7 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                                   child: CachedNetworkImage(
                                     imageUrl: imageUrl,
                                     fit: BoxFit.cover,
+                                    memCacheHeight: 300,
                                     placeholder: (context, url) => Container(color: Colors.grey[200]),
                                   ),
                                 ),

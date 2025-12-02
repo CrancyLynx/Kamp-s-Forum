@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -49,6 +50,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
   
   // Onay Kutusu
   bool _agreedToTerms = false;
+  late final TapGestureRecognizer _termsRecognizer;
 
   // Global Key'ler
   final GlobalKey _loginButtonKey = GlobalKey();
@@ -59,6 +61,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
+    _termsRecognizer = TapGestureRecognizer()..onTap = _showTermsAndConditions;
     _loadSavedEmail();
 
     // Üniversite verilerini yükle
@@ -130,7 +133,63 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     _adSoyadController.dispose();
     _phoneController.dispose();
     _smsCodeController.dispose();
+    _termsRecognizer.dispose();
     super.dispose();
+  }
+
+  void _showTermsAndConditions() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Kullanım Koşulları ve Gizlilik Politikası"),
+          content: const SingleChildScrollView(
+            child: Text(
+              """Son Güncelleme: 3 Aralık 2025
+
+Lütfen uygulamamızı kullanmadan önce bu kullanım koşullarını dikkatlice okuyun.
+
+1. Koşulların Kabulü
+Bu uygulamayı indirerek, kurarak veya kullanarak, bu Kullanım Koşullarına ("Koşullar") ve Gizlilik Politikamıza yasal olarak bağlı kalmayı kabul etmiş olursunuz. Bu koşulları kabul etmiyorsanız, uygulamayı kullanamazsınız.
+
+2. Hizmetlerin Açıklaması
+Uygulamamız, üniversite öğrencileri için bir sosyal platform, pazar yeri ve forum hizmeti sunar. Hizmetlerimizi sürekli olarak geliştiriyor ve değiştiriyoruz ve herhangi bir zamanda hizmetlerimizi veya herhangi bir özelliğini, önceden haber vermeksizin, geçici veya kalıcı olarak değiştirme veya durdurma hakkını saklı tutarız.
+
+3. Kullanıcı Davranışı ve İçerik
+Uygulamayı kullanırken yasa dışı, taciz edici, iftira niteliğinde, müstehcen veya başka bir şekilde sakıncalı içerik yayınlamamayı kabul edersiniz. Başkalarının fikri mülkiyet haklarına saygı göstermelisiniz. Tarafınızdan gönderilen, yayınlanan veya görüntülenen herhangi bir İçerik için tüm sorumluluk size aittir. Gönderdiğiniz içeriğin üçüncü taraf haklarını ihlal etmediğini garanti edersiniz. Topluluk kurallarımızı ihlal eden içeriği kaldırma hakkını saklı tutarız.
+
+4. Fikri Mülkiyet
+Uygulama ve orijinal içeriği, özellikleri ve işlevselliği (Kullanıcı İçeriği hariç) bizim ve lisans verenlerimizin münhasır mülkiyetindedir ve telif hakkı, ticari marka ve diğer fikri mülkiyet yasalarıyla korunmaktadır.
+
+5. Kayıt ve Hesap Güvenliği
+Hesap oluştururken doğru ve eksiksiz bilgi vermeyi kabul edersiniz. Hesabınızın ve şifrenizin gizliliğini korumaktan siz sorumlusunuz. Hesabınız altında gerçekleşen tüm faaliyetlerden siz sorumlusunuz.
+
+6. Sorumluluğun Sınırlandırılması
+Uygulama "olduğu gibi" ve "mevcut olduğu gibi" esasına göre sağlanmaktadır. Yasaların izin verdiği azami ölçüde, uygulama veya hizmetlerimizin kullanımından kaynaklanan dolaylı, arızi, özel, sonuç olarak ortaya çıkan veya cezai zararlardan sorumlu olmayacağız.
+
+7. Gizlilik
+Gizlilik Politikamız, kişisel bilgilerinizi nasıl topladığımızı, kullandığımızı ve ifşa ettiğimizi açıklamaktadır. Uygulamayı kullanarak, bu tür verilerin Gizlilik Politikamıza uygun olarak toplanmasını ve kullanılmasını kabul etmiş olursunuz.
+
+8. Değişiklikler
+Bu Koşulları zaman zaman değiştirme hakkımızı saklı tutarız. Değişiklikler yayınlandıktan sonra uygulamayı kullanmaya devam etmeniz, yeni koşulları kabul ettiğiniz anlamına gelir.
+
+9. Fesih
+Bu Koşulları ihlal etmeniz durumunda, hesabınızı ve uygulamaya erişiminizi önceden bildirimde bulunmaksızın derhal askıya alma veya feshetme hakkımızı saklı tutarız.
+
+10. İletişim
+Bu Koşullar hakkında herhangi bir sorunuz varsa, lütfen bizimle iletisimegec@kampusyardim.com üzerinden iletişime geçin.""",
+              style: TextStyle(fontSize: 14),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("Kapat"),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _loadSavedEmail() async {
@@ -197,20 +256,23 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
   }
 
   Future<void> _sendSmsCode(String phone) async {
-    setState(() => _isLoading = true);
     await _authService.verifyPhone(
       phoneNumber: phone,
       onCodeSent: (verId) {
-        setState(() {
-          _verificationId = verId;
-          _codeSent = true;
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _verificationId = verId;
+            _codeSent = true;
+            _isLoading = false;
+          });
+        }
         showSnackBar("Doğrulama kodu gönderildi.");
       },
       onError: (msg) {
-        if (mounted) setState(() => _isLoading = false);
-        showSnackBar(msg, isError: true);
+        if (mounted) {
+          setState(() => _isLoading = false);
+          showSnackBar(msg, isError: true);
+        }
       },
     );
   }
@@ -220,7 +282,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       showSnackBar("Lütfen 6 haneli kodu tam girin.", isError: true);
       return;
     }
-    setState(() => _isLoading = true);
+    if (mounted) setState(() => _isLoading = true);
 
     try {
       PhoneAuthCredential credential = PhoneAuthProvider.credential(
@@ -273,7 +335,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       
       if (phone.isEmpty || phone.length < 10) return showSnackBar("Geçerli numara girin.", isError: true);
 
-      setState(() => _isLoading = true);
+      if (mounted) setState(() => _isLoading = true);
       final error = await _authService.validatePhonePassword(phone, password);
       
       if (error == null) {
@@ -285,7 +347,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       return;
     }
 
-    setState(() => _isLoading = true);
+    if (mounted) setState(() => _isLoading = true);
     
     if (!isLogin) {
       // --- KAYIT OLMA İŞLEMİ ---
@@ -353,10 +415,12 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
             final phone = doc.data()?['phoneNumber'];
             
             if (phone != null && phone.toString().isNotEmpty) {
-              setState(() {
-                _isMfaVerification = true;
-                _isPhoneLoginMode = true;
-              });
+              if (mounted) {
+                setState(() {
+                  _isMfaVerification = true;
+                  _isPhoneLoginMode = true;
+                });
+              }
               await _sendSmsCode(phone);
               showSnackBar("2 Aşamalı Doğrulama: Kod gönderildi.");
             } else {
@@ -664,9 +728,19 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
           ),
           child: CheckboxListTile(
             contentPadding: EdgeInsets.zero,
-            title: Text(
-              "Şartlar ve Koşulları okudum, kabul ediyorum.",
-              style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 13),
+            title: RichText(
+              text: TextSpan(
+                style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 13),
+                children: [
+                  const TextSpan(text: "Okudum, anladım ve "),
+                  TextSpan(
+                    text: "Şartlar ve Koşulları",
+                    style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                    recognizer: _termsRecognizer,
+                  ),
+                  const TextSpan(text: " kabul ediyorum."),
+                ],
+              ),
             ),
             value: _agreedToTerms,
             onChanged: (bool? value) {
@@ -715,7 +789,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       children: [
         _buildModernTextField(controller: _phoneController, label: "Telefon Numarası", icon: Icons.phone_android, isDark: isDark, inputType: TextInputType.phone),
         const SizedBox(height: 16),
-        _buildModernTextField(controller: passwordController, label: "Şifre (Opsiyonel)", icon: Icons.lock_outline, isDark: isDark, isPassword: true),
+        _buildModernTextField(controller: passwordController, label: "Şifre", icon: Icons.lock_outline, isDark: isDark, isPassword: true),
       ],
     );
   }
@@ -775,26 +849,28 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     );
   }
 
-  // --- DÜZELTİLMİŞ SEÇİM PANELİ (FULL EKRAN) ---
   Future<String?> _showSelectionPanel({
     required BuildContext context,
     required String title,
     required List<String> options,
   }) async {
-    // Klavye ve ekran alanlarını doğru yönetmek için showModalBottomSheet ayarları güncellendi.
     return showModalBottomSheet<String>(
       context: context,
-      isScrollControlled: true, // Tam ekran kullanımı için kritik
-      useSafeArea: true, // Çentik ve alt bar için güvenli alan
+      isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (BuildContext context) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
+        String searchQuery = '';
         
-        // Arama filtresi için stateful widget
         return StatefulBuilder(
           builder: (context, setModalState) {
+            final filteredOptions = options
+                .where((option) => option.toLowerCase().contains(searchQuery.toLowerCase()))
+                .toList();
+
             return DraggableScrollableSheet(
-              initialChildSize: 0.9, // Açıldığında ekranın %90'ı
+              initialChildSize: 0.9,
               minChildSize: 0.5,
               maxChildSize: 1.0,
               builder: (_, scrollController) {
@@ -803,6 +879,8 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                     color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                   ),
+                  // Keyboard-aware padding
+                  padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
                   child: Column(
                     children: [
                       const SizedBox(height: 12),
@@ -812,61 +890,48 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                         padding: const EdgeInsets.all(16.0),
                         child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                       ),
+
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                        child: TextField(
+                          onChanged: (value) {
+                            setModalState(() {
+                              searchQuery = value;
+                            });
+                          },
+                          decoration: const InputDecoration(
+                            hintText: "Ara...",
+                            prefixIcon: Icon(Icons.search),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          ),
+                        ),
+                      ),
                       
                       const Divider(height: 1),
                       
-                      // Liste Alanı
                       Expanded(
-                        child: Autocomplete<String>(
-                           optionsBuilder: (TextEditingValue textEditingValue) {
-                             if (textEditingValue.text == '') {
-                               return options;
-                             }
-                             return options.where((String option) {
-                               return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
-                             });
-                           },
-                           onSelected: (String selection) {
-                             Navigator.pop(context, selection);
-                           },
-                           fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
-                             return Padding(
-                               padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
-                               child: TextField(
-                                 controller: textController,
-                                 focusNode: focusNode,
-                                 decoration: const InputDecoration(
-                                   hintText: "Ara...",
-                                   prefixIcon: Icon(Icons.search),
-                                   border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                                   contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                 ),
-                               ),
-                             );
-                           },
-                           optionsViewBuilder: (context, onSelected, options) {
-                             return ListView.separated(
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
-                                itemCount: options.length,
-                                separatorBuilder: (context, index) => const Divider(height: 1),
-                                itemBuilder: (BuildContext context, int index) {
-                                  final String option = options.elementAt(index);
-                                  return ListTile(
-                                    title: Text(option),
-                                    onTap: () => onSelected(option),
-                                    trailing: const Icon(Icons.chevron_right, size: 18, color: Colors.grey),
-                                  );
-                                },
-                             );
-                           },
+                        child: ListView.separated(
+                          controller: scrollController,
+                          itemCount: filteredOptions.length,
+                          separatorBuilder: (context, index) => const Divider(height: 1, indent: 16, endIndent: 16),
+                          itemBuilder: (context, index) {
+                            final option = filteredOptions[index];
+                            return ListTile(
+                              title: Text(option),
+                              onTap: () {
+                                Navigator.pop(context, option);
+                              },
+                            );
+                          },
                         ),
                       ),
                     ],
                   ),
                 );
-              }
+              },
             );
-          }
+          },
         );
       },
     );

@@ -19,7 +19,7 @@ class AppLogo extends StatelessWidget {
     final Color secondaryColor = isLightMode ? AppColors.greyText : Colors.white70;
 
     // DÜZELTME: Temaya göre logo resmini dinamik olarak seç
-    final String logoAsset = isLightMode ? 'assets/images/app_logo2.png' : 'assets/images/app_logo3.png';
+    final String logoAsset = isLightMode ? 'assets/images/app_icon2.png' : 'assets/images/app_logo3.png';
 
     return Column(
       mainAxisSize: MainAxisSize.min,

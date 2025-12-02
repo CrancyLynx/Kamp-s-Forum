@@ -1,19 +1,20 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:image_picker/image_picker.dart'; 
+import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_functions/cloud_functions.dart'; 
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../utils/app_colors.dart';
-import '../auth/giris_ekrani.dart'; 
+import '../auth/giris_ekrani.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../services/auth_service.dart';
 import '../../utils/maskot_helper.dart';
-import '../../services/image_compression_service.dart'; 
-import '../../services/image_cache_manager.dart'; 
+import '../../services/image_compression_service.dart';
+import '../../services/image_cache_manager.dart';
 
 class ProfilDuzenlemeEkrani extends StatefulWidget {
   const ProfilDuzenlemeEkrani({super.key});
@@ -36,8 +37,8 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   final _instagramController = TextEditingController();
   final _xPlatformController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
 
-  // Global Key'ler (Sadece avatar ve kaydet butonu kaldı)
   final GlobalKey _avatarAreaKey = GlobalKey();
   final GlobalKey _saveButtonKey = GlobalKey();
 
@@ -55,7 +56,13 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   bool _isTwoFactorEnabled = false;
   bool _isLoading = false;
 
-  // Hazır avatarlar
+  // --- YENİ EKLENEN DOĞRULAMA STATE'LERİ ---
+  bool _isEmailVerified = false;
+  bool _isPhoneVerified = false;
+  Timer? _cooldownTimer;
+  int _cooldownSeconds = 0;
+  // -----------------------------------------
+
   final List<String> _presetAvatars = [
     'https://api.dicebear.com/7.x/pixel-art/png?seed=Leo',
     'https://api.dicebear.com/7.x/adventurer/png?seed=Gizmo',
@@ -99,7 +106,20 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
     });
   }
 
+  @override
+  void dispose() {
+    _cooldownTimer?.cancel();
+    super.dispose();
+  }
+
   Future<void> _loadUserData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    
+    // Auth verilerini tazeleyin
+    await user.reload();
+    final updatedUser = FirebaseAuth.instance.currentUser!;
+
     final userDoc = await FirebaseFirestore.instance.collection('kullanicilar').doc(_userId).get();
     if (userDoc.exists && mounted) {
       final data = userDoc.data()!;
@@ -112,19 +132,57 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
         _linkedinController.text = data['linkedin'] ?? '';
         _instagramController.text = data['instagram'] ?? '';
         _xPlatformController.text = data['x_platform'] ?? '';
-        _phoneController.text = data['phoneNumber'] ?? '';
         _isTwoFactorEnabled = data['isTwoFactorEnabled'] ?? false;
         
         final submissionData = data['submissionData'] as Map<String, dynamic>?;
         _university = submissionData?['university'];
         _department = submissionData?['department'];
         _currentAvatarUrl = data['avatarUrl'];
+
+        // Auth ve Firestore verilerini birleştir
+        _emailController.text = updatedUser.email ?? '';
+        _phoneController.text = data['phoneNumber'] ?? ''; 
+
+        // Doğrulama durumlarını ayarla
+        _isEmailVerified = updatedUser.emailVerified;
+        _isPhoneVerified = updatedUser.phoneNumber != null && updatedUser.phoneNumber!.isNotEmpty;
       });
     }
   }
 
-  // --- 1. RESİM SEÇME FONKSİYONLARI ---
+  // --- E-POSTA DOĞRULAMA ---
+  void _sendVerificationEmail() async {
+    if (_cooldownSeconds > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Lütfen tekrar denemeden önce $_cooldownSeconds saniye bekleyin."), backgroundColor: Colors.orange));
+      return;
+    }
 
+    setState(() => _isLoading = true);
+    try {
+      await FirebaseAuth.instance.currentUser?.sendEmailVerification();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Doğrulama e-postası gönderildi! Lütfen gelen kutunuzu kontrol edin."), backgroundColor: AppColors.success));
+        
+        // Cooldown başlat
+        setState(() => _cooldownSeconds = 60);
+        _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+          if (_cooldownSeconds > 0) {
+            setState(() => _cooldownSeconds--);
+          } else {
+            timer.cancel();
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Hata: $e"), backgroundColor: AppColors.error));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // --- RESİM SEÇME FONKSİYONLARI ---
   void _showImageSourceActionSheet() {
     showModalBottomSheet(
       context: context,
@@ -224,12 +282,11 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
     }
   }
 
-  // --- 2. PROFİLİ KAYDETME ---
+  // --- PROFİLİ KAYDETME ---
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
-    // Takma Ad Kontrolü
     final newTakmaAd = _takmaAdController.text.trim();
     if (newTakmaAd != _originalTakmaAd) {
       final query = await FirebaseFirestore.instance.collection('kullanicilar').where('takmaAd', isEqualTo: newTakmaAd).limit(1).get();
@@ -242,7 +299,6 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
       }
     }
 
-    // Avatar Yükleme/Belirleme
     String? newAvatarUrl;
     if (_isAvatarRemoved) {
       newAvatarUrl = '';
@@ -263,7 +319,6 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
     };
 
     if (newAvatarUrl != null) updateData['avatarUrl'] = newAvatarUrl;
-    // CoverUrl artık güncellenmiyor/kullanılmıyor
 
     try {
       await FirebaseFirestore.instance.collection('kullanicilar').doc(_userId).update(updateData);
@@ -278,7 +333,6 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
     }
   }
 
-  // --- DİĞER (Telefon, 2FA, Silme) ---
   void _showPhoneUpdateDialog() {
     final newPhoneController = TextEditingController();
     final smsCodeController = TextEditingController();
@@ -338,7 +392,10 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                           'phoneNumber': newPhoneController.text.trim(),
                         });
 
-                        setState(() => _phoneController.text = newPhoneController.text.trim());
+                        setState(() { 
+                          _phoneController.text = newPhoneController.text.trim();
+                          _isPhoneVerified = true;
+                        });
                         if (mounted) { Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Güncellendi!"))); }
                       }
                     } catch (e) {
@@ -357,8 +414,8 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   }
 
   Future<void> _toggleMFA(bool value) async {
-    if (value && (_phoneController.text.isEmpty || _phoneController.text.length < 10)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Önce telefon numarası eklemelisiniz."), backgroundColor: Colors.orange));
+    if (value && !_isPhoneVerified) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Önce telefon numaranızı doğrulamanız gerekir."), backgroundColor: Colors.orange));
       return;
     }
     setState(() => _isLoading = true);
@@ -367,7 +424,7 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
       _isLoading = false;
       if (error == null) {
         _isTwoFactorEnabled = value;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value ? "2FA Aktif!" : "2FA Kapalı."), backgroundColor: value ? AppColors.success : Colors.grey));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value ? "2 Adımlı Doğrulama Aktif!" : "2 Adımlı Doğrulama Kapalı."), backgroundColor: value ? AppColors.success : Colors.grey));
       } else {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: AppColors.error));
       }
@@ -383,20 +440,22 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text("Şifrenizi girin."),
+            const Text("Hesabınızı silme işlemini onaylamak için lütfen şifrenizi girin."),
+            const SizedBox(height: 10),
             TextField(controller: passwordController, obscureText: true, decoration: const InputDecoration(labelText: "Şifre", border: OutlineInputBorder())),
           ],
         ),
         actions: [
            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("İptal")),
            ElevatedButton(
+             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
              onPressed: () async {
                Navigator.pop(ctx, false);
                final success = await _authService.reauthenticateUser(passwordController.text);
                if (success && mounted) _performDelete();
                else if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Şifre yanlış."), backgroundColor: Colors.red));
              },
-             child: const Text("Onayla"),
+             child: const Text("Hesabımı Sil", style: TextStyle(color: Colors.white)),
            )
         ],
       ),
@@ -423,17 +482,20 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text("Bilgi Değişikliği"),
+          title: const Text("Bilgi Değişikliği Talebi"),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: uniController, decoration: const InputDecoration(labelText: "Yeni Üniversite")),
-              TextField(controller: deptController, decoration: const InputDecoration(labelText: "Yeni Bölüm")),
+              const Text("Üniversite veya bölüm bilgilerinizde bir hata varsa, düzeltilmesi için talep gönderebilirsiniz."),
+              const SizedBox(height: 15),
+              TextField(controller: uniController, decoration: const InputDecoration(labelText: "Üniversite", border: OutlineInputBorder())),
+              const SizedBox(height: 10),
+              TextField(controller: deptController, decoration: const InputDecoration(labelText: "Bölüm", border: OutlineInputBorder())),
             ],
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("İptal")),
-            ElevatedButton(onPressed: () { Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Talebiniz iletildi."))); }, child: const Text("Gönder")),
+            ElevatedButton(onPressed: () { Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Talebiniz yöneticiye iletildi."))); }, child: const Text("Talep Gönder")),
           ],
         ),
       );
@@ -450,6 +512,33 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
           Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primary)),
         ],
       ),
+    );
+  }
+
+  Widget _buildVerificationTile({
+    required IconData icon,
+    required String title,
+    required String value,
+    required bool isVerified,
+    required VoidCallback? onVerify,
+    String verifyText = "Doğrula",
+    int cooldown = 0,
+  }) {
+    bool onCooldown = cooldown > 0;
+    return ListTile(
+      leading: Icon(icon, color: Colors.grey[600]),
+      title: Text(title, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+      subtitle: Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+      trailing: isVerified
+        ? const Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.verified, color: AppColors.success, size: 18),
+            SizedBox(width: 4),
+            Text("Doğrulandı", style: TextStyle(color: AppColors.success, fontWeight: FontWeight.bold, fontSize: 13)),
+          ])
+        : TextButton(
+            onPressed: onCooldown ? null : onVerify,
+            child: Text(onCooldown ? "$cooldown sn" : verifyText, style: TextStyle(color: onCooldown ? Colors.grey : AppColors.primary, fontWeight: FontWeight.bold)),
+          ),
     );
   }
 
@@ -503,7 +592,6 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
           children: [
             const SizedBox(height: 20),
             
-            // --- 1. SADECE AVATAR DÜZENLEME ---
             Center(
               child: GestureDetector(
                 key: _avatarAreaKey,
@@ -520,7 +608,7 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                         ]
                       ),
                       child: CircleAvatar(
-                        radius: 65, // Biraz daha büyük
+                        radius: 65,
                         backgroundColor: Colors.grey[200],
                         backgroundImage: _isAvatarRemoved ? null : (_avatarImageFile != null
                             ? FileImage(_avatarImageFile!) as ImageProvider
@@ -554,7 +642,6 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
             
             const SizedBox(height: 30),
 
-            // --- 2. FORM ALANLARI ---
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Form(
@@ -576,7 +663,24 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                       ),
                       child: Column(
                         children: [
-                          _buildModernInput(_phoneController, "Telefon Numarası", Icons.phone_android, readOnly: true, onTap: _showPhoneUpdateDialog),
+                          _buildVerificationTile(
+                            icon: Icons.email_outlined,
+                            title: "E-posta Adresi",
+                            value: _emailController.text,
+                            isVerified: _isEmailVerified,
+                            onVerify: _isEmailVerified ? null : _sendVerificationEmail,
+                            cooldown: _cooldownSeconds,
+                          ),
+                          const Divider(height: 1, indent: 16, endIndent: 16),
+                          _buildVerificationTile(
+                            icon: Icons.phone_android,
+                            title: "Telefon Numarası",
+                            value: _phoneController.text.isEmpty ? 'Eklenmemiş' : _phoneController.text,
+                            isVerified: _isPhoneVerified,
+                            onVerify: _showPhoneUpdateDialog,
+                            verifyText: _isPhoneVerified ? "Değiştir" : "Doğrula",
+                          ),
+                          const Divider(height: 1, indent: 16, endIndent: 16),
                           SwitchListTile(
                             title: const Text("İki Adımlı Doğrulama (2FA)", style: TextStyle(fontWeight: FontWeight.w500)),
                             subtitle: Text(_isTwoFactorEnabled ? "Aktif" : "Pasif", style: TextStyle(fontSize: 12, color: Colors.grey[600])),

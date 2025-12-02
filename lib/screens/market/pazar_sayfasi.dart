@@ -124,7 +124,7 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
                   Row(
                     key: _searchBarKey,
                     children: [
-                      const Icon(Icons.shopping_bag_outlined, color: Color.fromARGB(255, 255, 255, 255), size: 28),
+                      Icon(Icons.shopping_bag_outlined, color: Theme.of(context).textTheme.bodyLarge?.color, size: 28),
                       const SizedBox(width: 8),
                       Text("Kampüs Pazarı", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.bodyLarge?.color)),
                       const Spacer(),

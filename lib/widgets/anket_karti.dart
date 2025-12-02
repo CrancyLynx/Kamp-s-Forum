@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:kampus_yardim_app/providers/blocked_users_provider.dart';
+import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../services/image_cache_manager.dart'; // Cache Manager eklendi
@@ -119,6 +121,26 @@ class _AnketKartiState extends State<AnketKarti> {
 
   @override
   Widget build(BuildContext context) {
+    final blockedUsersProvider = Provider.of<BlockedUsersProvider>(context);
+    final authorId = widget.data['userId'] as String?;
+    if (blockedUsersProvider.isUserBlocked(authorId)) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).disabledColor.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.block_flipped, color: Colors.grey),
+            SizedBox(width: 16),
+            Expanded(child: Text("Engellenen bir kullanıcının anketi gizlendi.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic))),
+          ],
+        ),
+      );
+    }
+    
     final userId = FirebaseAuth.instance.currentUser?.uid;
     final serverVoters = Map<String, dynamic>.from(widget.data['voters'] ?? {});
     final rawOptions = List<dynamic>.from(widget.data['options'] ?? []);

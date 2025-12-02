@@ -9,6 +9,8 @@ import 'package:timeago/timeago.dart' as timeago;
 import 'package:image_picker/image_picker.dart'; 
 import 'package:firebase_storage/firebase_storage.dart'; 
 import 'dart:io';
+import 'package:provider/provider.dart';
+import '../../providers/blocked_users_provider.dart';
 import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart';
 import 'gonderi_duzenleme_ekrani.dart';
@@ -443,6 +445,29 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
 
   @override
   Widget build(BuildContext context) {
+    final blockedUsersProvider = Provider.of<BlockedUsersProvider>(context);
+    if (blockedUsersProvider.isUserBlocked(widget.authorUserId)) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text("İçerik Gizlendi"),
+        ),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.block_flipped, size: 80, color: Colors.grey),
+              SizedBox(height: 20),
+              Text(
+                "Bu gönderinin sahibi engellenmiş.",
+                style: TextStyle(fontSize: 18, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
     final bool isDeletedUser = widget.authorUserId == 'deleted_user';
 
     String timeStr = '';

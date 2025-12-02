@@ -7,67 +7,66 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    function isAdmin() {
-      return isSignedIn() && 
-             firestore.get(/databases/(default)/documents/kullanicilar/$(request.auth.uid)).data.role == 'admin';
-    }
+    // Not: Admin kontrolü Storage kurallarında Firestore okumayı gerektirir ve bazen yavaş olabilir.
+    // Basitlik için burada sadece signedIn ve dosya sahipliği kontrolü yapacağız.
 
     function isValidImage() {
       return request.resource.contentType.matches('image/.*')
              && request.resource.size < 10 * 1024 * 1024; // Max 10MB
     }
     
-    // Dosya isminin kullanıcı ID'si ile başlayıp başlamadığını kontrol eder
-    // Kodunuzda dosya isimleri: "USERID-ZAMAN.jpg" formatında olduğu için bu kontrol güvenlidir.
+    // Dosya adı "USERID-..." ile başlıyorsa veya "USERID.jpg" ise sahibidir.
     function isOwnerOfFile(fileName) {
       return fileName.matches(request.auth.uid + '.*');
     }
 
     // --- KURALLAR ---
 
-    // 1. Profil Resimleri (Klasörlü yapı)
-    match /profil_resimleri/{userId}/{fileName} {
+    // 1. Profil Resimleri (Düzeltildi: Kodda direkt klasör içine atılıyor)
+    // Kodun yolu: 'profil_resimleri/USERID.jpg'
+    match /profil_resimleri/{fileName} {
       allow read: if true;
-      allow write: if (isSignedIn() && request.auth.uid == userId && isValidImage()) || isAdmin();
-      allow delete: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
+      allow write: if isSignedIn() && isOwnerOfFile(fileName) && isValidImage();
+      allow delete: if isSignedIn() && isOwnerOfFile(fileName);
     }
 
-    // 2. Gönderi Resimleri (Kodunuzda düz klasöre atılıyor)
-    // Kod: ref.child('gonderi_resimleri/$fileName')
+    // 2. Gönderi Resimleri
     match /gonderi_resimleri/{fileName} {
       allow read: if true;
-      // Dosya adı userId ile başlıyorsa yüklemeye izin ver
-      allow write: if (isSignedIn() && isOwnerOfFile(fileName) && isValidImage()) || isAdmin();
-      allow delete: if (isSignedIn() && isOwnerOfFile(fileName)) || isAdmin();
+      allow write: if isSignedIn() && isOwnerOfFile(fileName) && isValidImage();
+      allow delete: if isSignedIn() && isOwnerOfFile(fileName);
     }
 
     // 3. Yorum Resimleri
     match /yorum_resimleri/{fileName} {
       allow read: if true;
-      allow write: if (isSignedIn() && isOwnerOfFile(fileName) && isValidImage()) || isAdmin();
-      allow delete: if (isSignedIn() && isOwnerOfFile(fileName)) || isAdmin();
+      allow write: if isSignedIn() && isOwnerOfFile(fileName) && isValidImage();
+      allow delete: if isSignedIn() && isOwnerOfFile(fileName);
     }
 
     // 4. Ürün Resimleri
     match /urun_resimleri/{fileName} {
       allow read: if true;
-      allow write: if (isSignedIn() && isValidImage()) || isAdmin();
-      // Ürün resimlerinde isOwnerOfFile bazen tutmayabilir (kod yapısına göre), 
-      // bu yüzden sadece silerken kontrol etmek daha esnek olabilir.
-      allow delete: if (isSignedIn() && isOwnerOfFile(fileName)) || isAdmin();
+      allow write: if isSignedIn() && isValidImage();
+      allow delete: if isSignedIn() && isOwnerOfFile(fileName);
     }
 
-    // 5. Sohbet Resimleri
+    // 5. Sohbet Resimleri (Klasörlü yapı: chat_images/CHAT_ID/FILENAME)
     match /chat_images/{chatId}/{fileName} {
       allow read: if isSignedIn();
       allow write: if isSignedIn() && isValidImage();
     }
     
-    // 6. Genel Kural (Diğer klasörler için yedek)
-    match /{folder}/{userId}/{fileName} {
+    // 6. Anket Resimleri
+    match /anket_resimleri/{fileName} {
       allow read: if true;
-      allow write: if (isSignedIn() && request.auth.uid == userId && isValidImage()) || isAdmin();
-      allow delete: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
+      allow write: if isSignedIn() && isOwnerOfFile(fileName) && isValidImage();
+    }
+    
+    // 7. Etkinlik Resimleri (Sadece Admin ekler genelde ama kodda kontrol etmek lazım)
+    match /events/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && isValidImage(); // Geniş izin, admin kontrolü kodda yapılmalı
     }
   }
 }

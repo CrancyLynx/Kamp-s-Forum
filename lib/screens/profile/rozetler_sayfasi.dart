@@ -3,7 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../models/badge_model.dart';
 import '../../utils/app_colors.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
-import '../../utils/maskot_helper.dart'; // EKLENDİ
+import '../../utils/maskot_helper.dart';
 
 class RozetlerSayfasi extends StatefulWidget {
   final Set<String> earnedBadgeIds;
@@ -22,26 +22,21 @@ class RozetlerSayfasi extends StatefulWidget {
 }
 
 class _RozetlerSayfasiState extends State<RozetlerSayfasi> {
-  // --- YENİ SİSTEM İÇİN GLOBAL KEY'LER ---
   final Map<String, GlobalKey> _badgeKeys = {};
 
   @override
   void initState() {
     super.initState();
 
-    // Her rozet için bir GlobalKey oluştur
     for (var badge in allBadges) {
       _badgeKeys[badge.id] = GlobalKey();
     }
 
-    // --- YENİ SİSTEM İLE MASKOT KODU ---
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Vurgulanacak rozeti bul: Ya kazanılan ilk rozet ya da en yakın olunan rozet
       String? targetBadgeId;
       if (widget.earnedBadgeIds.isNotEmpty) {
         targetBadgeId = widget.earnedBadgeIds.first;
       } else {
-        // En yüksek ilerlemeye sahip rozeti bul
         double maxProgress = 0;
         for (var badge in allBadges) {
           final progressData = _getBadgeProgress(badge.id);
@@ -75,7 +70,6 @@ class _RozetlerSayfasiState extends State<RozetlerSayfasi> {
 
   @override
   Widget build(BuildContext context) {
-    // Admin rozetini, kullanıcının admin olup olmamasına göre dinamik olarak ekle
     final userBadges = Set<String>.from(widget.earnedBadgeIds);
     if (widget.isAdmin) {
       userBadges.add('admin');
@@ -95,7 +89,7 @@ class _RozetlerSayfasiState extends State<RozetlerSayfasi> {
           final bool isEarned = userBadges.contains(badge.id);
 
           return KeyedSubtree(
-            key: _badgeKeys[badge.id], // --- HER KARTA KEY EKLE ---
+            key: _badgeKeys[badge.id],
             child: _buildBadgeCard(context, badge, isEarned),
           );
         },
@@ -103,14 +97,13 @@ class _RozetlerSayfasiState extends State<RozetlerSayfasi> {
     );
   }
 
-  // YENİ: Rozet kartını oluşturan ve ilerleme durumunu gösteren widget
   Widget _buildBadgeCard(BuildContext context, Badge badge, bool isEarned) {
     final progressData = _getBadgeProgress(badge.id);
     final double progress = progressData['progress']!;
     final String progressText = progressData['text']!;
 
     return Opacity(
-      opacity: isEarned ? 1.0 : 0.6, // Kazanılmamışsa soluk göster
+      opacity: isEarned ? 1.0 : 0.6,
       child: Card(
         elevation: isEarned ? 4 : 1,
         shape: RoundedRectangleBorder(
@@ -160,7 +153,6 @@ class _RozetlerSayfasiState extends State<RozetlerSayfasi> {
                       : const Icon(Icons.lock_outline, color: Colors.grey, size: 28),
                 ],
               ),
-              // Kazanılmamışsa ve ilerleme varsa göster
               if (!isEarned && progress > 0)
                 Padding(
                   padding: const EdgeInsets.only(top: 12.0),
@@ -172,7 +164,7 @@ class _RozetlerSayfasiState extends State<RozetlerSayfasi> {
                         child: LinearProgressIndicator(
                           value: progress,
                           backgroundColor: Colors.grey.shade300,
-                          color: badge.color.withOpacity(0.8), // Renk opaklığı azaltıldı
+                          color: badge.color.withOpacity(0.8),
                           minHeight: 6,
                         ),
                       ),
@@ -191,11 +183,11 @@ class _RozetlerSayfasiState extends State<RozetlerSayfasi> {
     );
   }
 
-  // YENİ: Rozet ID'sine göre ilerleme durumunu hesaplayan fonksiyon
   Map<String, dynamic> _getBadgeProgress(String badgeId) {
-    final int postCount = widget.userData['postCount'] ?? 0;
-    final int commentCount = widget.userData['commentCount'] ?? 0;
-    final int likeCount = widget.userData['likeCount'] ?? 0;
+    // Güvenli veri çekimi
+    final int postCount = (widget.userData['postCount'] is int) ? widget.userData['postCount'] : 0;
+    final int commentCount = (widget.userData['commentCount'] is int) ? widget.userData['commentCount'] : 0;
+    final int likeCount = (widget.userData['likeCount'] is int) ? widget.userData['likeCount'] : 0;
 
     switch (badgeId) {
       case 'pioneer':
