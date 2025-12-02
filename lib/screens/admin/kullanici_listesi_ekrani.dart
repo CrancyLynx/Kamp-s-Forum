@@ -91,9 +91,11 @@ class KullaniciListesiEkrani extends StatelessWidget {
                 elevation: 1,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 child: ListTile(
+                  // DÜZELTME: avatarUrl'nin null veya boş olup olmadığını kontrol et.
                   leading: CircleAvatar(
-                    backgroundImage: (user['avatarUrl'] != null && user['avatarUrl'] != "") 
-                        ? CachedNetworkImageProvider(user['avatarUrl']) 
+                    backgroundImage: (user['avatarUrl'] != null &&
+                            user['avatarUrl'].toString().isNotEmpty)
+                        ? CachedNetworkImageProvider(user['avatarUrl'])
                         : null,
                     backgroundColor: isVerified ? Colors.green.shade100 : Colors.grey.shade200,
                     child: (user['avatarUrl'] == null || user['avatarUrl'] == "")

@@ -18,6 +18,9 @@ class AppLogo extends StatelessWidget {
     final Color textColor = isLightMode ? AppColors.primary : Colors.white;
     final Color secondaryColor = isLightMode ? AppColors.greyText : Colors.white70;
 
+    // DÜZELTME: Temaya göre logo resmini dinamik olarak seç
+    final String logoAsset = isLightMode ? 'assets/images/app_logo2.png' : 'assets/images/app_logo3.png';
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -36,7 +39,7 @@ class AppLogo extends StatelessWidget {
           ),
           child: ClipOval(
             child: Image.asset(
-              'assets/images/app_logo3.png', // Kesinlikle bu dosya kullanılacak
+              logoAsset, // Değiştirildi
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) {
                 // Eğer resim yüklenemezse yedek ikon göster

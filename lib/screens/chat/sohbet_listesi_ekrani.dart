@@ -44,7 +44,7 @@ class _SohbetListesiEkraniState extends State<SohbetListesiEkrani> {
     // Sadece hiç sohbet yoksa tutorial'ı göster
     _chatListStream.first.then((snapshot) {
       if (snapshot.docs.isEmpty && mounted) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) { // DÜZELTME: checkAndShow metodu çağrıldı
           MaskotHelper.checkAndShow(context,
               featureKey: 'sohbet_listesi_tutorial_gosterildi',
               targets: [
@@ -55,7 +55,7 @@ class _SohbetListesiEkraniState extends State<SohbetListesiEkrani> {
                     contents: [
                       TargetContent(
                         align: ContentAlign.bottom,
-                        builder: (context, controller) => MaskotHelper.buildTutorialContent(context,
+                        builder: (context, controller) => MaskotHelper.buildTutorialContent(context, // DÜZELTME: buildTutorialContent metodu kullanıldı
                             title: 'Mesajlaşmaya Başla!',
                             description: 'Arkadaşlarının profillerine giderek onlarla sohbet başlatabilirsin. Tüm mesajların burada listelenecek.',
                             mascotAssetPath: 'assets/images/mutlu_bay.png'),

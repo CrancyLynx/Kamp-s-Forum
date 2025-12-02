@@ -47,7 +47,7 @@ class _AnketEklemeEkraniState extends State<AnketEklemeEkrani> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      MaskotHelper.checkAndShow(
+      MaskotHelper.checkAndShow( // DÜZELTME: checkAndShow metodu çağrıldı
         context,
         featureKey: 'anket_ekleme_tutorial_gosterildi',
         targets: [
@@ -56,16 +56,16 @@ class _AnketEklemeEkraniState extends State<AnketEklemeEkrani> {
             keyTarget: _questionKey,
             alignSkip: Alignment.bottomRight,
             contents: [
-              TargetContent(
+              TargetContent( // DÜZELTME: buildTutorialContent metodu kullanıldı
                   align: ContentAlign.bottom,
-                  builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Ne Merak Ediyorsun?', description: 'Topluluğa sormak istediğin soruyu buraya yazarak anketini başlat.', mascotAssetPath: 'assets/images/düsünceli_bay.png'))
+                  builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Ne Merak Ediyorsun?', description: 'Topluluğa sormak istediğin soruyu buraya yazarak anketini başlat.', mascotAssetPath: 'assets/images/düsünceli_bay.png')),
             ],
           ),
           TargetFocus(
             identify: "anket-secenekleri",
             keyTarget: _firstOptionKey,
             alignSkip: Alignment.bottomRight,
-            contents: [
+            contents: [ // DÜZELTME: buildTutorialContent metodu kullanıldı
               TargetContent(align: ContentAlign.bottom, builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Seçenekleri Belirle', description: 'Anketine en az iki seçenek eklemelisin. İstersen yandaki ikona tıklayarak seçeneklere resim de ekleyebilirsin!', mascotAssetPath: 'assets/images/mutlu_bay.png'))
             ],
           ),
@@ -73,7 +73,7 @@ class _AnketEklemeEkraniState extends State<AnketEklemeEkrani> {
             identify: "anket-paylas",
             keyTarget: _shareButtonKey,
             alignSkip: Alignment.bottomLeft,
-            contents: [TargetContent(align: ContentAlign.bottom, builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Fikirleri Topla!', description: 'Hazır olduğunda anketini buradan paylaşarak topluluğun fikrini alabilirsin.', mascotAssetPath: 'assets/images/duyuru_bay.png'))],
+            contents: [TargetContent(align: ContentAlign.bottom, builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Fikirleri Topla!', description: 'Hazır olduğunda anketini buradan paylaşarak topluluğun fikrini alabilirsin.', mascotAssetPath: 'assets/images/duyuru_bay.png'))], // DÜZELTME: buildTutorialContent metodu kullanıldı
           ),
         ],
       );

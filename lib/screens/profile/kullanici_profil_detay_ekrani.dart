@@ -656,6 +656,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
 
   Widget _buildPostItem(DocumentSnapshot doc, Map<String, dynamic> data) {
     final bool isSaved = (_myUserData?['savedPosts'] as List<dynamic>? ?? []).contains(doc.id);
+    final String kategori = data['kategori'] ?? 'Genel';
 
     String formattedTime = '...';
     if (data['zaman'] is Timestamp) {
@@ -672,10 +673,10 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
         baslik: data['baslik'] ?? 'Başlıksız',
         mesaj: data['mesaj'] ?? '',
         zaman: formattedTime,
-        kategori: data['kategori'] ?? 'Genel',
+        kategori: kategori,
         authorUserId: data['userId'] ?? '',
         isAuthorAdmin: false,
-        avatarUrl: data['avatarUrl'],
+        avatarUrl: data['avatarUrl'] ?? '',
         isGuest: false,
         isAdmin: false, 
         onShowLoginRequired: () {},
