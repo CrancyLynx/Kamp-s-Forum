@@ -161,9 +161,9 @@ class MapDataService {
         '&key=$_apiKey'; //
 
     // YENİ: Filtreye göre dinamik arama yarıçapı
-    // Üniversite, kütüphane ve tümü için daha geniş bir alanda (10km) arama yap.
-    int radius = 1000; // Varsayılan 1km
-    if (typeFilter == 'universite' || typeFilter == 'kutuphane' || typeFilter == 'all') {
+    // 'all' filtresi için daha geniş bir alanda (10km) arama yap. Diğerleri için 5km.
+    int radius = 5000; // Varsayılan 5km
+    if (typeFilter == 'all') {
       radius = 10000; // 10km
     }
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:kampus_yardim_app/services/auth_service.dart';
@@ -46,18 +47,27 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
       await user.reload(); 
       if (!mounted) return;
 
+      final isNowVerified = user.emailVerified || (user.phoneNumber != null && user.phoneNumber!.isNotEmpty);
+
       setState(() {
         isEmailVerified = user.emailVerified;
       });
       
-      if (isEmailVerified || (user.phoneNumber != null && user.phoneNumber!.isNotEmpty)) {
+      if (isNowVerified) {
+        final userDocRef = FirebaseFirestore.instance.collection('kullanicilar').doc(user.uid);
+        final userDoc = await userDocRef.get();
+        
+        if (userDoc.exists && userDoc.data()?['status'] != 'Verified') {
+          await userDocRef.update({'status': 'Verified', 'verified': true});
+        }
+
         emailTimer?.cancel();
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const AnaKontrolcu()),
         );
       }
     } catch (e) {
-      debugPrint("Bağlantı hatası (önemsiz): $e");
+      debugPrint("Doğrulama durumu kontrol hatası: $e");
     }
   }
 
@@ -214,7 +224,7 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
             _buildSelectionCard(
               icon: Icons.phone_android_outlined,
               title: "SMS ile Doğrula",
-              subtitle: "Hızlı • Yönetici Onayı Gerekir\n(Telefonunuza kod gönderilir)",
+              subtitle: "Hızlı • (Telefonunuza kod gönderilir)",
               color: Colors.orange.shade50,
               onTap: startPhoneVerification,
             ),

@@ -288,7 +288,41 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
         'commentCount': FieldValue.increment(1),
       });
 
-      if (_currentUserId != widget.authorUserId) {
+      // --- MENTION NOTIFICATION LOGIC ---
+      final mentionRegex = RegExp(r'@(\w+)');
+      final matches = mentionRegex.allMatches(content);
+      Set<String> mentionedUserIds = {};
+
+      for (final match in matches) {
+        final takmaAd = match.group(1);
+        if (takmaAd != null) {
+          final userQuery = await FirebaseFirestore.instance
+              .collection('kullanicilar')
+              .where('takmaAd', isEqualTo: takmaAd)
+              .limit(1)
+              .get();
+
+          if (userQuery.docs.isNotEmpty) {
+            final mentionedUserId = userQuery.docs.first.id;
+            // Don't notify self, and don't send duplicate notifications
+            if (mentionedUserId != _currentUserId && !mentionedUserIds.contains(mentionedUserId)) {
+              mentionedUserIds.add(mentionedUserId);
+              await FirebaseFirestore.instance.collection('bildirimler').add({
+                'userId': mentionedUserId,
+                'senderId': _currentUserId,
+                'senderName': myName,
+                'type': 'mention_comment',
+                'postId': widget.postId,
+                'message': '$myName bir yorumda senden bahsetti.',
+                'isRead': false,
+                'timestamp': FieldValue.serverTimestamp(),
+              });
+            }
+          }
+        }
+      }
+
+      if (_currentUserId != widget.authorUserId && !mentionedUserIds.contains(widget.authorUserId)) {
         await FirebaseFirestore.instance.collection('bildirimler').add({
           'userId': widget.authorUserId,
           'senderId': _currentUserId, // EKLENDİ

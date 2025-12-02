@@ -24,6 +24,7 @@ import 'package:shimmer/shimmer.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../../providers/blocked_users_provider.dart';
+import '../../services/image_cache_manager.dart';
 
 const List<String> kCategories = ['Eğitim', 'Okul', 'Dersler', 'Sınavlar', 'Etkinlikler', 'Sosyal', 'Diğer'];
 const List<String> kFilterCategories = ['Tümü', ...kCategories];
@@ -1005,6 +1006,7 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                                   widget.avatarUrl!,
                                   maxWidth: 80,
                                   maxHeight: 80,
+                                  cacheManager: ImageCacheManager.instance,
                                 )
                               : null,
                           child: (widget.avatarUrl == null || widget.avatarUrl!.isEmpty)

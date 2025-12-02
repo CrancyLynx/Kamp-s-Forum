@@ -37,12 +37,14 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   GoogleMapController? _mapController;
   final MapDataService _mapDataService = MapDataService();
   StreamSubscription? _firestoreSubscription;
+  StreamSubscription? _locationSubscription;
 
   // Durum Değişkenleri
   String _currentFilter = 'all';
   Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
   LatLng? _userLocation;
+  BitmapDescriptor? _iconUser;
   bool _isLoading = false;
   bool _isRouteActive = false;
   bool _isMapCreated = false;
@@ -93,6 +95,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   @override
   void dispose() {
     _firestoreSubscription?.cancel();
+    _locationSubscription?.cancel();
     _mapController?.dispose();
     _searchController.dispose();
     _debounce?.cancel();
@@ -107,8 +110,8 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       // 1. İkonları hazırla
       await _prepareCustomMarkers();
 
-      // 2. Konumu al
-      await _getUserLocation();
+      // 2. Konumu al ve dinlemeye başla
+      await _initializeLocationStream();
 
       // 3. Mekanları yükle (Konum alındıktan sonra)
       await _loadPlaces();
@@ -127,6 +130,9 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   // --- 1. Marker İkonlarını Oluşturma ---
   Future<void> _prepareCustomMarkers() async {
     try {
+      // YENİ: Kullanıcı ikonu
+      _iconUser = await _createMarkerBitmap(Icons.person_pin, AppColors.primary);
+
       final iconUni = await _createMarkerBitmap(Icons.school, Colors.redAccent);
       final iconYemek = await _createMarkerBitmap(Icons.restaurant, Colors.orangeAccent);
       final iconDurak = await _createMarkerBitmap(Icons.directions_bus, Colors.blueAccent);
@@ -171,7 +177,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   }
 
   // --- 2. Kullanıcı Konumu ---
-  Future<void> _getUserLocation() async {
+  Future<void> _initializeLocationStream() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) return;
@@ -183,18 +189,27 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       }
       if (permission == LocationPermission.deniedForever) return;
 
-      Position pos = await Geolocator.getCurrentPosition();
-      
+      // İlk konumu hızlıca al
+      Position initialPos = await Geolocator.getCurrentPosition();
       if (mounted) {
         setState(() {
-          _userLocation = LatLng(pos.latitude, pos.longitude);
+          _userLocation = LatLng(initialPos.latitude, initialPos.longitude);
         });
-        
-        // Eğer dışarıdan bir odak noktası verilmediyse kendi konumuna odaklan
         if (widget.initialFocus == null && _mapController != null) {
           _mapController?.animateCamera(CameraUpdate.newLatLngZoom(_userLocation!, 15));
         }
       }
+
+      // Konum değişikliklerini dinle
+      _locationSubscription = Geolocator.getPositionStream().listen((Position pos) {
+        if (mounted) {
+          setState(() {
+            _userLocation = LatLng(pos.latitude, pos.longitude);
+            _updateMarkers(); // Konum değiştikçe marker'ı güncelle
+          });
+        }
+      });
+
     } catch (e) {
       debugPrint("Konum alma hatası: $e");
     }
@@ -242,7 +257,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
         Marker(
           markerId: const MarkerId('user_location'),
           position: _userLocation!,
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          icon: _iconUser ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
           infoWindow: const InfoWindow(title: 'Konumun'),
           zIndex: 2,
         ),
@@ -942,7 +957,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                     if (_userLocation != null) {
                       _mapController?.animateCamera(CameraUpdate.newLatLngZoom(_userLocation!, 16));
                     } else {
-                      _getUserLocation(); // Konum yoksa tekrar iste
+                      _initializeLocationStream(); // Konum yoksa tekrar iste
                     }
                   },
                 ),

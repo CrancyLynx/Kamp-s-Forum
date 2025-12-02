@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kampus_yardim_app/providers/blocked_users_provider.dart';
@@ -117,7 +119,6 @@ class AppLogic extends StatefulWidget {
 
 class _AppLogicState extends State<AppLogic> {
   final PushNotificationService _notificationService = PushNotificationService();
-  OverlayEntry? _overlayEntry;
 
   @override
   void initState() {
@@ -135,46 +136,51 @@ class _AppLogicState extends State<AppLogic> {
   }
 
   void _showInAppNotification(String title, String body) {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
     final context = navigatorKey.currentContext;
     if (context == null) return;
 
     final overlayState = Overlay.of(context);
-    _overlayEntry = OverlayEntry(
-      builder: (context) => Positioned(
-        top: 0,
-        left: 0,
-        right: 0,
-        child: Material(
-          color: Colors.transparent,
-          child: TweenAnimationBuilder<double>(
-            tween: Tween(begin: -100, end: 0),
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeOutBack,
-            builder: (context, value, child) {
-              return Transform.translate(
-                offset: Offset(0, value),
-                child: InAppNotification(
-                  title: title,
-                  body: body,
-                  onTap: () => _overlayEntry?.remove(),
-                  onDismiss: () => _overlayEntry?.remove(),
-                ),
-              );
-            },
+    late OverlayEntry overlayEntry;
+
+    overlayEntry = OverlayEntry(
+      builder: (context) {
+        void removeOverlay() {
+          if (overlayEntry.mounted) {
+            overlayEntry.remove();
+          }
+        }
+
+        // Auto-dismiss after a delay
+        Future.delayed(const Duration(seconds: 4), removeOverlay);
+
+        return Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: Material(
+            color: Colors.transparent,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: -100, end: 0),
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeOutBack,
+              builder: (context, value, child) {
+                return Transform.translate(
+                  offset: Offset(0, value),
+                  child: InAppNotification(
+                    title: title,
+                    body: body,
+                    onTap: removeOverlay,
+                    onDismiss: removeOverlay,
+                  ),
+                );
+              },
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
 
-    overlayState.insert(_overlayEntry!);
-    Future.delayed(const Duration(seconds: 4), () {
-      if (_overlayEntry != null && _overlayEntry!.mounted) {
-        _overlayEntry?.remove();
-        _overlayEntry = null;
-      }
-    });
+    overlayState.insert(overlayEntry);
   }
 
   @override
@@ -190,6 +196,10 @@ class AnaKontrolcu extends StatefulWidget {
 }
 
 class _AnaKontrolcuState extends State<AnaKontrolcu> with WidgetsBindingObserver {
+  StreamSubscription<User?>? _authSubscription;
+  User? _currentUser;
+  bool _authInitialized = false;
+
   void _showLoginPrompt(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -237,10 +247,25 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> with WidgetsBindingObserver
   void initState() {
     super.initState();
     PresenceService().configure();
+    
+    final blockedUsersProvider = Provider.of<BlockedUsersProvider>(context, listen: false);
+
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (!mounted) return;
+      setState(() {
+        _currentUser = user;
+        if (!_authInitialized) _authInitialized = true;
+      });
+
+      if (user == null || user.isAnonymous) {
+        blockedUsersProvider.startListening(null);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _authSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -253,36 +278,27 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> with WidgetsBindingObserver
       statusBarIconBrightness: isDarkMode ? Brightness.light : Brightness.dark,
     ));
 
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, authSnapshot) { 
-        if (authSnapshot.connectionState == ConnectionState.waiting) {
-          return const LoadingScreen();
-        }
-        
-        if (authSnapshot.hasData) {
-          final user = authSnapshot.data!;
-          
-          if (user.isAnonymous) {
-             Provider.of<BlockedUsersProvider>(context, listen: false).startListening(null);
-             return AnaEkran(
-                 isGuest: true,
-                 showLoginPrompt: () => _showLoginPrompt(context),
-             );
-          }
+    if (!_authInitialized) {
+      return const LoadingScreen();
+    }
+    
+    final user = _currentUser;
+    if (user != null) {
+      if (user.isAnonymous) {
+         return AnaEkran(
+             isGuest: true,
+             showLoginPrompt: () => _showLoginPrompt(context),
+         );
+      }
 
-          if (!user.emailVerified && (user.phoneNumber == null || user.phoneNumber!.isEmpty)) {
-            return const VerificationWrapper();
-          }
+      if (!user.emailVerified && (user.phoneNumber == null || user.phoneNumber!.isEmpty)) {
+        return const VerificationWrapper();
+      }
 
-          // ÖNEMLİ: Veri akışını sabitleyen ara widget kullanımı
-          return _KullaniciVerisiYukleyici(user: user);
-        } 
+      return _KullaniciVerisiYukleyici(user: user);
+    } 
 
-        Provider.of<BlockedUsersProvider>(context, listen: false).startListening(null);
-        return const GirisEkrani(); 
-      }, 
-    );
+    return const GirisEkrani(); 
   }
 }
 
@@ -297,11 +313,13 @@ class _KullaniciVerisiYukleyici extends StatefulWidget {
 
 class _KullaniciVerisiYukleyiciState extends State<_KullaniciVerisiYukleyici> {
   late Stream<DocumentSnapshot> _userStream;
+  late final BlockedUsersProvider _blockedUsersProvider;
 
   @override
   void initState() {
     super.initState();
-    Provider.of<BlockedUsersProvider>(context, listen: false).startListening(widget.user.uid);
+    _blockedUsersProvider = Provider.of<BlockedUsersProvider>(context, listen: false);
+    _blockedUsersProvider.startListening(widget.user.uid);
     // Stream'i sadece bir kez oluşturuyoruz. Tema değişse bile burası tekrar çalışmaz.
     _userStream = FirebaseFirestore.instance.collection('kullanicilar').doc(widget.user.uid).snapshots();
   }
@@ -310,14 +328,14 @@ class _KullaniciVerisiYukleyiciState extends State<_KullaniciVerisiYukleyici> {
   void didUpdateWidget(covariant _KullaniciVerisiYukleyici oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.user.uid != widget.user.uid) {
-      Provider.of<BlockedUsersProvider>(context, listen: false).startListening(widget.user.uid);
+      _blockedUsersProvider.startListening(widget.user.uid);
       _userStream = FirebaseFirestore.instance.collection('kullanicilar').doc(widget.user.uid).snapshots();
     }
   }
 
   @override
   void dispose() {
-    Provider.of<BlockedUsersProvider>(context, listen: false).stopListening();
+    _blockedUsersProvider.stopListening();
     super.dispose();
   }
 
