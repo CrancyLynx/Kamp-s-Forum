@@ -244,7 +244,7 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                     setState(() { _selectedPresetAvatarUrl = url; _avatarImageFile = null; _isAvatarRemoved = false; });
                     Navigator.pop(context);
                   },
-                  child: CircleAvatar(backgroundImage: CachedNetworkImageProvider(url, cacheManager: ImageCacheManager.instance)),
+                  child: CircleAvatar(backgroundImage: CachedNetworkImageProvider(url, cacheManager: CustomCacheManager.instance)),
                 );
               },
             ),
@@ -613,9 +613,9 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                         backgroundImage: _isAvatarRemoved ? null : (_avatarImageFile != null
                             ? FileImage(_avatarImageFile!) as ImageProvider
                             : _selectedPresetAvatarUrl != null
-                              ? CachedNetworkImageProvider(_selectedPresetAvatarUrl!, cacheManager: ImageCacheManager.instance)
+                              ? CachedNetworkImageProvider(_selectedPresetAvatarUrl!, cacheManager: CustomCacheManager.instance)
                               : (_currentAvatarUrl != null && _currentAvatarUrl!.isNotEmpty)
-                                  ? CachedNetworkImageProvider(_currentAvatarUrl!, cacheManager: ImageCacheManager.instance)
+                                  ? CachedNetworkImageProvider(_currentAvatarUrl!, cacheManager: CustomCacheManager.instance)
                                   : null),
                         child: (_isAvatarRemoved || (_avatarImageFile == null && _selectedPresetAvatarUrl == null && (_currentAvatarUrl == null || _currentAvatarUrl!.isEmpty)))
                             ? const Icon(Icons.person, size: 70, color: Colors.grey)

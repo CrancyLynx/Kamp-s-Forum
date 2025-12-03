@@ -6,7 +6,7 @@ import 'package:kampus_yardim_app/providers/blocked_users_provider.dart';
 import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
 import 'package:timeago/timeago.dart' as timeago;
-import '../../services/image_cache_manager.dart'; // Cache Manager eklendi
+import '../../services/custom_cache_manager.dart'; // Cache Manager eklendi
 
 class AnketKarti extends StatefulWidget {
   final String docId;
@@ -191,7 +191,7 @@ class _AnketKartiState extends State<AnketKarti> {
               CircleAvatar(
                 radius: 16,
                 backgroundImage: (widget.data['avatarUrl'] != null) 
-                    ? CachedNetworkImageProvider(widget.data['avatarUrl'], cacheManager: ImageCacheManager.instance) 
+                    ? CachedNetworkImageProvider(widget.data['avatarUrl'], cacheManager: CustomCacheManager.instance) 
                     : null,
                 backgroundColor: AppColors.primary.withAlpha(26),
                 child: widget.data['avatarUrl'] == null 
@@ -258,7 +258,7 @@ class _AnketKartiState extends State<AnketKarti> {
                          // A. Arka Plan Resmi
                          CachedNetworkImage(
                            imageUrl: imgUrl,
-                           cacheManager: ImageCacheManager.instance,
+                           cacheManager: CustomCacheManager.instance,
                            fit: BoxFit.cover,
                            placeholder: (_,__) => Container(color: Colors.grey[200]),
                            errorWidget: (_,__,_) => Container(color: Colors.grey[300], child: const Icon(Icons.error)),

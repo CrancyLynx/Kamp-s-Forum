@@ -83,7 +83,7 @@ class _UrunEklemeEkraniState extends State<UrunEklemeEkrani> {
         'sellerAvatar': sellerAvatar,
         'title': _titleController.text.trim(),
         'description': _descController.text.trim(),
-        'price': int.parse(_priceController.text.trim()),
+        'price': int.tryParse(_priceController.text.trim()) ?? 0,
         'category': _selectedCategory,
         'imageUrl': imageUrl,
         'timestamp': FieldValue.serverTimestamp(),
@@ -151,7 +151,11 @@ class _UrunEklemeEkraniState extends State<UrunEklemeEkrani> {
                       controller: _priceController,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(labelText: "Fiyat", border: OutlineInputBorder(), suffixText: "TL"),
-                      validator: (v) => v!.isEmpty ? "Fiyat gerekli" : null,
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return "Fiyat gerekli";
+                        if (int.tryParse(v) == null) return "Geçerli bir sayı girin";
+                        return null;
+                      },
                     ),
                   ),
                   const SizedBox(width: 16),

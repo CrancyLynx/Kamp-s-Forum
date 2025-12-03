@@ -274,16 +274,16 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
                 if (isDark) {
                   Widget logo = Image.asset('assets/images/app_logo3.png', height: 40);
                   return ColorFiltered(
-                    colorFilter: const ColorFilter.matrix([
-                      -1, 0, 0, 0, 255,
-                       0, -1, 0, 0, 255,
-                       0, 0, -1, 0, 255,
-                       0, 0, 0, 1, 0,
+                    colorFilter: const ColorFilter.matrix(<double>[
+                      0, 0, 0, 0, 255, // Red
+                      0, 0, 0, 0, 255, // Green
+                      0, 0, 0, 0, 255, // Blue
+                      0, 0, 0, 1, 0,   // Alpha
                     ]),
                     child: logo,
                   );
                 }
-                return Image.asset('assets/images/app_icon2.png', height: 40);
+                return Image.asset('assets/images/app_icon2.png', height: 60);
               }
             ),
             const SizedBox(width: 10),
@@ -541,7 +541,7 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
       // DÜZELTME: heroTag eklendi
       floatingActionButton: !widget.isGuest
           ? FloatingActionButton.extended(
-              heroTag: 'forum_create_fab', // BENZERSİZ TAG
+              heroTag: 'forum_create_fab',
               onPressed: () => _showCreateOptions(context),
               backgroundColor: AppColors.primary,
               icon: const Icon(Icons.add, color: Colors.white),
@@ -1001,17 +1001,18 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                         child: CircleAvatar(
                           radius: 20,
                           backgroundColor: AppColors.primary.withOpacity(0.1),
-                          backgroundImage: (widget.avatarUrl != null && widget.avatarUrl!.isNotEmpty)
-                              ? CachedNetworkImageProvider(
-                                  widget.avatarUrl!,
-                                  maxWidth: 80,
-                                  maxHeight: 80,
-                                  cacheManager: ImageCacheManager.instance,
+                          child: (widget.avatarUrl != null && widget.avatarUrl!.isNotEmpty)
+                              ? ClipOval(
+                                  child: CachedNetworkImage(
+                                    imageUrl: widget.avatarUrl!,
+                                    memCacheWidth: 80,
+                                    memCacheHeight: 80,
+                                    width: 40,
+                                    height: 40,
+                                    fit: BoxFit.cover,
+                                  ),
                                 )
-                              : null,
-                          child: (widget.avatarUrl == null || widget.avatarUrl!.isEmpty)
-                              ? Text(widget.adSoyad.isNotEmpty ? widget.adSoyad[0].toUpperCase() : '?', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold))
-                              : null,
+                              : Text(widget.adSoyad.isNotEmpty ? widget.adSoyad[0].toUpperCase() : '?', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
                         ),
                       ),
                       const SizedBox(width: 12),

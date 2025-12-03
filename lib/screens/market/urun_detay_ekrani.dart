@@ -5,9 +5,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../chat/sohbet_detay_ekrani.dart';
 // Düzeltilmiş Importlar
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart';
-import '../../services/image_cache_manager.dart'; // YENİ: Merkezi önbellek yöneticisi
 
 class UrunDetayEkrani extends StatelessWidget {
   final String productId;
@@ -143,7 +143,7 @@ class UrunDetayEkrani extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   CachedNetworkImage(
-                    cacheManager: ImageCacheManager.instance, // YENİ: Merkezi önbellek yöneticisi kullanılıyor.
+                    cacheManager: DefaultCacheManager(), // YENİ: Merkezi önbellek yöneticisi kullanılıyor.
                     imageUrl: productData['imageUrl'] ?? '',
                     fit: BoxFit.cover,
                     placeholder: (_,__) => Container(color: Colors.grey[300]),
@@ -238,7 +238,7 @@ class UrunDetayEkrani extends StatelessWidget {
                           children: [
                             CircleAvatar(
                               radius: 28,
-                              backgroundImage: (productData['sellerAvatar'] != null && productData['sellerAvatar'].isNotEmpty) ? CachedNetworkImageProvider(productData['sellerAvatar'], cacheManager: ImageCacheManager.instance) : null,
+                              backgroundImage: (productData['sellerAvatar'] != null && productData['sellerAvatar'].isNotEmpty) ? CachedNetworkImageProvider(productData['sellerAvatar'], cacheManager: DefaultCacheManager()) : null,
                               child: (productData['sellerAvatar'] == null || productData['sellerAvatar'].isEmpty) ? const Icon(Icons.person, size: 30) : null,
                             ),
                             const SizedBox(width: 12),

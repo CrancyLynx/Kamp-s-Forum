@@ -337,8 +337,7 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16.0)),
                   child: AspectRatio(
                     aspectRatio: 1, // 1:1 (kare) oran
-                    child: CachedNetworkImage(
-                      cacheManager: ImageCacheManager.instance,
+                    child: CachedNetworkImage(                      
                       imageUrl: data['imageUrl'] ?? '',
                       fit: BoxFit.cover,
                       placeholder: (context, url) => Container(color: Colors.grey[200]),

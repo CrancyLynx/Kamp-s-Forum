@@ -12,8 +12,8 @@ import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 // Servis ve Yardımcılar
 import '../../services/map_data_service.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import '../../utils/app_colors.dart';
-import '../../services/image_cache_manager.dart';
 import '../../utils/maskot_helper.dart';
 
 class KampusHaritasiSayfasi extends StatefulWidget {
@@ -571,7 +571,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                         ? PageView.builder(
                             itemCount: location.photoUrls.length,
                             itemBuilder: (_, i) => CachedNetworkImage(
-                              cacheManager: ImageCacheManager.instance,
+                              cacheManager: DefaultCacheManager(),
                               imageUrl: location.photoUrls[i],
                               fit: BoxFit.cover,
                               placeholder: (c, u) => Container(color: Colors.grey[200], child: const Center(child: CircularProgressIndicator())),

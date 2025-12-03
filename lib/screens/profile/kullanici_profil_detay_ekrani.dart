@@ -297,17 +297,20 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
           child: CircleAvatar(
             radius: 60,
             backgroundColor: Colors.white,
-            backgroundImage: avatarUrl.isNotEmpty
-                ? CachedNetworkImageProvider(
-                    avatarUrl,
-                    cacheManager: ImageCacheManager.instance,
-                    maxWidth: 240,
-                    maxHeight: 240,
+            child: avatarUrl.isNotEmpty
+                ? ClipOval(
+                    child: CachedNetworkImage(
+                      imageUrl: avatarUrl,
+                      memCacheWidth: 240,
+                      memCacheHeight: 240,
+                      fit: BoxFit.cover,
+                      width: 120,
+                      height: 120,
+                    ),
                   )
-                : null,
-            child: avatarUrl.isEmpty 
-                ? Text(name[0].toUpperCase(), style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: AppColors.primary)) 
-                : null,
+                : (name.isNotEmpty
+                    ? Text(name[0].toUpperCase(), style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: AppColors.primary))
+                    : null),
           ),
         ),
         
