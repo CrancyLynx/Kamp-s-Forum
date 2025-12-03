@@ -1,8 +1,9 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
-// Native Splash Paketi Importu
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-import '../../main.dart'; 
+import '../../main.dart';
+import '../../utils/app_colors.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -11,129 +12,311 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
+class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
+  late AnimationController _scaleController;
+  late AnimationController _slideController;
+  late AnimationController _floatingController;
   late Animation<double> _scaleAnimation;
-  late Animation<double> _opacityAnimation;
   late Animation<Offset> _slideAnimation;
+  late Animation<double> _floatingAnimation;
   Timer? _navigationTimer;
 
   @override
   void initState() {
     super.initState();
 
-    // YENİ: Native Splash'i hemen kaldırmak yerine, build işlemi bittikten sonra kaldırıyoruz.
-    // Bu sayede arada siyah/beyaz boşluk oluşmaz.
+    // Native Splash'i kaldır
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FlutterNativeSplash.remove();
     });
 
-    _controller = AnimationController(
+    // Logo scale animasyonu (0.3s)
+    _scaleController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2000),
+      duration: const Duration(milliseconds: 1200),
     );
 
-    _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.elasticOut),
+    _scaleAnimation = Tween<double>(begin: 0.3, end: 1.0).animate(
+      CurvedAnimation(parent: _scaleController, curve: Curves.easeOutBack),
     );
 
-    // Logo ve yazının opaklık animasyonları
-    _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.8, curve: Curves.easeIn)),
+    // Text slide animasyonu (aşağıdan yukarı)
+    _slideController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
     );
 
-    // Yazının aşağıdan yukarı kayması için animasyon tanımı
-    _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.5), end: Offset.zero).animate(
-      CurvedAnimation(parent: _controller, curve: const Interval(0.4, 1.0, curve: Curves.easeOutCubic)),
+    _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.8), end: Offset.zero).animate(
+      CurvedAnimation(parent: _slideController, curve: Curves.easeOutQuad),
     );
 
-    _controller.forward();
+    // Floating blob animasyonu (loop)
+    _floatingController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    )..repeat();
 
-    _navigationTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          PageRouteBuilder(
-            transitionDuration: const Duration(milliseconds: 800),
-            pageBuilder: (_, __, ___) => const AnaKontrolcu(),
-            transitionsBuilder: (_, animation, __, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-          ),
-        );
-      }
+    _floatingAnimation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _floatingController, curve: Curves.linear),
+    );
+
+    // Animasyonları sırayla başlat
+    _startSequentialAnimation();
+  }
+
+  void _startSequentialAnimation() {
+    _scaleController.forward().then((_) {
+      _slideController.forward();
+      // 2.5 saniye sonra sayfayı değiştir
+      _navigationTimer = Timer(const Duration(milliseconds: 2500), () {
+        _navigateToHome();
+      });
     });
+  }
+
+  void _navigateToHome() {
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          transitionDuration: const Duration(milliseconds: 1000),
+          pageBuilder: (_, __, ___) => const AnaKontrolcu(),
+          transitionsBuilder: (_, animation, __, child) {
+            return FadeTransition(
+              opacity: animation,
+              child: child,
+            );
+          },
+        ),
+      );
+    }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _scaleController.dispose();
+    _slideController.dispose();
+    _floatingController.dispose();
     _navigationTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       body: Container(
-        // DEĞİŞTİRİLDİ: Arka plan mora çevrildi.
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF512DA8), Color(0xFF311B92)], // Koyu mordan -> daha koyu mora
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? [const Color(0xFF1A1A2E), const Color(0xFF16213E), const Color(0xFF0F3460)]
+                : [AppColors.primary, AppColors.primaryDark, const Color(0xFF4A148C)],
           ),
         ),
-        child: Center(
-          child: AnimatedBuilder(
-            animation: _controller,
-            builder: (context, child) {
-              return Transform.scale(
-                scale: _scaleAnimation.value,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Logo
-                    FadeTransition(
-                      opacity: _opacityAnimation,
-                      child: Image.asset('assets/images/app_logo3.png', width: 150),
+        child: Stack(
+          children: [
+            // Animated blob background (Instagram style)
+            Positioned(
+              top: -100,
+              right: -50,
+              child: AnimatedBuilder(
+                animation: _floatingAnimation,
+                builder: (context, child) {
+                  return Transform.translate(
+                    offset: Offset(
+                      50 * (0.5 - (_floatingAnimation.value - 0.5).abs()),
+                      30 * sin(_floatingAnimation.value * 2 * pi),
                     ),
-                    const SizedBox(height: 24),
-                    // Animasyonlu Yazı
-                    SlideTransition(
-                      position: _slideAnimation,
-                      child: FadeTransition(
-                        opacity: CurvedAnimation(parent: _controller, curve: const Interval(0.5, 1.0)),
-                        // YENİ: Metalik görünüm için ShaderMask
-                        child: ShaderMask(
-                          blendMode: BlendMode.srcIn,
-                          shaderCallback: (bounds) => const LinearGradient(
-                            colors: [Color(0xFFE0E0E0), Color(0xFFBDBDBD)], // Açık griden -> Koyu griye
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter, 
-                          ).createShader(Rect.fromLTWH(0, 0, bounds.width, bounds.height)),
-                          child: const Text(
-                            "Kampüs Forum",
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.5,
-                              shadows: [
-                                Shadow(
-                                  blurRadius: 10.0,
-                                  color: Colors.black54,
-                                  offset: Offset(0, 5),
-                                ),
-                              ],
-                            ),
+                    child: Container(
+                      width: 300,
+                      height: 300,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: (isDark
+                                ? Colors.white
+                                : AppColors.primaryAccent)
+                            .withOpacity(0.1),
+                        boxShadow: [
+                          BoxShadow(
+                            color: (isDark
+                                    ? Colors.white
+                                    : AppColors.primaryAccent)
+                                .withOpacity(0.2),
+                            blurRadius: 80,
+                            spreadRadius: 20,
                           ),
-                        ),
+                        ],
                       ),
                     ),
-                  ],
+                  );
+                },
+              ),
+            ),
+
+            // Second blob
+            Positioned(
+              bottom: -150,
+              left: -80,
+              child: AnimatedBuilder(
+                animation: _floatingAnimation,
+                builder: (context, child) {
+                  return Transform.translate(
+                    offset: Offset(
+                      -50 * (0.5 - (_floatingAnimation.value - 0.5).abs()),
+                      -30 * cos(_floatingAnimation.value * 2 * pi),
+                    ),
+                    child: Container(
+                      width: 250,
+                      height: 250,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: (isDark ? Colors.blue : Colors.purple)
+                            .withOpacity(0.08),
+                        boxShadow: [
+                          BoxShadow(
+                            color: (isDark ? Colors.blue : Colors.purple)
+                                .withOpacity(0.15),
+                            blurRadius: 60,
+                            spreadRadius: 15,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            // Main content
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Logo with scale animation
+                  ScaleTransition(
+                    scale: _scaleAnimation,
+                    child: Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withOpacity(0.1),
+                        border: Border.all(
+                          color: (isDark
+                                  ? Colors.white
+                                  : AppColors.primaryAccent)
+                              .withOpacity(0.3),
+                          width: 2,
+                        ),
+                      ),
+                      child: Image.asset(
+                        'assets/images/app_logo3.png',
+                        width: 120,
+                        height: 120,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 40),
+
+                  // App name with slide animation
+                  SlideTransition(
+                    position: _slideAnimation,
+                    child: FadeTransition(
+                      opacity: _slideAnimation.drive(
+                        Tween<double>(begin: 0, end: 1),
+                      ),
+                      child: Column(
+                        children: [
+                          ShaderMask(
+                            blendMode: BlendMode.srcIn,
+                            shaderCallback: (bounds) => LinearGradient(
+                              colors: isDark
+                                  ? [Colors.white, Colors.white70]
+                                  : [Colors.white, Colors.white54],
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                            ).createShader(
+                              Rect.fromLTWH(0, 0, bounds.width, bounds.height),
+                            ),
+                            child: const Text(
+                              "Kampüs Forum",
+                              style: TextStyle(
+                                fontSize: 42,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.2,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          ShaderMask(
+                            blendMode: BlendMode.srcIn,
+                            shaderCallback: (bounds) => LinearGradient(
+                              colors: isDark
+                                  ? [Colors.white38, Colors.white24]
+                                  : [Colors.white60, Colors.white38],
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                            ).createShader(
+                              Rect.fromLTWH(0, 0, bounds.width, bounds.height),
+                            ),
+                            child: const Text(
+                              "Öğrenci Topluluğu",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0.5,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Loading indicator
+            Positioned(
+              bottom: 80,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      isDark ? Colors.white : Colors.white,
+                    ),
+                    strokeWidth: 2,
+                  ),
                 ),
-              );
-            },
-          ),
+              ),
+            ),
+
+            // Bottom text
+            Positioned(
+              bottom: 30,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Text(
+                  "Yükleniyor...",
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.7),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
