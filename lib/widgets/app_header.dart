@@ -169,36 +169,30 @@ class PanelHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = Theme.of(context).scaffoldBackgroundColor;
     
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            accentColor.withOpacity(0.1),
-            accentColor.withOpacity(0.05),
-          ],
-        ),
+        color: bgColor,
       ),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // Gradient fade çizgisi yerine
+          // Bottom fade gradient (yumuşak geçiş)
           Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: 25,
+            bottom: -20,
+            left: -16,
+            right: -16,
+            height: 40,
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    accentColor.withOpacity(0.05),
-                    accentColor.withOpacity(0),
+                    bgColor.withOpacity(1.0),
+                    bgColor.withOpacity(0),
                   ],
                 ),
               ),

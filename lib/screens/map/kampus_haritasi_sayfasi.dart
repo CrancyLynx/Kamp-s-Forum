@@ -1190,39 +1190,63 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                child: Stack(
+                  clipBehavior: Clip.none,
                   children: [
-                    Text(
-                      '${_searchRadiusKm.toStringAsFixed(1)} km',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    // Bottom fade gradient (keskin çizgi yerine yumuşak geçiş)
+                    Positioned(
+                      bottom: -12,
+                      left: -12,
+                      right: -12,
+                      height: 20,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Theme.of(context).cardColor.withOpacity(1.0),
+                              Theme.of(context).cardColor.withOpacity(0),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    Row(
+                    Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        FloatingActionButton.small(
-                          heroTag: 'radiusDown',
-                          backgroundColor: Colors.red.withOpacity(0.8),
-                          child: const Icon(Icons.remove, color: Colors.white, size: 18),
-                          onPressed: () {
-                            if (_searchRadiusKm > 1.0) {
-                              setState(() => _searchRadiusKm -= 1.0);
-                              _updateMarkers();
-                            }
-                          },
+                        Text(
+                          '${_searchRadiusKm.toStringAsFixed(1)} km',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                         ),
-                        const SizedBox(width: 8),
-                        FloatingActionButton.small(
-                          heroTag: 'radiusUp',
-                          backgroundColor: Colors.green.withOpacity(0.8),
-                          child: const Icon(Icons.add, color: Colors.white, size: 18),
-                          onPressed: () {
-                            if (_searchRadiusKm < 25.0) {
-                              setState(() => _searchRadiusKm += 1.0);
-                              _updateMarkers();
-                            }
-                          },
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            FloatingActionButton.small(
+                              heroTag: 'radiusDown',
+                              backgroundColor: Colors.red.withOpacity(0.8),
+                              child: const Icon(Icons.remove, color: Colors.white, size: 18),
+                              onPressed: () {
+                                if (_searchRadiusKm > 1.0) {
+                                  setState(() => _searchRadiusKm -= 1.0);
+                                  _updateMarkers();
+                                }
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            FloatingActionButton.small(
+                              heroTag: 'radiusUp',
+                              backgroundColor: Colors.green.withOpacity(0.8),
+                              child: const Icon(Icons.add, color: Colors.white, size: 18),
+                              onPressed: () {
+                                if (_searchRadiusKm < 25.0) {
+                                  setState(() => _searchRadiusKm += 1.0);
+                                  _updateMarkers();
+                                }
+                              },
+                            ),
+                          ],
                         ),
                       ],
                     ),
