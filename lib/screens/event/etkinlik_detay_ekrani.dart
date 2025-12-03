@@ -134,6 +134,12 @@ class _EtkinlikDetayEkraniState extends State<EtkinlikDetayEkrani> {
         final String? description = data['description'];
         final String? imageUrl = data['imageUrl'];
         final String? registrationLink = data['registrationLink'];
+        
+        // NULL SAFETY: date kontrolü
+        if (data['date'] == null) {
+          return Scaffold(appBar: SimpleAppHeader(title: 'Hata'), body: const Center(child: Text("Etkinlik tarihi eksik.")));
+        }
+        
         final DateTime eventDate = (data['date'] as Timestamp).toDate();
         
         // Gerçek zamanlı güncellemeler için state'i güncel tut
