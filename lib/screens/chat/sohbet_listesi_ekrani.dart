@@ -8,7 +8,6 @@ import '../../providers/blocked_users_provider.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../utils/maskot_helper.dart';
 import '../../utils/app_colors.dart';
-import '../../widgets/app_header.dart';
 import '../../widgets/animated_list_item.dart';
 import 'sohbet_detay_ekrani.dart';
 
@@ -78,13 +77,33 @@ class _SohbetListesiEkraniState extends State<SohbetListesiEkrani> {
 
   @override
   Widget build(BuildContext context) {
-
-
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppHeader(
-        title: "Mesajlar",
-        showLogo: false,
+      appBar: AppBar(
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.message_rounded,
+                color: Colors.blue,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Mesajlar',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
         centerTitle: false,
         elevation: 0,
       ),
