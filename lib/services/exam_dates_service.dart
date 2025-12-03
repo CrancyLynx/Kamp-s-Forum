@@ -59,12 +59,14 @@ class ExamDatesService {
     }
   }
 
-  /// Tüm sınavları döndürür (geçmiş + gelecek) - gelecek sınavlar en üste
+  /// Tüm sınavları döndürür (sadece 1 yıl önceki geçmiş sınavlar + gelecek sınavlar)
+  /// Gelecek sınavlar en üste, geçmiş sınavlar altında
   List<Map<String, dynamic>> _filterUpcomingExams(
       List<Map<String, dynamic>> exams) {
     final now = DateTime.now();
+    final oneYearAgo = now.subtract(Duration(days: 365)); // 1 yıl öncesi
 
-    // Sınavları 2 gruba böl: geçmiş ve gelecek
+    // Sınavları 2 gruba böl: geçmiş (1 yıl içinde) ve gelecek
     final future = <Map<String, dynamic>>[];
     final past = <Map<String, dynamic>>[];
 
@@ -75,18 +77,23 @@ class ExamDatesService {
       // Saat bilgisini standardize et (00:00)
       final examDateNormalized = DateTime(examDate.year, examDate.month, examDate.day);
       final nowNormalized = DateTime(now.year, now.month, now.day);
+      final oneYearAgoNormalized = DateTime(oneYearAgo.year, oneYearAgo.month, oneYearAgo.day);
 
       if (examDateNormalized.isAfter(nowNormalized)) {
         // Gelecek sınav - gün sayısını ekle
         final daysUntil = examDateNormalized.difference(nowNormalized).inDays;
         exam['daysUntil'] = daysUntil;
         future.add(exam);
-      } else {
-        // Geçmiş sınav - gün sayısını ekle (negatif)
+      } else if (examDateNormalized.isAfter(oneYearAgoNormalized) || 
+                 (examDateNormalized.year == oneYearAgoNormalized.year &&
+                  examDateNormalized.month == oneYearAgoNormalized.month &&
+                  examDateNormalized.day == oneYearAgoNormalized.day)) {
+        // Geçmiş sınav ama 1 yıl içinde - gün sayısını ekle
         final daysPassed = nowNormalized.difference(examDateNormalized).inDays;
         exam['daysPassed'] = daysPassed;
         past.add(exam);
       }
+      // 1 yıldan eski sınavları hariç tut
     }
 
     // Gelecek sınavları tarihe göre sırala (en yakın en üste)
@@ -98,12 +105,12 @@ class ExamDatesService {
     // Gelecek sınavlar + Geçmiş sınavlar
     final result = [...future, ...past];
 
-    print('✅ Toplam sınavlar: ${result.length} adet (Gelecek: ${future.length}, Geçmiş: ${past.length})');
+    print('✅ Toplam sınavlar: ${result.length} adet (Gelecek: ${future.length}, Geçmiş 1 yıl: ${past.length})');
 
     return result;
   }
 
-  /// Test amaçlı örnek sınav tarihleri (gerçek tarihler + geçmiş sınavlar)
+  /// Test amaçlı örnek sınav tarihleri (gerçek tarihler + 1 yıl önceki geçmiş sınavlar)
   List<Map<String, dynamic>> _getTestExamDates() {
     return [
       // ✅ Gelecek Sınavlar (2025-2026)
@@ -197,8 +204,48 @@ class ExamDatesService {
         'source': 'OSYM',
         'importance': 'high',
       },
+      {
+        'id': 'yks_2026',
+        'name': 'YKS 2026',
+        'date': DateTime(2026, 6, 14),
+        'description': 'Yükseköğretim Kurumları Sınavı 2026',
+        'color': 'blue',
+        'type': 'exam',
+        'source': 'OSYM',
+        'importance': 'high',
+      },
+      {
+        'id': 'tus_2026',
+        'name': 'TUS 2026',
+        'date': DateTime(2026, 4, 26),
+        'description': 'Tıp Uzmanlaşma Sınavı 2026',
+        'color': 'green',
+        'type': 'exam',
+        'source': 'OSYM',
+        'importance': 'high',
+      },
+      {
+        'id': 'dus_2026',
+        'name': 'DÜŞ 2026',
+        'date': DateTime(2026, 9, 21),
+        'description': 'Diş Hekimliği Uzmanlaşma Sınavı 2026',
+        'color': 'red',
+        'type': 'exam',
+        'source': 'OSYM',
+        'importance': 'medium',
+      },
       
-      // ✅ Geçmiş Sınavlar (Demo için)
+      // ✅ Geçmiş Sınavlar (1 yıl öncesi - 2024)
+      {
+        'id': 'tus_2024',
+        'name': 'TUS 2024',
+        'date': DateTime(2024, 4, 28),
+        'description': 'Tıp Uzmanlaşma Sınavı',
+        'color': 'green',
+        'type': 'exam',
+        'source': 'OSYM',
+        'importance': 'high',
+      },
       {
         'id': 'kpss_2024',
         'name': 'KPSS 2024',
@@ -218,6 +265,36 @@ class ExamDatesService {
         'type': 'exam',
         'source': 'OSYM',
         'importance': 'high',
+      },
+      {
+        'id': 'oabt_2024',
+        'name': 'ÖABT 2024',
+        'date': DateTime(2024, 7, 21),
+        'description': 'Öğretmen Atama Sınavı Başarı Testi',
+        'color': 'teal',
+        'type': 'exam',
+        'source': 'OSYM',
+        'importance': 'high',
+      },
+      {
+        'id': 'ales_2024_fall',
+        'name': 'ALES 2024 (Güz)',
+        'date': DateTime(2024, 9, 15),
+        'description': 'Akademik Personel ve Lisansüstü Eğitim Giriş Sınavı',
+        'color': 'purple',
+        'type': 'exam',
+        'source': 'OSYM',
+        'importance': 'medium',
+      },
+      {
+        'id': 'dus_2024',
+        'name': 'DÜŞ 2024',
+        'date': DateTime(2024, 9, 23),
+        'description': 'Diş Hekimliği Uzmanlaşma Sınavı',
+        'color': 'red',
+        'type': 'exam',
+        'source': 'OSYM',
+        'importance': 'medium',
       },
     ];
   }

@@ -1531,7 +1531,7 @@ void _showCalendarPanel(BuildContext context) {
                                       borderRadius: BorderRadius.circular(20),
                                     ),
                                     child: const Text(
-                                      'Sınav Yapılıyor',
+                                      'Sınav Bitti',
                                       style: TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
