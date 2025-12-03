@@ -156,29 +156,53 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
             ),
 
             // 2. KATEGORİLER VE SIRALAMA - Kompakt tasarım
-            SizedBox(
-              height: 50,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: _categories.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
-                itemBuilder: (context, index) {
-                  final category = _categories[index];
-                  final isSelected = _selectedCategory == category;
-                  return ChoiceChip(
-                    avatar: category == 'Favorilerim' ? Icon(Icons.favorite, color: isSelected ? Colors.white : Colors.redAccent, size: 16) : null,
-                    label: Text(category),
-                    selected: isSelected,
-                    onSelected: (selected) => setState(() => _selectedCategory = category),
-                    selectedColor: category == 'Favorilerim' ? Colors.redAccent : AppColors.primary,
-                    backgroundColor: Theme.of(context).cardColor,
-                    labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : Theme.of(context).textTheme.bodyLarge?.color,
-                      fontWeight: FontWeight.bold,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Sıralama Butonları
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildSortChip('En Yeni', 'newest', Icons.new_releases),
+                        const SizedBox(width: 8),
+                        _buildSortChip('Fiyat (Artan)', 'price_asc', Icons.arrow_upward),
+                        const SizedBox(width: 8),
+                        _buildSortChip('Fiyat (Azalan)', 'price_desc', Icons.arrow_downward),
+                      ],
                     ),
-                  );
-                },
+                  ),
+                  const SizedBox(height: 8),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  // Kategori Filtreleri
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _categories.map((category) {
+                        final isSelected = _selectedCategory == category;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: ChoiceChip(
+                            avatar: category == 'Favorilerim' ? Icon(Icons.favorite, color: isSelected ? Colors.white : Colors.redAccent, size: 16) : null,
+                            label: Text(category),
+                            selected: isSelected,
+                            onSelected: (selected) => setState(() => _selectedCategory = category),
+                            selectedColor: category == 'Favorilerim' ? Colors.redAccent : AppColors.primary,
+                            backgroundColor: Theme.of(context).cardColor,
+                            labelStyle: TextStyle(
+                              color: isSelected ? Colors.white : Theme.of(context).textTheme.bodyLarge?.color,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            side: BorderSide(color: Colors.grey.withOpacity(0.2)),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
               ),
             ),
 
@@ -253,6 +277,33 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
               label: const Text("İlan Ver", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             )
           : null,
+    );
+  }
+
+  Widget _buildSortChip(String label, String sortKey, IconData icon) {
+    final isSelected = _sortOrder == sortKey;
+    return ChoiceChip(
+      label: Row(
+        children: [
+          Icon(icon, size: 16, color: isSelected ? AppColors.primary : Colors.grey[600]),
+          const SizedBox(width: 6),
+          Text(label),
+        ],
+      ),
+      selected: isSelected,
+      onSelected: (selected) {
+        if (selected) {
+          setState(() => _sortOrder = sortKey);
+        }
+      },
+      selectedColor: AppColors.primary.withOpacity(0.1),
+      backgroundColor: Theme.of(context).cardColor,
+      labelStyle: TextStyle(
+        color: isSelected ? AppColors.primary : Theme.of(context).textTheme.bodyLarge?.color,
+        fontWeight: FontWeight.bold,
+        fontSize: 12,
+      ),
+      side: BorderSide(color: isSelected ? AppColors.primary.withOpacity(0.5) : Colors.grey.withOpacity(0.2)),
     );
   }
 
