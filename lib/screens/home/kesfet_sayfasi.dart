@@ -383,6 +383,8 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                       ),
                     ],
                   ),
+                ],
+              ),
             ),
 
             // Ana içerik

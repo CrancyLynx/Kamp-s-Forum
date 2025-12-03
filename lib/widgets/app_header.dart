@@ -181,65 +181,80 @@ class PanelHeader extends StatelessWidget {
             accentColor.withOpacity(0.05),
           ],
         ),
-        border: Border(
-          bottom: BorderSide(
-            color: isDarkMode 
-              ? Colors.white.withOpacity(0.05)
-              : Colors.black.withOpacity(0.05),
-            width: 1,
-          ),
-        ),
       ),
-      child: Row(
+      child: Stack(
         children: [
-          // İkon container
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: accentColor.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              icon,
-              color: accentColor,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          // Başlık ve alt başlık
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: isDarkMode ? Colors.white : Colors.black87,
-                  ),
+          // Gradient fade çizgisi yerine
+          Positioned(
+            bottom: -1,
+            left: 0,
+            right: 0,
+            height: 20,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    accentColor.withOpacity(0.05),
+                    accentColor.withOpacity(0),
+                  ],
                 ),
-                if (subtitle.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDarkMode 
-                        ? Colors.grey[400]
-                        : Colors.grey[600],
-                    ),
-                  ),
-                ]
-              ],
+              ),
             ),
           ),
-          // Trailing widget
-          if (trailing != null) ...[
-            const SizedBox(width: 12),
-            trailing!,
-          ],
+          Row(
+            children: [
+              // İkon container
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: accentColor.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  color: accentColor,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Başlık ve alt başlık
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: isDarkMode ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    if (subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDarkMode 
+                            ? Colors.grey[400]
+                            : Colors.grey[600],
+                        ),
+                      ),
+                    ]
+                  ],
+                ),
+              ),
+              // Trailing widget
+              if (trailing != null) ...[
+                const SizedBox(width: 12),
+                trailing!,
+              ],
+            ],
+          ),
         ],
       ),
     );
