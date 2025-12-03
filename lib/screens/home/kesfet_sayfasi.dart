@@ -189,36 +189,29 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
       body: SafeArea(
         child: Column(
           children: [
-            // ✅ PanelHeader + Arama Barı Birleşik (Gradient Fade)
+            // ✅ PanelHeader + Arama Barı Birleşik (Sadece Bottom Fade)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    AppColors.primary.withOpacity(0.1),
-                    AppColors.primary.withOpacity(0.05),
-                  ],
-                ),
+                color: Theme.of(context).scaffoldBackgroundColor,
               ),
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  // Gradient fade çizgisi yerine
+                  // Bottom fade gradient (keskin çizgi yerine yumuşak geçiş)
                   Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    height: 25,
+                    bottom: -20,
+                    left: -16,
+                    right: -16,
+                    height: 40,
                     child: Container(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            AppColors.primary.withOpacity(0.05),
-                            AppColors.primary.withOpacity(0),
+                            Theme.of(context).scaffoldBackgroundColor.withOpacity(1.0),
+                            Theme.of(context).scaffoldBackgroundColor.withOpacity(0),
                           ],
                         ),
                       ),
