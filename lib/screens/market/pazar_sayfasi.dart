@@ -109,25 +109,35 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppHeader(
-        title: 'Kampüs Pazarı',
-        showLogo: true,
-        centerTitle: false,
-        elevation: 2,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.chat_bubble_outline_rounded),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SohbetListesiEkrani())),
-          ),
-          IconButton(
-            icon: const Icon(Icons.notifications_none_rounded),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BildirimEkrani())),
-          ),
-        ],
-      ),
       body: SafeArea(
         child: Column(
           children: [
+            // ✅ YENİ: Modern senkronize header
+            PanelHeader(
+              title: 'Kampüs Pazarı',
+              subtitle: 'Ürün al ve sat',
+              icon: Icons.shopping_bag_rounded,
+              accentColor: AppColors.primary,
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    tooltip: 'Mesajlar',
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const SohbetListesiEkrani()));
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.notifications_none),
+                    tooltip: 'Bildirimler',
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const BildirimEkrani()));
+                    },
+                  ),
+                ],
+              ),
+            ),
             
             // ✅ ARAMA BAR
             Padding(

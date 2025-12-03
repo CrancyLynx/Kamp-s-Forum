@@ -240,48 +240,80 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      appBar: AppHeader(
-        title: 'Kampüs Forum',
-        showLogo: true,
-        centerTitle: false,
-        elevation: 2,
-        actions: [
-          if (!widget.isGuest) ...[
-            IconButton(
-              icon: const Icon(Icons.chat_bubble_outline_rounded),
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SohbetListesiEkrani())),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // ✅ Modern senkronize header
+            PanelHeader(
+              title: 'Kampüs Forum',
+              subtitle: 'Soru, fikir ve tartışmaları paylaş',
+              icon: Icons.forum_rounded,
+              accentColor: AppColors.primary,
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!widget.isGuest) ...[
+                    IconButton(
+                      icon: const Icon(Icons.chat_bubble_outline),
+                      tooltip: 'Mesajlar',
+                      onPressed: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const SohbetListesiEkrani()));
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.notifications_none),
+                      tooltip: 'Bildirimler',
+                      onPressed: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const BildirimEkrani()));
+                      },
+                    ),
+                  ]
+                ],
+              ),
             ),
-            IconButton(
-              icon: const Icon(Icons.notifications_none_rounded),
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BildirimEkrani())),
+
+            // Kategori filtreleri
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 8),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  // Kategori Filtreleri
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: kFilterCategories.map((category) {
+                        final isSelected = _selectedFilter == category;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: ChoiceChip(
+                            label: Text(category),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              if (selected) {
+                                setState(() => _selectedFilter = category);
+                                _resetAndFetch();
+                              }
+                            },
+                            selectedColor: AppColors.primary,
+                            backgroundColor: isDark ? Colors.grey[800] : Colors.grey[100],
+                            labelStyle: TextStyle(
+                              color: isSelected ? Colors.white : Colors.grey,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            side: BorderSide(color: Colors.grey.withOpacity(0.2)),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ]
-        ],
-      ),
-      body: Column(
-        children: [
-          SizedBox(
-            height: 50,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: kFilterCategories.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final category = kFilterCategories[index];
-                final isSelected = _selectedFilter == category;
-                return ChoiceChip(
-                  label: Text(category),
-                  selected: isSelected,
-                  onSelected: (bool selected) { if (selected) { setState(() => _selectedFilter = category); _resetAndFetch(); } },
-                  selectedColor: AppColors.primary,
-                  backgroundColor: isDark ? Colors.grey[800] : Colors.grey[100],
-                  labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.grey),
-                );
-              },
-            ),
-          ),
-          
           Expanded(
             child: StreamBuilder<DocumentSnapshot>(
               stream: widget.isGuest ? null : FirebaseFirestore.instance.collection('kullanicilar').doc(FirebaseAuth.instance.currentUser!.uid).snapshots(),
@@ -346,13 +378,14 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
               },
             ),
           ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: !widget.isGuest ? FloatingActionButton(
-        heroTag: 'forum_create', // Hero tag eklendi
-        onPressed: () => _showCreateOptions(context), 
-        backgroundColor: AppColors.primary, 
-        child: const Icon(Icons.add, color: Colors.white)
+        heroTag: 'forum_create',
+        onPressed: () => _showCreateOptions(context),
+        backgroundColor: AppColors.primary,
+        child: const Icon(Icons.add, color: Colors.white),
       ) : null,
     );
   }
