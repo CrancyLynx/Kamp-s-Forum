@@ -224,9 +224,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                   SlideTransition(
                     position: _slideAnimation,
                     child: FadeTransition(
-                      opacity: _slideAnimation.drive(
-                        Tween<double>(begin: 0, end: 1),
-                      ),
+                      opacity: _slideController,
                       child: Column(
                         children: [
                           ShaderMask(

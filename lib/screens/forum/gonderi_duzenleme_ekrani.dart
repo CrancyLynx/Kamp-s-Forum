@@ -81,18 +81,26 @@ class _GonderiDuzenlemeEkraniState extends State<GonderiDuzenlemeEkrani> {
                 key: _formKey,
                 child: Column(
                   children: [
-                    TextFormField(
-                      controller: _titleController,
-                      decoration: const InputDecoration(labelText: "Başlık", border: OutlineInputBorder()),
-                      validator: (value) => (value == null || value.trim().isEmpty) ? 'Başlık boş bırakılamaz.' : null,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _messageController,
-                      decoration: const InputDecoration(labelText: "Mesaj", border: OutlineInputBorder()),
-                      maxLines: 8,
-                      validator: (value) => (value == null || value.trim().isEmpty) ? 'Mesaj boş bırakılamaz.' : null,
-                    ),
+                      TextFormField(
+                        controller: _titleController,
+                        decoration: const InputDecoration(labelText: "Başlık", border: OutlineInputBorder()),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) return 'Başlık boş bırakılamaz.';
+                          if (value.trim().length < 3) return 'Başlık en az 3 karakter olmalıdır.';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _messageController,
+                        decoration: const InputDecoration(labelText: "Mesaj", border: OutlineInputBorder()),
+                        maxLines: 8,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) return 'Mesaj boş bırakılamaz.';
+                          if (value.trim().length < 5) return 'Mesaj en az 5 karakter olmalıdır.';
+                          return null;
+                        },
+                      ),
                   ],
                 ),
               ),

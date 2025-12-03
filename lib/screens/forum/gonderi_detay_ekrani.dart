@@ -293,14 +293,17 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
         'commentCount': FieldValue.increment(1),
       });
 
-      // --- MENTION NOTIFICATION LOGIC ---
+      // --- MENTION NOTIFICATION LOGIC (✅ SPAM KORUMASLI) ---
       final mentionRegex = RegExp(r'@(\w+)');
       final matches = mentionRegex.allMatches(content);
       Set<String> mentionedUserIds = {};
+      Set<String> processedMentions = {}; // ✅ Aynı kullanıcıya birden fazla bildirim gitmemesi için
 
       for (final match in matches) {
         final takmaAd = match.group(1);
-        if (takmaAd != null) {
+        if (takmaAd != null && !processedMentions.contains(takmaAd)) { // ✅ Zaten işlendiyse atla
+          processedMentions.add(takmaAd);
+          
           final userQuery = await FirebaseFirestore.instance
               .collection('kullanicilar')
               .where('takmaAd', isEqualTo: takmaAd)

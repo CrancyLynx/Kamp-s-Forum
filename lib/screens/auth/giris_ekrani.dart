@@ -483,9 +483,12 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
         showSnackBar("Lütfen şifre giriniz.", isError: true);
         return;
       }
-      if (password.length < 6) {
+      
+      // 🔒 ŞİFRE KARMAŞIKLIĞI KONTROLÜ (YENİ)
+      final passwordError = _authService.validatePasswordStrength(password);
+      if (passwordError != null) {
         if (mounted) setState(() => _isLoading = false);
-        showSnackBar("Şifre en az 6 karakter olmalıdır.", isError: true);
+        showSnackBar(passwordError, isError: true);
         return;
       }
       if (password != confirmPassword) {
@@ -494,10 +497,20 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
         return;
       }
       
-      // Telefon
-      if (phone.isEmpty || phone.length < 10) {
+      // Telefon (İyileştirilmiş Validasyon)
+      if (phone.isEmpty) {
         if (mounted) setState(() => _isLoading = false);
-        showSnackBar("Lütfen geçerli bir telefon numarası giriniz.", isError: true);
+        showSnackBar("Lütfen telefon numarası giriniz.", isError: true);
+        return;
+      }
+      if (!phone.startsWith('+90')) {
+        if (mounted) setState(() => _isLoading = false);
+        showSnackBar("Telefon numarası +90 ile başlamalıdır.", isError: true);
+        return;
+      }
+      if (phone.length != 13) {
+        if (mounted) setState(() => _isLoading = false);
+        showSnackBar("Telefon numarası +90 ile birlikte 13 karakter olmalıdır (örn: +905551234567).", isError: true);
         return;
       }
       

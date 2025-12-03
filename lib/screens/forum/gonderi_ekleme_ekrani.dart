@@ -8,6 +8,7 @@ import 'forum_sayfasi.dart';
 import '../../utils/app_colors.dart';
 // YENİ: Servis importu
 import '../../services/image_compression_service.dart';
+import '../../services/gamification_service.dart'; // ✅ XP SİSTEMİ
 
 class GonderiEklemeEkrani extends StatefulWidget {
   final String userName;
@@ -34,34 +35,81 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
     if (_isPickingImage) return;
     
     if (_selectedImages.length >= 2) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("En fazla 2 resim ekleyebilirsiniz.")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("En fazla 2 resim ekleyebilirsiniz."),
+          backgroundColor: Colors.orange,
+        ),
+      );
       return;
     }
 
     setState(() => _isPickingImage = true);
 
     try {
-      final List<XFile> pickedFiles = await _picker.pickMultiImage(imageQuality: 80); // Quality burada da 80 kalsın
+      final List<XFile> pickedFiles = await _picker.pickMultiImage(imageQuality: 85);
 
       if (pickedFiles.isNotEmpty) {
         for (var xfile in pickedFiles) {
-          if (_selectedImages.length < 2) {
+          if (_selectedImages.length >= 2) break;
+
+          try {
             File originalFile = File(xfile.path);
-            // YENİ: Sıkıştırma işlemi
+            
+            // Dosya boyutu kontrolü (10MB max)
+            final int fileSizeInBytes = originalFile.lengthSync();
+            const int maxFileSizeInBytes = 10 * 1024 * 1024;
+            
+            if (fileSizeInBytes > maxFileSizeInBytes) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Resim boyutu 10MB'dan küçük olmalıdır."),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+              continue;
+            }
+
+            // Resim sıkıştırma
             File? compressedFile = await ImageCompressionService.compressImage(originalFile);
             
             setState(() {
               _selectedImages.add(compressedFile ?? originalFile);
             });
+          } catch (e) {
+            debugPrint("Resim işleme hatası: $e");
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text("Resim işlenemedi: $e"),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
           }
         }
         
-        if (pickedFiles.length > 2) {
-           if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Sadece ilk 2 resim seçildi.")));
+        if (pickedFiles.length > 2 && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Sadece ilk 2 resim seçildi."),
+              backgroundColor: Colors.orange,
+            ),
+          );
         }
       }
     } catch (e) {
       debugPrint("Resim seçme hatası: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Resim seçilmedi: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isPickingImage = false);
     }
@@ -76,16 +124,28 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
   Future<List<String>> _uploadImages(String userId) async {
     List<String> downloadUrls = [];
     
-    for (var imageFile in _selectedImages) {
+    for (int i = 0; i < _selectedImages.length; i++) {
       try {
+        final imageFile = _selectedImages[i];
         final timestamp = DateTime.now().millisecondsSinceEpoch;
-        final fileName = "$userId-$timestamp-${downloadUrls.length}.jpg";
+        final fileName = "$userId-$timestamp-$i.jpg";
         final ref = FirebaseStorage.instance.ref().child('gonderi_resimleri/$fileName');
         
-        final uploadTask = ref.putFile(imageFile, SettableMetadata(contentType: 'image/jpeg'));
+        final uploadTask = ref.putFile(
+          imageFile,
+          SettableMetadata(
+            contentType: 'image/jpeg',
+            customMetadata: {'uploadedAt': timestamp.toString()},
+          ),
+        );
+        
         final snapshot = await uploadTask;
         final url = await snapshot.ref.getDownloadURL();
         downloadUrls.add(url);
+        
+        debugPrint('Resim yüklendi: $url');
+      } on FirebaseException catch (e) {
+        debugPrint("Firebase resim yükleme hatası: ${e.code} - ${e.message}");
       } catch (e) {
         debugPrint("Resim yükleme hatası: $e");
       }
@@ -94,29 +154,103 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
   }
 
   Future<void> _gonderiEkle() async {
-    if (!_formKey.currentState!.validate()) return;
+    // Form validasyonu
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Lütfen tüm alanları doldurun."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Başlık validasyonu
+    final baslik = _baslikController.text.trim();
+    if (baslik.length < 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Başlık en az 3 karakter olmalıdır."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Mesaj validasyonu
+    final mesaj = _mesajController.text.trim();
+    if (mesaj.length < 5) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Mesaj en az 5 karakter olmalıdır."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     FocusScope.of(context).unfocus();
     setState(() => _isLoading = true);
 
     try {
-      final userId = FirebaseAuth.instance.currentUser!.uid;
+      final userId = FirebaseAuth.instance.currentUser?.uid;
       
+      if (userId == null) {
+        throw Exception('Kullanıcı oturumu sona erdi.');
+      }
+
+      // Kullanıcı bilgilerini al
       final userDoc = await FirebaseFirestore.instance.collection('kullanicilar').doc(userId).get();
+      if (!userDoc.exists) {
+        throw Exception('Kullanıcı profili bulunamadı.');
+      }
+
       final userData = userDoc.data() ?? {};
       
       final String displayName = _isAnonymous ? 'Anonim' : widget.userName;
       final String? currentAvatarUrl = _isAnonymous ? null : userData['avatarUrl'];
       final List<dynamic> authorBadges = _isAnonymous ? [] : (userData['earnedBadges'] ?? []);
 
+      // Resim yükle
       List<String> imageUrls = [];
       if (_selectedImages.isNotEmpty) {
         imageUrls = await _uploadImages(userId);
+        
+        // ✅ DÜZELTME: Resim yükleme başarısızlığını kontrol et
+        if (imageUrls.length < _selectedImages.length) {
+          final failedCount = _selectedImages.length - imageUrls.length;
+          
+          // Kullanıcıya sor
+          final shouldContinue = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text("Resim Yükleme Hatası"),
+              content: Text("$failedCount resim yüklenemedi. Gönderi resimsiz veya eksik resimle paylaşılsın mı?"),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text("İptal"),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text("Devam Et"),
+                ),
+              ],
+            ),
+          );
+          
+          if (shouldContinue != true) {
+            if (mounted) setState(() => _isLoading = false);
+            return;
+          }
+        }
       }
 
+      // Gönderiyi oluştur
       await FirebaseFirestore.instance.collection('gonderiler').add({
         'type': 'gonderi',
-        'baslik': _baslikController.text.trim(),
-        'mesaj': _mesajController.text.trim(),
+        'baslik': baslik,
+        'mesaj': mesaj,
         'ad': displayName,
         'realUsername': widget.userName,
         'userId': userId,
@@ -129,18 +263,58 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
         'likes': [],
         'imageUrls': imageUrls,
         'isAnonymous': _isAnonymous,
+        'isPinned': false,
       });
 
-      final userRef = FirebaseFirestore.instance.collection('kullanicilar').doc(userId);
-      await userRef.update({'postCount': FieldValue.increment(1)});
+      // Kullanıcının gönderi sayısını güncelle
+      await FirebaseFirestore.instance.collection('kullanicilar').doc(userId).update({
+        'postCount': FieldValue.increment(1),
+      });
+
+      // ✅ XP EKLE: Gönderi paylaşma ödülü (10 XP)
+      try {
+        await GamificationService().addXP(
+          userId,
+          'post_created',
+          10,
+          'post-${DateTime.now().millisecondsSinceEpoch}',
+        );
+      } catch (e) {
+        debugPrint('XP ekleme hatası (gönderi): $e');
+        // XP hatası gönderi eklemeyi engellemez
+      }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Yayınlandı!"), backgroundColor: AppColors.success));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Gönderi yayınlandı!"),
+            backgroundColor: AppColors.success,
+          ),
+        );
+        
         await Future.delayed(const Duration(milliseconds: 300));
         if (mounted) Navigator.of(context).pop();
       }
+    } on FirebaseException catch (e) {
+      debugPrint("Firebase hatası: ${e.code} - ${e.message}");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Hata: ${e.message}"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Hata oluştu."), backgroundColor: AppColors.error));
+      debugPrint("Gönderi ekleme hatası: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Hata oluştu: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

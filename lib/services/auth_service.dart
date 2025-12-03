@@ -53,7 +53,7 @@ class AuthService {
     }
   }
 
-  // --- KAYIT OLMA (DÜZELTİLMİŞ & GÜVENLİ VERSİYON) ---
+  // --- KAYIT OLMA (GÜVENLİ VERSİYON - ROLLBACK DESTEKLİ) ---
   Future<String?> register({
     required String email,
     required String password,
@@ -64,6 +64,7 @@ class AuthService {
     required String department,
   }) async {
     User? createdUser;
+    
     try {
       // 1. E-posta uzantısı kontrolü
       final lowerEmail = email.toLowerCase();
@@ -71,9 +72,21 @@ class AuthService {
         return "Sadece üniversite e-postası (.edu veya .edu.tr) ile kayıt olabilirsiniz.";
       }
 
-      // 2. Takma Ad Kontrolü (Boş değilse)
+      // 2. Telefon format kontrolü (YENİ EKLEME)
+      if (!phone.startsWith('+90')) {
+        return "Telefon numarası +90 ile başlamalıdır.";
+      }
+      if (phone.length != 13) { // +90XXXXXXXXXX
+        return "Telefon numarası +90 ile birlikte 13 karakter olmalıdır (örn: +905551234567).";
+      }
+
+      // 3. Takma Ad Kontrolü
       if (takmaAd.isNotEmpty) {
-        final checkNick = await _firestore.collection('kullanicilar').where('takmaAd', isEqualTo: takmaAd).limit(1).get();
+        final checkNick = await _firestore.collection('kullanicilar')
+            .where('takmaAd', isEqualTo: takmaAd)
+            .limit(1)
+            .get();
+        
         if (checkNick.docs.isNotEmpty) {
           final random = Random();
           final suggestion1 = '$takmaAd${random.nextInt(100)}';
@@ -83,28 +96,90 @@ class AuthService {
         }
       }
 
-      // 3. Kullanıcı Oluşturma (Firebase Auth)
-      UserCredential cred = await _auth.createUserWithEmailAndPassword(email: email, password: password);
+      // 4. Kullanıcı Oluşturma (Firebase Auth)
+      UserCredential cred = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
       createdUser = cred.user;
 
       if (createdUser != null) {
-        // 4. Veritabanına Yazma (Firestore)
-        // DİKKAT: Burada hata olsa bile, PushNotificationService ile çakışmayı önlemek için
-        // hemen silmek yerine retry mantığı veya soft fail uygulayacağız.
+        // 5. Veritabanına Yazma (Firestore) - ROLLBACK DESTEKLİ
         try {
-          await _createUserDocument(createdUser, adSoyad, takmaAd, phone, email, university, department);
+          // Email doğrulama maili gönder
+          await createdUser.sendEmailVerification();
+          
+          // Firestore'a kullanıcı verisi yaz (retry ile)
+          await _createUserDocumentWithRetry(
+            createdUser,
+            adSoyad,
+            takmaAd,
+            phone,
+            email,
+            university,
+            department,
+            maxRetries: 3,
+          );
+          
+          return null; // ✅ Başarılı
+          
         } catch (dbError) {
-          print("Veritabanı oluşturma hatası (Kritik değil): $dbError");
-          // Not: Auth kullanıcısı oluştuğu için, veritabanı yazma hatası olsa bile
-          // kullanıcıyı silmiyoruz. Uygulama içinde "Profil Tamamla" ekranı ile bu veri sonradan da eklenebilir.
-          // Bu, "Giriş ekranına atma" sorununu çözer.
+          // ❌ Firestore yazma başarısız - ROLLBACK
+          print("❌ Kritik Hata: Firestore yazma başarısız. Auth kullanıcısı siliniyor...");
+          
+          try {
+            // Auth kullanıcısını sil (rollback)
+            await createdUser.delete();
+            print("✅ Rollback başarılı: Auth kullanıcısı silindi.");
+          } catch (deleteError) {
+            print("⚠️ Rollback hatası: Auth kullanıcısı silinemedi: $deleteError");
+            // Bu durumda manuel temizlik gerekebilir
+          }
+          
+          return "Kayıt sırasında bir hata oluştu. Lütfen tekrar deneyin. Hata: ${_handleError(dbError)}";
         }
       }
-      return null; // Başarılı
+      
+      return "Kullanıcı oluşturulamadı.";
 
+    } on FirebaseAuthException catch (e) {
+      // Auth hatası
+      return _handleError(e);
     } catch (e) {
-      // Sadece Auth oluşturulamazsa hata dönüyoruz.
-      return "Kayıt başarısız: ${_handleError(e)}";
+      // Genel hata
+      return "Beklenmeyen hata: ${_handleError(e)}";
+    }
+  }
+
+  // Retry mekanizmalı Firestore yazma
+  Future<void> _createUserDocumentWithRetry(
+    User user,
+    String adSoyad,
+    String takmaAd,
+    String phone,
+    String email,
+    String uni,
+    String dept, {
+    int maxRetries = 3,
+  }) async {
+    int attempt = 0;
+    
+    while (attempt < maxRetries) {
+      try {
+        await _createUserDocument(user, adSoyad, takmaAd, phone, email, uni, dept);
+        print("✅ Firestore yazma başarılı (Deneme ${attempt + 1})");
+        return; // Başarılı
+      } catch (e) {
+        attempt++;
+        print("⚠️ Firestore yazma hatası (Deneme $attempt/$maxRetries): $e");
+        
+        if (attempt >= maxRetries) {
+          throw e; // Son deneme başarısız, hatayı fırlat
+        }
+        
+        // Kısa bir bekleme sonrası tekrar dene
+        await Future.delayed(Duration(milliseconds: 500 * attempt));
+      }
     }
   }
 
@@ -150,6 +225,32 @@ class AuthService {
     }, SetOptions(merge: true)); 
   }
 
+  // --- ŞİFRE KARMAŞIKLIĞI KONTROLÜ (YENİ EKLEME) ---
+  String? validatePasswordStrength(String password) {
+    if (password.length < 8) {
+      return "Şifre en az 8 karakter olmalıdır.";
+    }
+    
+    if (!password.contains(RegExp(r'[A-Z]'))) {
+      return "Şifre en az bir büyük harf içermelidir.";
+    }
+    
+    if (!password.contains(RegExp(r'[a-z]'))) {
+      return "Şifre en az bir küçük harf içermelidir.";
+    }
+    
+    if (!password.contains(RegExp(r'[0-9]'))) {
+      return "Şifre en az bir rakam içermelidir.";
+    }
+    
+    // OWASP önerilen özel karakter seti
+    if (!password.contains(RegExp(r'''[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]'''))) {
+      return "Şifre en az bir özel karakter içermelidir (!@#\$%^&* vb.).";
+    }
+    
+    return null; // ✅ Şifre güçlü
+  }
+
   // --- DİĞER FONKSİYONLAR ---
   Future<String?> getSavedEmail() async {
     final prefs = await SharedPreferences.getInstance();
@@ -188,15 +289,28 @@ class AuthService {
   }
   
   Future<String?> validatePhonePassword(String phone, String password) async {
-      try {
-        final query = await _firestore.collection('kullanicilar').where('phoneNumber', isEqualTo: phone).limit(1).get();
-        if (query.docs.isEmpty) return "Bu numara ile kayıtlı hesap bulunamadı.";
-        final email = query.docs.first['email'];
-        await _auth.signInWithEmailAndPassword(email: email, password: password);
-        return null;
-      } catch (e) {
-        return _handleError(e);
+    try {
+      // Telefon format kontrolü
+      if (!phone.startsWith('+90') || phone.length != 13) {
+        return "Geçersiz telefon numarası formatı. +90XXXXXXXXXX formatında olmalı.";
       }
+      
+      final query = await _firestore
+          .collection('kullanicilar')
+          .where('phoneNumber', isEqualTo: phone)
+          .limit(1)
+          .get();
+      
+      if (query.docs.isEmpty) {
+        return "Bu numara ile kayıtlı hesap bulunamadı.";
+      }
+      
+      final email = query.docs.first.data()['email'] as String;
+      await _auth.signInWithEmailAndPassword(email: email, password: password);
+      return null;
+    } catch (e) {
+      return _handleError(e);
+    }
   }
   
   Future<String?> sendPasswordReset(String email) async {

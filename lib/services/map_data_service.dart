@@ -129,117 +129,277 @@ class MapDataService {
     }
   }
 
-  // --- GOOGLE PLACES API (NEARBY SEARCH) - OPTİMİZE EDİLDİ ---
+  // --- ✅ GOOGLE PLACES API (TAMAMEN YENİDEN YAZILDI - ÜST DÜZEY) ---
   Future<List<LocationModel>> searchNearbyPlaces({required LatLng center, required String typeFilter}) async {
     final cacheKey = "${center.latitude}_${center.longitude}_$typeFilter";
     if (_nearbyCache.containsKey(cacheKey)) {
       return _nearbyCache[cacheKey]!;
     }
 
-    // 1. ADIM: Daha spesifik Google Place Tipleri kullanıyoruz.
-    // 'keyword' yerine 'type' parametresi daha güvenilirdir ancak sadece tek bir tip destekler.
-    // Bu yüzden 'keyword' kullanmaya devam edip daha spesifik terimler seçeceğiz.
-    
-    String keyword;
-
-    if (typeFilter == 'yemek') {
-      // Sadece kafe ve restoranlar
-      keyword = 'cafe|restaurant|bakery|meal_takeaway'; 
-    } else if (typeFilter == 'durak') {
-      // Sadece toplu taşıma
-      keyword = 'bus_station|transit_station|subway_station';
-    } else if (typeFilter == 'kutuphane') {
-      keyword = 'library';
-    } else if (typeFilter == 'universite') {
-      keyword = 'university'; 
-    } else {
-      // 'all' (Tümü) seçeneği için en önemli yerleri çekiyoruz
-      // Keyword kullanımı type'dan daha esnektir çoklu arama için
-      keyword = 'university OR library OR cafe OR bus station';
-    }
-
-    // URL Oluşturma
-    String baseUrl = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json'
-        '?location=${center.latitude},${center.longitude}' // radius buradan kaldırıldı
-        '&language=tr' //
-        '&key=$_apiKey'; //
-
-    // YENİ: Filtreye göre dinamik arama yarıçapı
-    // 'all' filtresi için daha geniş bir alanda (10km) arama yap. Diğerleri için 5km.
-    int radius = 5000; // Varsayılan 5km
-    if (typeFilter == 'all') {
-      radius = 10000; // 10km
-    }
-
     try {
-      final url = Uri.parse('$baseUrl&radius=$radius&keyword=${Uri.encodeComponent(keyword)}');
-      final response = await http.get(url).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () => throw TimeoutException('Arama isteği zaman aşımına uğradı.'),
+      List<LocationModel> allPlaces = [];
+
+      // ✅ FARKLI FİLTRELER İÇİN ÖZEL STRATEJİLER
+      if (typeFilter == 'universite') {
+        // ✅ ÜNİVERSİTE: Çok geniş alanda ara, tüm şehirdeki üniversiteleri getir
+        allPlaces = await _searchUniversities(center);
+      } else if (typeFilter == 'yemek') {
+        // ✅ YEMEK: Restoran ve kafeler için optimize edilmiş arama
+        allPlaces = await _searchRestaurants(center);
+      } else if (typeFilter == 'durak') {
+        // ✅ DURAK: Toplu taşıma durakları
+        allPlaces = await _searchTransitStations(center);
+      } else if (typeFilter == 'kutuphane') {
+        // ✅ KÜTÜPHANE: Kütüphaneler
+        allPlaces = await _searchLibraries(center);
+      } else if (typeFilter == 'all') {
+        // ✅ TÜMÜ: Sadece Firestore verilerini kullan, Google Places kullanma
+        // (Kullanıcı konumu marker'ını kaldırmak için UI'da düzenleme yapacağız)
+        return []; // Boş döndür, sadece Firestore verileri gösterilsin
+      }
+
+      _nearbyCache[cacheKey] = allPlaces;
+      return allPlaces;
+    } catch (e) {
+      if (kDebugMode) print("Google Places API Hatası: $e");
+      return [];
+    }
+  }
+
+  // ✅ ÜNİVERSİTE ARAMA - ŞEHİRDEKİ TÜM ÜNİVERSİTELER
+  Future<List<LocationModel>> _searchUniversities(LatLng center) async {
+    final List<LocationModel> universities = [];
+    
+    try {
+      // İlk arama: 20km yarıçapında tüm üniversiteler
+      final url1 = Uri.parse(
+        'https://maps.googleapis.com/maps/api/place/nearbysearch/json'
+        '?location=${center.latitude},${center.longitude}'
+        '&radius=20000' // 20km - şehir çapında
+        '&type=university'
+        '&language=tr'
+        '&key=$_apiKey'
       );
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'OK') {
-          final List<dynamic> results = data['results'];
-          
-          // 2. ADIM: İSTEMCİ TARAFLI FİLTRELEME (JUNK REMOVER)
-          // İstenmeyen yerleri (ATM, Market, Benzinlik vb.) manuel olarak eliyoruz.
-          
-          final List<String> blackListTypes = [
-            'atm', 'bank', 'gas_station', 'car_repair', 'hospital', 'doctor', 
-            'dentist', 'gym', 'lodging', 'real_estate_agency', 'travel_agency',
-            'convenience_store', 'grocery_or_supermarket', 'store', 'clothing_store'
-          ];
 
-          // Üniversite modunda marketlerin çıkmasını engellemek için extra kontrol
-          final bool strictUniversityMode = typeFilter == 'universite';
-
-          final List<LocationModel> places = [];
-
-          for (var item in results) {
-            final List<String> types = List<String>.from(item['types'] ?? []);
-            final String name = (item['name'] ?? '').toString().toLowerCase();
-
-            // Kara liste kontrolü (Eğer bu tiplerden birine sahipse ve özellikle onu aramamışsak atla)
-            bool isJunk = types.any((t) => blackListTypes.contains(t));
-            
-            // İstisna: Eğer filtre 'yemek' ise 'store' (market) bazen kafe olabilir, o yüzden typeFilter'a göre esnek davranılabilir.
-            // Ancak 'universite' seçiliyse çok katı olmalıyız.
-            
-            if (strictUniversityMode) {
-               // Üniversite arıyorsak içinde 'university' tipi MUTLAKA olmalı.
-               // Ayrıca isminde 'market', 'bakkal', 'kırtasiye' geçiyorsa ele (Google bazen bunları university olarak etiketliyor).
-               if (!types.contains('university')) continue;
-               if (name.contains('market') || name.contains('bakkal') || name.contains('copy') || name.contains('kırtasiye')) continue;
-            } else {
-               // Diğer modlarda kara liste kontrolü yap
-               if (isJunk) continue;
-            }
-
-            // Temiz veriyi modele çevir
-            final loc = item['geometry']['location'];
-            String assignedType = typeFilter == 'all' ? _determineTypeFromTags(types) : typeFilter;
-
-            places.add(LocationModel(
-              id: item['place_id'],
-              title: item['name'],
-              snippet: item['vicinity'] ?? '',
-              position: LatLng(loc['lat'], loc['lng']),
-              type: assignedType,
-              rating: (item['rating'] as num?)?.toDouble() ?? 0.0,
-              icon: _getIconForType(assignedType),
-              photoUrls: _extractPhotoUrls(item['photos']),
-            ));
+      final response1 = await http.get(url1).timeout(const Duration(seconds: 15));
+      
+      if (response1.statusCode == 200) {
+        final data1 = json.decode(response1.body);
+        if (data1['status'] == 'OK' || data1['status'] == 'ZERO_RESULTS') {
+          if (data1['results'] != null) {
+            universities.addAll(_parseUniversityResults(data1['results']));
           }
 
-          _nearbyCache[cacheKey] = places;
-          return places;
+          // Eğer sonraki sayfa varsa (next_page_token), onu da çek
+          String? nextPageToken = data1['next_page_token'];
+          if (nextPageToken != null) {
+            await Future.delayed(const Duration(seconds: 2)); // Google API gereksinimi
+            
+            final url2 = Uri.parse(
+              'https://maps.googleapis.com/maps/api/place/nearbysearch/json'
+              '?pagetoken=$nextPageToken'
+              '&key=$_apiKey'
+            );
+            
+            final response2 = await http.get(url2).timeout(const Duration(seconds: 15));
+            if (response2.statusCode == 200) {
+              final data2 = json.decode(response2.body);
+              if (data2['results'] != null) {
+                universities.addAll(_parseUniversityResults(data2['results']));
+              }
+            }
+          }
         }
       }
     } catch (e) {
-      print("Google Places API Hatası: $e");
+      if (kDebugMode) print("Üniversite arama hatası: $e");
     }
-    return [];
+
+    return universities;
+  }
+
+  // ✅ RESTORAN ARAMA - DAHA FAZLA RESTORAN VE KAFE
+  Future<List<LocationModel>> _searchRestaurants(LatLng center) async {
+    final List<LocationModel> restaurants = [];
+    final Set<String> seenIds = {}; // Duplicate önleme
+
+    try {
+      // 1. Restoran araması
+      final restaurantResults = await _fetchPlacesByType(center, 'restaurant', 5000);
+      for (var place in restaurantResults) {
+        if (!seenIds.contains(place.id)) {
+          restaurants.add(place);
+          seenIds.add(place.id);
+        }
+      }
+
+      // 2. Kafe araması
+      final cafeResults = await _fetchPlacesByType(center, 'cafe', 5000);
+      for (var place in cafeResults) {
+        if (!seenIds.contains(place.id)) {
+          restaurants.add(place);
+          seenIds.add(place.id);
+        }
+      }
+
+      // 3. Fırın/pastane araması
+      final bakeryResults = await _fetchPlacesByType(center, 'bakery', 3000);
+      for (var place in bakeryResults) {
+        if (!seenIds.contains(place.id)) {
+          restaurants.add(place);
+          seenIds.add(place.id);
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print("Restoran arama hatası: $e");
+    }
+
+    return restaurants;
+  }
+
+  // ✅ TOPLU TAŞIMA DURAK ARAMA
+  Future<List<LocationModel>> _searchTransitStations(LatLng center) async {
+    final List<LocationModel> stations = [];
+    final Set<String> seenIds = {};
+
+    try {
+      // Bus station
+      final busResults = await _fetchPlacesByType(center, 'bus_station', 3000);
+      for (var place in busResults) {
+        if (!seenIds.contains(place.id)) {
+          stations.add(place);
+          seenIds.add(place.id);
+        }
+      }
+
+      // Transit station
+      final transitResults = await _fetchPlacesByType(center, 'transit_station', 3000);
+      for (var place in transitResults) {
+        if (!seenIds.contains(place.id)) {
+          stations.add(place);
+          seenIds.add(place.id);
+        }
+      }
+
+      // Subway station
+      final subwayResults = await _fetchPlacesByType(center, 'subway_station', 5000);
+      for (var place in subwayResults) {
+        if (!seenIds.contains(place.id)) {
+          stations.add(place);
+          seenIds.add(place.id);
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print("Durak arama hatası: $e");
+    }
+
+    return stations;
+  }
+
+  // ✅ KÜTÜPHANE ARAMA
+  Future<List<LocationModel>> _searchLibraries(LatLng center) async {
+    return await _fetchPlacesByType(center, 'library', 10000);
+  }
+
+  // ✅ GENEL TİP BAZLI ARAMA FONKSİYONU
+  Future<List<LocationModel>> _fetchPlacesByType(LatLng center, String type, int radius) async {
+    final List<LocationModel> places = [];
+    
+    try {
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/place/nearbysearch/json'
+        '?location=${center.latitude},${center.longitude}'
+        '&radius=$radius'
+        '&type=$type'
+        '&language=tr'
+        '&key=$_apiKey'
+      );
+
+      final response = await http.get(url).timeout(const Duration(seconds: 12));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK' && data['results'] != null) {
+          final results = data['results'] as List<dynamic>;
+          
+          for (var item in results) {
+            final place = _parseLocationResult(item, type);
+            if (place != null) {
+              places.add(place);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print("$type arama hatası: $e");
+    }
+
+    return places;
+  }
+
+  // ✅ ÜNİVERSİTE SONUÇLARINI PARSE ET
+  List<LocationModel> _parseUniversityResults(List<dynamic> results) {
+    final List<LocationModel> universities = [];
+    
+    // ✅ KARA LİSTE: Bu kelimeleri içeren yerler üniversite değil
+    final blacklistKeywords = [
+      'market', 'bakkal', 'kırtasiye', 'copy', 'fotokopi', 
+      'berber', 'kuaför', 'apart', 'yurt', 'pansiyon', 'otel',
+      'cafe', 'restaurant', 'kafe', 'restoran'
+    ];
+
+    for (var item in results) {
+      try {
+        final List<String> types = List<String>.from(item['types'] ?? []);
+        final String name = (item['name'] ?? '').toString().toLowerCase();
+        
+        // Üniversite tipi kontrolü
+        if (!types.contains('university')) continue;
+        
+        // Kara liste kontrolü
+        bool isBlacklisted = blacklistKeywords.any((keyword) => name.contains(keyword));
+        if (isBlacklisted) continue;
+        
+        // Geçerli üniversite
+        final loc = item['geometry']['location'];
+        universities.add(LocationModel(
+          id: item['place_id'],
+          title: item['name'],
+          snippet: item['vicinity'] ?? '',
+          position: LatLng(loc['lat'], loc['lng']),
+          type: 'universite',
+          rating: (item['rating'] as num?)?.toDouble() ?? 0.0,
+          icon: _iconUni,
+          photoUrls: _extractPhotoUrls(item['photos']),
+        ));
+      } catch (e) {
+        if (kDebugMode) print("Üniversite parse hatası: $e");
+      }
+    }
+
+    return universities;
+  }
+
+  // ✅ GENEL LOCATION PARSE
+  LocationModel? _parseLocationResult(Map<String, dynamic> item, String type) {
+    try {
+      final loc = item['geometry']?['location'];
+      if (loc == null) return null;
+
+      return LocationModel(
+        id: item['place_id'],
+        title: item['name'] ?? 'Bilinmeyen',
+        snippet: item['vicinity'] ?? '',
+        position: LatLng(loc['lat'], loc['lng']),
+        type: type,
+        rating: (item['rating'] as num?)?.toDouble() ?? 0.0,
+        icon: _getIconForType(type),
+        photoUrls: _extractPhotoUrls(item['photos']),
+      );
+    } catch (e) {
+      if (kDebugMode) print("Location parse hatası: $e");
+      return null;
+    }
   }
 
   // Tiplere göre otomatik kategori belirleme (Tümü seçeneği için)

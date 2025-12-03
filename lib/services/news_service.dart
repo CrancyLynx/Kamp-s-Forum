@@ -36,37 +36,94 @@ class NewsService {
   // Çünkü api_keys.dart artık runtime'da değer dönüyor.
   String get _apiKey => newsApiKey;
   
-  final String _baseUrl = 'https://newsapi.org/v2/top-headlines';
+  // ✅ everything endpoint kullanarak daha fazla haber alabiliriz
+  final String _baseUrl = 'https://newsapi.org/v2/everything';
 
   Future<List<Article>> fetchTopHeadlines({String? category}) async {
-    // API Key yoksa veya limit dolduysa direkt mock veriye dön
-    if (_apiKey.isEmpty || _apiKey.contains('API_KEY')) {
+    // ✅ API KEY KONTROLÜ
+    debugPrint("📰 NEWS API: Key uzunluğu: ${_apiKey.length}");
+    
+    // API Key yoksa veya geçersizse direkt mock veriye dön
+    if (_apiKey.isEmpty || _apiKey.contains('API_KEY') || _apiKey.length < 10) {
+      debugPrint("❌ NEWS API: Key geçersiz, mock veriye geçiliyor");
       return _getMockArticles(category);
     }
 
+    // ✅ Kategoriye göre arama terimi belirle
+    String searchQuery = _getSearchQueryForCategory(category);
+    
     final queryParameters = {
-      'country': 'tr',
+      'q': searchQuery, // everything endpoint için query gerekli
+      'language': 'tr', // Türkçe haberler
+      'sortBy': 'publishedAt', // En yeni haberler
+      'pageSize': '20', // 20 haber al
       'apiKey': _apiKey,
-      if (category != null && category.isNotEmpty && category != 'general') 'category': category,
     };
     
     final uri = Uri.parse(_baseUrl).replace(queryParameters: queryParameters);
+    debugPrint("📰 NEWS API: İstek URL (query gizli): ${_baseUrl}?q=$searchQuery&language=tr...");
 
     try {
-      final response = await http.get(uri).timeout(const Duration(seconds: 5));
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      
+      debugPrint("📰 NEWS API: Status Code: ${response.statusCode}");
+      debugPrint("📰 NEWS API: Response Body (ilk 200 karakter): ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}");
       
       if (response.statusCode == 200) {
         final Map<String, dynamic> json = jsonDecode(response.body);
+        
+        // ✅ API durumu kontrolü
+        if (json['status'] == 'error') {
+          debugPrint("❌ NEWS API Hatası: ${json['code']} - ${json['message']}");
+          return _getMockArticles(category);
+        }
+        
         final List<dynamic> articlesJson = json['articles'] ?? [];
-        if (articlesJson.isEmpty) return _getMockArticles(category);
-        return articlesJson.map((article) => Article.fromJson(article)).toList();
+        debugPrint("✅ NEWS API: ${articlesJson.length} haber alındı");
+        
+        if (articlesJson.isEmpty) {
+          debugPrint("⚠️ NEWS API: Boş sonuç, mock veriye geçiliyor");
+          return _getMockArticles(category);
+        }
+        
+        // ✅ Kategori bilgisini ekle
+        return articlesJson.map((article) {
+          final parsed = Article.fromJson(article);
+          return Article(
+            title: parsed.title,
+            description: parsed.description,
+            urlToImage: parsed.urlToImage,
+            url: parsed.url,
+            sourceName: parsed.sourceName,
+            category: category ?? 'general',
+          );
+        }).toList();
       } else {
-        debugPrint("API Hatası: ${response.statusCode} - Mock veriye geçiliyor.");
+        debugPrint("❌ NEWS API Hatası: ${response.statusCode} - ${response.body}");
         return _getMockArticles(category);
       }
     } catch (e) {
-      debugPrint("Bağlantı Hatası: $e - Mock veriye geçiliyor.");
+      debugPrint("❌ NEWS API Bağlantı Hatası: $e");
       return _getMockArticles(category);
+    }
+  }
+
+  // ✅ Kategoriye göre arama terimi
+  String _getSearchQueryForCategory(String? category) {
+    switch (category) {
+      case 'technology':
+        return 'teknoloji OR yazılım OR yapay zeka OR bilgisayar';
+      case 'science':
+        return 'bilim OR araştırma OR TÜBİTAK OR üniversite';
+      case 'business':
+        return 'ekonomi OR girişim OR KOSGEB OR iş';
+      case 'entertainment':
+        return 'kültür OR sanat OR müzik OR festival';
+      case 'health':
+        return 'sağlık OR spor OR beslenme OR psikoloji';
+      case 'general':
+      default:
+        return 'Türkiye OR eğitim OR üniversite OR öğrenci';
     }
   }
 

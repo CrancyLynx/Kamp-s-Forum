@@ -236,39 +236,42 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       LocationSettings locationSettings;
       try {
         if (Platform.isAndroid) {
+          // ✅ DÜZELTİLDİ: forceLocationManager kaldırıldı (FusedLocationProvider kullanılacak)
+          // ✅ DÜZELTİLDİ: accuracy best yapıldı (en yüksek doğruluk)
+          // ✅ DÜZELTİLDİ: intervalDuration 5 saniyeye düşürüldü
+          // ✅ DÜZELTİLDİ: distanceFilter 5 metreye düşürüldü
           locationSettings = AndroidSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 10,
-            forceLocationManager: true,
-            intervalDuration: const Duration(seconds: 10),
+            accuracy: LocationAccuracy.best,
+            distanceFilter: 5,
+            intervalDuration: const Duration(seconds: 5),
           );
         } else if (Platform.isIOS) {
           locationSettings = AppleSettings(
-            accuracy: LocationAccuracy.high,
+            accuracy: LocationAccuracy.best,
             activityType: ActivityType.fitness,
-            distanceFilter: 10,
+            distanceFilter: 5,
             pauseLocationUpdatesAutomatically: true,
           );
         } else {
           locationSettings = const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 10,
+            accuracy: LocationAccuracy.best,
+            distanceFilter: 5,
           );
         }
       } catch (e) {
         // LocationSettings başarısız olursa fallback
         debugPrint("LocationSettings hatası: $e");
         locationSettings = const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 10,
+          accuracy: LocationAccuracy.best,
+          distanceFilter: 5,
         );
       }
 
-      // İlk konum al
+      // İlk konum al - ✅ best accuracy ile
       try {
         Position initialPos = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-          timeLimit: const Duration(seconds: 10),
+          desiredAccuracy: LocationAccuracy.best,
+          timeLimit: const Duration(seconds: 15),
         );
         
         if (mounted) {
@@ -276,6 +279,9 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
             _userLocation = LatLng(initialPos.latitude, initialPos.longitude);
             _locationError = null; // Hata temizle
           });
+          
+          // Marker'ları güncelle
+          _updateMarkers();
           
           if (widget.initialFocus == null && _mapController != null) {
             _mapController?.animateCamera(
@@ -345,7 +351,8 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     if (!mounted) return;
     Set<Marker> newMarkers = {};
 
-    if (_userLocation != null) {
+    // ✅ KULLANICI KONUM MARKER'I - "Tümü" kategorisinde GÖSTERİLMEZ
+    if (_userLocation != null && _currentFilter != 'all') {
       newMarkers.add(
         Marker(
           markerId: const MarkerId('user_location'),
@@ -357,6 +364,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       );
     }
 
+    // Firestore lokasyonları
     for (var loc in _firestoreLocations) {
       newMarkers.add(Marker(
         markerId: MarkerId("fs_${loc.id}"),
@@ -367,6 +375,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       ));
     }
 
+    // Google Places lokasyonları (Duplicate kontrolü ile)
     for (var loc in _googleLocations) {
       bool isDuplicate = _firestoreLocations.any((f) {
         double dist = _calculateDistance(f.position, loc.position);
@@ -377,13 +386,14 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
         newMarkers.add(Marker(
           markerId: MarkerId("g_${loc.id}"),
           position: loc.position,
-          icon: loc.icon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          icon: loc.icon ?? BitmapDescriptor.defaultMarker,
           infoWindow: InfoWindow(title: loc.title),
           onTap: () => _showLocationDetails(loc),
         ));
       }
     }
 
+    // Arama sonuçları marker'ları
     final searchMarkers = _markers.where((m) => m.markerId.value.startsWith("s_"));
     newMarkers.addAll(searchMarkers);
 

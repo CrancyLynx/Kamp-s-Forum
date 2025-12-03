@@ -562,11 +562,9 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                   : _getSmartFallbackImage(article.title);
               
               return GestureDetector(
-                onTap: () async { 
-                  final url = Uri.parse(article.url);
-                  if (await canLaunchUrl(url)) { 
-                    launchUrl(url, mode: LaunchMode.externalApplication); 
-                  }
+                onTap: () {
+                  // ✅ YENİ: Haber detay paneli aç
+                  _showNewsDetailPanel(context, article);
                 },
                 child: Container(
                   margin: const EdgeInsets.only(right: 12),
@@ -730,6 +728,222 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
         ]),
       ),
     );
+  }
+
+  // ✅ YENİ: HABER DETAY PANELİ
+  void _showNewsDetailPanel(BuildContext context, Article article) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (_, controller) {
+          final img = (article.urlToImage != null && article.urlToImage!.isNotEmpty)
+              ? article.urlToImage!
+              : _getSmartFallbackImage(article.title);
+
+          return Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 10,
+                  spreadRadius: 2,
+                )
+              ],
+            ),
+            child: Column(
+              children: [
+                // Resim Alanı
+                Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                      child: CachedNetworkImage(
+                        imageUrl: img,
+                        height: 200,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(
+                          color: Colors.grey[200],
+                          height: 200,
+                          child: const Center(child: CircularProgressIndicator()),
+                        ),
+                        errorWidget: (_, __, ___) => Container(
+                          color: Colors.grey[300],
+                          height: 200,
+                          child: const Icon(Icons.broken_image, size: 50, color: Colors.grey),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: CircleAvatar(
+                        backgroundColor: Colors.black54,
+                        child: IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 10,
+                      left: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          article.sourceName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                // İçerik Alanı
+                Expanded(
+                  child: ListView(
+                    controller: controller,
+                    padding: const EdgeInsets.all(20),
+                    children: [
+                      // Başlık
+                      Text(
+                        article.title,
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Açıklama
+                      if (article.description != null && article.description!.isNotEmpty)
+                        Text(
+                          article.description!,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[700],
+                            height: 1.5,
+                          ),
+                        ),
+
+                      const SizedBox(height: 24),
+
+                      // Kategoriye göre ikon
+                      Row(
+                        children: [
+                          Icon(
+                            _getCategoryIcon(article.category),
+                            color: AppColors.primary,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _newsCategories[article.category] ?? 'Gündem',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Siteye Git Butonu
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          final url = Uri.parse(article.url);
+                          if (await canLaunchUrl(url)) {
+                            launchUrl(url, mode: LaunchMode.externalApplication);
+                          } else {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Link açılamadı")),
+                              );
+                            }
+                          }
+                        },
+                        icon: const Icon(Icons.open_in_new, color: Colors.white),
+                        label: const Text(
+                          "Haberin Tamamını Oku",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 2,
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Paylaş Butonu
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          // Paylaşma fonksiyonu eklenebilir
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("Paylaş özelliği yakında...")),
+                          );
+                        },
+                        icon: const Icon(Icons.share),
+                        label: const Text("Paylaş"),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  IconData _getCategoryIcon(String category) {
+    switch (category) {
+      case 'technology':
+        return Icons.computer;
+      case 'science':
+        return Icons.science;
+      case 'business':
+        return Icons.business;
+      case 'entertainment':
+        return Icons.theater_comedy;
+      case 'health':
+        return Icons.health_and_safety;
+      default:
+        return Icons.newspaper;
+    }
   }
 
   // GÜNCELLENDİ: ARTIK RENKLİ ROZET DÖNDÜRÜYOR

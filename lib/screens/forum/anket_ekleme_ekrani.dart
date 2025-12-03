@@ -110,18 +110,64 @@ class _AnketEklemeEkraniState extends State<AnketEklemeEkrani> {
   }
 
   Future<void> _createPoll() async {
-    if (!_formKey.currentState!.validate()) return;
-    
+    // Form validasyonu
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Lütfen tüm alanları doldurun."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Soru validasyonu
+    final question = _questionController.text.trim();
+    if (question.length < 5) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Soru en az 5 karakter olmalıdır."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Seçenek validasyonu
+    if (_optionControllers.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("En az 2 seçenek olmalıdır."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     if (_optionControllers.any((c) => c.text.trim().isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Lütfen tüm seçenekleri doldurun.")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Lütfen tüm seçenekleri doldurun."),
+          backgroundColor: Colors.orange,
+        ),
+      );
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      final userId = FirebaseAuth.instance.currentUser!.uid;
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      
+      if (userId == null) {
+        throw Exception('Kullanıcı oturumu sona erdi.');
+      }
+
       final userDoc = await FirebaseFirestore.instance.collection('kullanicilar').doc(userId).get();
+      if (!userDoc.exists) {
+        throw Exception('Kullanıcı profili bulunamadı.');
+      }
+
       final userData = userDoc.data() ?? {};
       
       List<Map<String, dynamic>> optionsData = [];
@@ -130,24 +176,40 @@ class _AnketEklemeEkraniState extends State<AnketEklemeEkrani> {
       for (int i = 0; i < _optionControllers.length; i++) {
         String? imageUrl;
         
-        // Resim varsa yükle
-        if (_optionImages[i] != null) {
-          final timestamp = DateTime.now().millisecondsSinceEpoch;
-          final ref = FirebaseStorage.instance.ref().child('anket_resimleri/$userId-$timestamp-$i.jpg');
-          await ref.putFile(_optionImages[i]!);
-          imageUrl = await ref.getDownloadURL();
+        try {
+          // Resim varsa yükle
+          if (_optionImages[i] != null) {
+            final timestamp = DateTime.now().millisecondsSinceEpoch;
+            final ref = FirebaseStorage.instance.ref().child('anket_resimleri/$userId-$timestamp-$i.jpg');
+            
+            final uploadTask = ref.putFile(
+              _optionImages[i]!,
+              SettableMetadata(
+                contentType: 'image/jpeg',
+                customMetadata: {'pollOption': i.toString()},
+              ),
+            );
+            
+            final snapshot = await uploadTask;
+            imageUrl = await snapshot.ref.getDownloadURL();
+            debugPrint('Anket resimi yüklendi: $imageUrl');
+          }
+        } on FirebaseException catch (e) {
+          debugPrint("Anket resim yükleme hatası: ${e.code} - ${e.message}");
+          // Resim yüklenemezse devam et, resim olmadan seçenek ekle
         }
 
         optionsData.add({
           'text': _optionControllers[i].text.trim(),
           'voteCount': 0,
-          'imageUrl': imageUrl, // Varsa URL, yoksa null
+          'imageUrl': imageUrl,
         });
       }
 
+      // Anket oluştur
       await FirebaseFirestore.instance.collection('gonderiler').add({
         'type': 'anket',
-        'baslik': _questionController.text.trim(),
+        'baslik': question,
         'ad': widget.userName,
         'realUsername': widget.userName,
         'userId': userId,
@@ -155,20 +217,49 @@ class _AnketEklemeEkraniState extends State<AnketEklemeEkrani> {
         'zaman': FieldValue.serverTimestamp(),
         'lastCommentTimestamp': FieldValue.serverTimestamp(),
         'options': optionsData,
-        'voters': {}, 
+        'voters': {},
         'totalVotes': 0,
         'kategori': 'Anket',
         'mesaj': '',
         'commentCount': 0,
         'likes': [],
+        'isPinned': false,
+      });
+
+      // Kullanıcının anket sayısını güncelle
+      await FirebaseFirestore.instance.collection('kullanicilar').doc(userId).update({
+        'postCount': FieldValue.increment(1),
       });
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Anket oluşturuldu!"), backgroundColor: AppColors.success));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Anket oluşturuldu!"),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } on FirebaseException catch (e) {
+      debugPrint("Firebase hatası: ${e.code} - ${e.message}");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Hata: ${e.message}"),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Hata oluştu."), backgroundColor: AppColors.error));
+      debugPrint("Anket oluşturma hatası: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Hata oluştu: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

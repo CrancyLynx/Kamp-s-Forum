@@ -442,6 +442,15 @@ class _RozetlerSayfasiState extends State<RozetlerSayfasi> with SingleTickerProv
       case 'popular_author': target = 50; current = likeCount; break;
       case 'campus_phenomenon': target = 250; current = likeCount; break;
       case 'veteran': target = 50; current = postCount; break;
+      
+      // ✅ YENİ ROZETLER
+      case 'helper': target = 100; current = commentCount; break;
+      case 'early_bird': target = 20; current = postCount; break;
+      case 'night_owl': target = 20; current = postCount; break;
+      case 'question_master': target = 25; current = postCount; break;
+      case 'problem_solver': target = 50; current = commentCount; break;
+      case 'trending_topic': target = 100; current = likeCount; break;
+      
       case 'admin': return 0.0; // Admin manueldir
       default: return 0.0;
     }
@@ -462,6 +471,23 @@ class _RozetlerSayfasiState extends State<RozetlerSayfasi> with SingleTickerProv
       case 'popular_author': return '${50 - likeCount} beğeni daha kazanmalısın.';
       case 'campus_phenomenon': return '${250 - likeCount} beğeni daha kazanmalısın.';
       case 'veteran': return '${50 - postCount} gönderi daha paylaşmalısın.';
+      
+      // ✅ YENİ ROZETLER
+      case 'helper': return '${100 - commentCount} yorum daha yapmalısın.';
+      case 'early_bird': return '${20 - postCount} gönderi daha paylaşmalısın.';
+      case 'night_owl': return '${20 - postCount} gönderi daha paylaşmalısın.';
+      case 'question_master': return '${25 - postCount} soru daha sormalısın.';
+      case 'problem_solver': return '${50 - commentCount} cevap daha vermelisin.';
+      case 'trending_topic': return '${100 - likeCount} beğeni daha kazanmalısın.';
+      
+      // Diğerleri (henüz aktif değil)
+      case 'social_butterfly': return 'Bu özellik yakında aktif olacak!';
+      case 'curious': return 'Bu özellik yakında aktif olacak!';
+      case 'loyal_member': return 'Bu özellik yakında aktif olacak!';
+      case 'friendly': return 'Bu özellik yakında aktif olacak!';
+      case 'influencer': return 'Bu özellik yakında aktif olacak!';
+      case 'perfectionist': return 'Bu özellik yakında aktif olacak!';
+      
       default: return 'Bu rozeti kazanmak için aktif olmaya devam et!';
     }
   }
