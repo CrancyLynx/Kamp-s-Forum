@@ -352,13 +352,14 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     if (!mounted) return;
     Set<Marker> newMarkers = {};
 
-    // ✅ KULLANICI KONUM MARKER'I - "Tümü" kategorisinde GÖSTERİLMEZ
-    if (_userLocation != null && _currentFilter != 'all') {
+    // ✅ KULLANICI KONUM MARKER'I - SADECE "Tümü" KATEGORİSİNDE GÖSTER
+    // Yemek, Durak, Kütüphane kategorisinde gösterilmez - sadece ilgili mekanlar gösterilir
+    if (_userLocation != null && _currentFilter == 'all') {
       newMarkers.add(
         Marker(
           markerId: const MarkerId('user_location'),
           position: _userLocation!,
-          icon: _iconUser ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          icon: _iconUser ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
           infoWindow: const InfoWindow(title: 'Konumun'),
           zIndex: 2,
         ),
