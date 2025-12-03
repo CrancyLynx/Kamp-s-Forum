@@ -48,11 +48,15 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   String _currentFilter = 'all';
   Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
+  Set<Circle> _radiusCircles = {};
   LatLng? _userLocation;
   BitmapDescriptor? _iconUser;
   bool _isLoading = false;
   bool _isRouteActive = false;
 
+  // ✅ RADIUS KONTROLLERİ
+  double _searchRadiusKm = 5.0; // Başlangıç: 5km
+  bool _showRadiusCircle = false; // Sadece filter != 'all' olunca göster
   
   // ✅ YENİ: Error state tracking
   String? _locationError;
@@ -351,40 +355,69 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   void _updateMarkers() {
     if (!mounted) return;
     Set<Marker> newMarkers = {};
+    Set<Circle> newCircles = {};
 
-    // ✅ KULLANICI KONUM MARKER'I - SADECE "Tümü" KATEGORİSİNDE GÖSTER
-    // Yemek, Durak, Kütüphane kategorisinde gösterilmez - sadece ilgili mekanlar gösterilir
-    if (_userLocation != null && _currentFilter == 'all') {
+    // ✅ KULLANICI KONUM MARKER'I - TÜM KATEGORİLERDE GÖSTER
+    if (_userLocation != null) {
       newMarkers.add(
         Marker(
           markerId: const MarkerId('user_location'),
           position: _userLocation!,
           icon: _iconUser ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
           infoWindow: const InfoWindow(title: 'Konumun'),
-          zIndex: 2,
+          zIndex: 3,
         ),
       );
+      
+      // ✅ RADIUS DÜLESİ - Sadece 'all' dışında ve açıksa göster
+      if (_currentFilter != 'all' && _showRadiusCircle) {
+        newCircles.add(
+          Circle(
+            circleId: const CircleId('search_radius'),
+            center: _userLocation!,
+            radius: _searchRadiusKm * 1000,
+            fillColor: AppColors.primary.withOpacity(0.1),
+            strokeColor: AppColors.primary.withOpacity(0.5),
+            strokeWidth: 2,
+            zIndex: 1,
+          ),
+        );
+      }
     }
 
-    // Firestore lokasyonları
+    // Firestore lokasyonları (Radius ile filtrele)
     for (var loc in _firestoreLocations) {
-      newMarkers.add(Marker(
-        markerId: MarkerId("fs_${loc.id}"),
-        position: loc.position,
-        icon: loc.icon ?? BitmapDescriptor.defaultMarker,
-        infoWindow: InfoWindow(title: loc.title, snippet: loc.snippet),
-        onTap: () => _showLocationDetails(loc),
-      ));
+      bool isInRadius = true;
+      if (_userLocation != null && _currentFilter != 'all' && _showRadiusCircle) {
+        double distKm = _calculateDistance(_userLocation!, loc.position);
+        isInRadius = distKm <= _searchRadiusKm;
+      }
+
+      if (isInRadius) {
+        newMarkers.add(Marker(
+          markerId: MarkerId("fs_${loc.id}"),
+          position: loc.position,
+          icon: loc.icon ?? BitmapDescriptor.defaultMarker,
+          infoWindow: InfoWindow(title: loc.title, snippet: loc.snippet),
+          onTap: () => _showLocationDetails(loc),
+        ));
+      }
     }
 
-    // Google Places lokasyonları (Duplicate kontrolü ile)
+    // Google Places lokasyonları
     for (var loc in _googleLocations) {
       bool isDuplicate = _firestoreLocations.any((f) {
         double dist = _calculateDistance(f.position, loc.position);
         return dist < 0.05; 
       });
 
-      if (!isDuplicate) {
+      bool isInRadius = true;
+      if (_userLocation != null && _currentFilter != 'all' && _showRadiusCircle) {
+        double distKm = _calculateDistance(_userLocation!, loc.position);
+        isInRadius = distKm <= _searchRadiusKm;
+      }
+
+      if (!isDuplicate && isInRadius) {
         newMarkers.add(Marker(
           markerId: MarkerId("g_${loc.id}"),
           position: loc.position,
@@ -401,7 +434,33 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
 
     setState(() {
       _markers = newMarkers;
+      _radiusCircles = newCircles;
     });
+    
+    // ✅ ZOOM OPTIMIZATION
+    if (_mapController != null && _showRadiusCircle && _userLocation != null) {
+      _optimizeZoomLevel();
+    }
+  }
+
+  // ✅ ZOOM SEVIYESINI OTOMATİK AYARLA
+  void _optimizeZoomLevel() {
+    if (_mapController == null || _markers.isEmpty) return;
+    double baseZoom = 15.0;
+    if (_searchRadiusKm > 15) baseZoom = 12.0;
+    else if (_searchRadiusKm > 10) baseZoom = 13.0;
+    else if (_searchRadiusKm > 5) baseZoom = 14.0;
+    if (_markers.length > 20) baseZoom -= 1;
+    if (_markers.length > 40) baseZoom -= 1;
+    if (_markers.length > 60) baseZoom -= 2;
+    baseZoom = baseZoom.clamp(10.0, 18.0);
+    try {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(_userLocation!, baseZoom),
+      );
+    } catch (e) {
+      debugPrint("Zoom animation hatası: $e");
+    }
   }
 
   double _calculateDistance(LatLng p1, LatLng p2) {
@@ -926,8 +985,12 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     final isSelected = _currentFilter == key;
     return GestureDetector(
       onTap: () {
-        setState(() => _currentFilter = key);
-        _loadPlaces(); // Filtre değişince verileri yeniden yükle
+        setState(() {
+          _currentFilter = key;
+          _showRadiusCircle = (key != 'all');
+          _searchRadiusKm = 5.0;
+        });
+        _loadPlaces();
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
@@ -960,7 +1023,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
             onMapCreated: _onMapCreated,
             markers: _markers,
             polylines: _polylines,
-            // DÜZELTME: Kendi marker'ımızı kullandığımız için mavi noktayı kapattık.
+            circles: _radiusCircles,
             myLocationEnabled: false, 
             myLocationButtonEnabled: false, 
             zoomControlsEnabled: false,
@@ -1114,6 +1177,59 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
               ),
             ),
           ),
+
+          // ✅ YENİ: RADIUS KONTROL PANELİ
+          if (_showRadiusCircle && _userLocation != null)
+            Positioned(
+              left: 16,
+              top: 130,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${_searchRadiusKm.toStringAsFixed(1)} km',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FloatingActionButton.small(
+                          heroTag: 'radiusDown',
+                          backgroundColor: Colors.red.withOpacity(0.8),
+                          child: const Icon(Icons.remove, color: Colors.white, size: 18),
+                          onPressed: () {
+                            if (_searchRadiusKm > 1.0) {
+                              setState(() => _searchRadiusKm -= 1.0);
+                              _updateMarkers();
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        FloatingActionButton.small(
+                          heroTag: 'radiusUp',
+                          backgroundColor: Colors.green.withOpacity(0.8),
+                          child: const Icon(Icons.add, color: Colors.white, size: 18),
+                          onPressed: () {
+                            if (_searchRadiusKm < 25.0) {
+                              setState(() => _searchRadiusKm += 1.0);
+                              _updateMarkers();
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
           // 3. YÜKLENİYOR İNDİKATÖRÜ
           if (_isLoading)
