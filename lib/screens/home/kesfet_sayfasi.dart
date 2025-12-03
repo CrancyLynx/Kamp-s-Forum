@@ -14,6 +14,8 @@ import '../../services/exam_dates_service.dart';
 import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart'; 
 import '../event/etkinlik_detay_ekrani.dart';
+import '../chat/sohbet_listesi_ekrani.dart';
+import '../notification/bildirim_ekrani.dart';
 
 class KesfetSayfasi extends StatefulWidget {
   const KesfetSayfasi({super.key});
@@ -296,7 +298,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                                               const SnackBar(content: Text("Sohbeti görmek için giriş yapmalısınız.")),
                                             );
                                           } else {
-                                            // TODO: Navigate to chat
+                                            Navigator.push(context, MaterialPageRoute(builder: (context) => const SohbetListesiEkrani()));
                                           }
                                         },
                                         padding: const EdgeInsets.all(4),
@@ -329,7 +331,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                                               const SnackBar(content: Text("Bildirimleri görmek için giriş yapmalısınız.")),
                                             );
                                           } else {
-                                            // TODO: Navigate to notifications
+                                            Navigator.push(context, MaterialPageRoute(builder: (context) => const BildirimEkrani()));
                                           }
                                         },
                                         padding: const EdgeInsets.all(4),
