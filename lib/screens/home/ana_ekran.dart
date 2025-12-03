@@ -7,8 +7,6 @@ import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../forum/forum_sayfasi.dart';
 import 'kesfet_sayfasi.dart';
 import '../market/pazar_sayfasi.dart'; 
-import '../chat/sohbet_listesi_ekrani.dart'; 
-import '../notification/bildirim_ekrani.dart'; 
 import '../profile/profil_ekrani.dart'; 
 import '../../utils/maskot_helper.dart';
 import '../../utils/app_colors.dart';
@@ -132,14 +130,6 @@ class _AnaEkranState extends State<AnaEkran> {
     );
   }
 
-  void _handleGuestAction() {
-    if (widget.isGuest) {
-      widget.showLoginPrompt?.call();
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Bu özelliği kullanmak için giriş yapmalısınız.")));
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
 
@@ -183,7 +173,6 @@ class _AnaEkranState extends State<AnaEkran> {
 
 
     return Scaffold(
-      appBar: (_selectedIndex == 0) ? _buildKesfetAppBar(context) : null,
       floatingActionButton: widget.isGuest ? FloatingActionButton.extended(
               onPressed: widget.showLoginPrompt,
               label: const Text("Giriş Yap"),
@@ -209,124 +198,6 @@ class _AnaEkranState extends State<AnaEkran> {
         type: BottomNavigationBarType.fixed,
         items: navBarItems, // Değiştirilen kısım
       ),
-    );
-  }
-
-  AppBar _buildKesfetAppBar(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    Widget logo;
-
-    if (isDark) {
-      logo = ColorFiltered(
-                    colorFilter: const ColorFilter.matrix(<double>[
-                      0, 0, 0, 0, 255, // Red
-                      0, 0, 0, 0, 255, // Green
-                      0, 0, 0, 0, 255, // Blue
-                      0, 0, 0, 1, 0,   // Alpha
-                    ]),
-        child: Image.asset('assets/images/app_logo3.png', height: 40),
-                  );
-    } else {
-      logo = Image.asset('assets/images/app_icon2.png', height: 60);
-    }
-    return AppBar(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      elevation: 0,
-      title: Row(
-        children: [
-          logo,
-          const SizedBox(width: 8),
-          Text(
-            "Kampüs Forum", 
-            style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color, fontWeight: FontWeight.bold)
-          ),
-        ],
-      ),
-      actions: [
-        if (widget.isGuest) ...[
-          _AppBarIcon(icon: Icons.chat_bubble_outline_rounded, onPressed: _handleGuestAction),
-          _AppBarIcon(icon: Icons.notifications_none_rounded, onPressed: _handleGuestAction),
-        ] else
-          StreamBuilder<DocumentSnapshot>(
-            stream: FirebaseFirestore.instance.collection('kullanicilar').doc(_currentUserId).snapshots(),
-            builder: (context, snapshot) {
-              int unreadMsgCount = 0;
-              int unreadNotifCount = 0;
-
-              if (snapshot.hasData && snapshot.data?.exists == true) {
-                final data = snapshot.data!.data() as Map<String, dynamic>?;
-                unreadMsgCount = data?['totalUnreadMessages'] ?? 0;
-                unreadNotifCount = data?['unreadNotifications'] ?? 0;
-              }
-
-              return Row(
-                children: [
-                  _AppBarIcon(
-                    icon: Icons.chat_bubble_outline_rounded,
-                    badgeCount: unreadMsgCount,
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SohbetListesiEkrani())),
-                  ),
-                  _AppBarIcon(
-                    icon: Icons.notifications_none_rounded,
-                    hasNotificationDot: unreadNotifCount > 0,
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BildirimEkrani())),
-                  ),
-                ],
-              );
-            },
-          ),
-      ],
-    );
-  }
-}
-
-class _AppBarIcon extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onPressed;
-  final int badgeCount;
-  final bool hasNotificationDot;
-
-  const _AppBarIcon({
-    required this.icon,
-    required this.onPressed,
-    this.badgeCount = 0,
-    this.hasNotificationDot = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        IconButton(
-          icon: Icon(icon, color: Colors.grey),
-          onPressed: onPressed,
-        ),
-        if (badgeCount > 0)
-          Positioned(
-            right: 8,
-            top: 8,
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-              child: Text(
-                badgeCount > 9 ? '9+' : badgeCount.toString(),
-                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-        if (hasNotificationDot)
-          Positioned(
-            right: 12,
-            top: 12,
-            child: Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-            ),
-          ),
-      ],
     );
   }
 }

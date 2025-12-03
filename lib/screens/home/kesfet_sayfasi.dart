@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -135,6 +136,30 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
     });
   }
 
+  Future<List<Map<String, dynamic>>> _fetchExamDates() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('sinavlar')
+          .orderBy('date', descending: false)
+          .get();
+      
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'id': doc.id,
+          'name': data['name'] ?? 'Sınav',
+          'date': (data['date'] as Timestamp?)?.toDate(),
+          'description': data['description'] ?? '',
+          'color': data['color'] ?? 'orange',
+          'type': data['type'] ?? 'exam',
+        };
+      }).toList();
+    } catch (e) {
+      debugPrint('Sınav tarihleri çekilemedi: $e');
+      return [];
+    }
+  }
+
   String _getSmartFallbackImage(String title) {
     return "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=600&q=80"; 
   }
@@ -179,17 +204,162 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () async => _loadData(),
-          color: AppColors.primary,
-          child: CustomScrollView(
-            slivers: [
-              // ARAMA BARI
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: GestureDetector(
+        child: Column(
+          children: [
+            // ✅ PanelHeader + Arama Barı Birleşik
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppColors.primary.withOpacity(0.1),
+                    AppColors.primary.withOpacity(0.05),
+                  ],
+                ),
+                border: Border(
+                  bottom: BorderSide(
+                    color: isDark 
+                      ? Colors.white.withOpacity(0.05)
+                      : Colors.black.withOpacity(0.05),
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: Column(
+                children: [
+                  // Başlık Satırı
+                  Row(
+                    children: [
+                      // İkon container
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.explore_rounded,
+                          color: AppColors.primary,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Başlık
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              'Kampüsü Keşfet',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Haberler, etkinlikler ve daha fazlası',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Chat + Bildirim Butonları
+                      StreamBuilder<DocumentSnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('kullanicilar')
+                            .doc(FirebaseAuth.instance.currentUser?.uid ?? '')
+                            .snapshots(),
+                        builder: (context, snapshot) {
+                          int unreadMsgCount = 0;
+                          int unreadNotifCount = 0;
+
+                          if (snapshot.hasData && snapshot.data?.exists == true) {
+                            final data = snapshot.data!.data() as Map<String, dynamic>?;
+                            unreadMsgCount = data?['totalUnreadMessages'] ?? 0;
+                            unreadNotifCount = data?['unreadNotifications'] ?? 0;
+                          }
+
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Stack(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.chat_bubble_outline_rounded, size: 20),
+                                    onPressed: () {
+                                      if (FirebaseAuth.instance.currentUser == null) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text("Sohbeti görmek için giriş yapmalısınız.")),
+                                        );
+                                      } else {
+                                        // TODO: Navigate to chat
+                                      }
+                                    },
+                                    padding: const EdgeInsets.all(4),
+                                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                  ),
+                                  if (unreadMsgCount > 0)
+                                    Positioned(
+                                      right: 8,
+                                      top: 8,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(2),
+                                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                        constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                                        child: Text(
+                                          unreadMsgCount > 9 ? '9+' : unreadMsgCount.toString(),
+                                          style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              Stack(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.notifications_none_rounded, size: 20),
+                                    onPressed: () {
+                                      if (FirebaseAuth.instance.currentUser == null) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text("Bildirimleri görmek için giriş yapmalısınız.")),
+                                        );
+                                      } else {
+                                        // TODO: Navigate to notifications
+                                      }
+                                    },
+                                    padding: const EdgeInsets.all(4),
+                                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                  ),
+                                  if (unreadNotifCount > 0)
+                                    Positioned(
+                                      right: 12,
+                                      top: 12,
+                                      child: Container(
+                                        width: 6,
+                                        height: 6,
+                                        decoration: BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Arama Barı
+                  GestureDetector(
                     onTap: () {
                        showSearch(
                          context: context, 
@@ -197,19 +367,19 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                        );
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       decoration: BoxDecoration(
                         color: isDark ? Colors.grey[800] : Colors.grey[200],
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.search, color: Colors.grey[600]),
-                          const SizedBox(width: 10),
+                          Icon(Icons.search, color: Colors.grey[600], size: 20),
+                          const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               "Kullanıcı, Konu veya Mekan ara...", 
-                              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                              style: TextStyle(color: Colors.grey[600], fontSize: 13),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -217,28 +387,35 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
+            ),
 
+            // Ana içerik
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () async => _loadData(),
+                color: AppColors.primary,
+                child: CustomScrollView(
+                  slivers: [
               // HIZLI MENÜ (GÜNCELLENDİ: HARİTA EN BAŞA ALINDI)
               SliverToBoxAdapter(
                 child: SizedBox(
-                  height: 90,
+                  height: 80,
                   child: ListView(
                     scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
                     children: [
                       // HARİTA EN BAŞA GELDİ
                       _buildQuickAction(Icons.map, "Harita", Colors.green),
                       _buildQuickAction(Icons.restaurant, "Yemek", Colors.orange),
                       _buildQuickAction(Icons.directions_bus, "Durak", Colors.blue),
                       _buildQuickAction(Icons.local_library, "Kütüphane", Colors.brown),
+                      _buildQuickAction(Icons.calendar_today_rounded, "Takvim", Colors.purple),
                     ],
                   ),
                 ),
               ),
-
-              const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
               // HABERLER
               SliverToBoxAdapter(
@@ -369,8 +546,11 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
               ),
 
               const SliverToBoxAdapter(child: SizedBox(height: 80)),
-            ],
-          ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -492,15 +672,24 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
         if (label == 'Yemek') filter = 'yemek';
         if (label == 'Durak') filter = 'durak';
         if (label == 'Kütüphane') filter = 'kutuphane';
+        if (label == 'Takvim') {
+          _showCalendarPanel(context);
+          return;
+        }
         Navigator.push(context, MaterialPageRoute(builder: (context) => KampusHaritasiSayfasi(initialFilter: filter)));
       },
       child: Padding(
-        padding: const EdgeInsets.only(right: 20.0),
+        padding: const EdgeInsets.symmetric(horizontal: 6.0),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle), child: Icon(icon, color: color, size: 24)),
-            const SizedBox(height: 6),
-            Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(height: 5),
+            Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
@@ -984,6 +1173,408 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
         )
       )
     );
+  }
+}
+
+// TAKVIM PANELİ - Firestore'dan Sınav Tarihleri Çeker
+void _showCalendarPanel(BuildContext context) {
+  final state = _KesfetSayfasiState();
+  
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) => DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      builder: (_, controller) {
+        return FutureBuilder<List<Map<String, dynamic>>>(
+          future: state._fetchExamDates(),
+          builder: (context, snapshot) {
+            // Loading State
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
+
+            // Error State
+            if (snapshot.hasError) {
+              return Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: ListView(
+                  controller: controller,
+                  padding: const EdgeInsets.all(20),
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.calendar_today_rounded,
+                            color: Colors.purple,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Sınav Takvimi',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Sınav tarihleri yüklenemedi. Lütfen daha sonra deneyiniz.',
+                              style: TextStyle(color: Colors.red[700]),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            // Data Loaded
+            final exams = snapshot.data ?? [];
+            final now = DateTime.now();
+            
+            // Empty State
+            if (exams.isEmpty) {
+              return Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: ListView(
+                  controller: controller,
+                  padding: const EdgeInsets.all(20),
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.calendar_today_rounded,
+                            color: Colors.purple,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Sınav Takvimi',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    Center(
+                      child: Column(
+                        children: [
+                          Icon(Icons.event_busy, size: 60, color: Colors.grey[400]),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Henüz sınav takvimi eklenmemiştir',
+                            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+        
+            return Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: ListView(
+                controller: controller,
+                padding: const EdgeInsets.all(20),
+                children: [
+                  // Başlık
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.calendar_today_rounded,
+                          color: Colors.purple,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Sınav Takvimi',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  
+                  // Sınav Kartları (Firestore'dan)
+                  ...exams.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final exam = entry.value;
+                    final examDate = exam['date'] as DateTime?;
+                    
+                    if (examDate == null) {
+                      return const SizedBox.shrink();
+                    }
+                    
+                    final daysDiff = examDate.difference(now).inDays;
+                    final formattedDate = _formatExamDate(examDate);
+                    final colorStr = exam['color'] as String? ?? 'orange';
+                    final examColor = _getColorByName(colorStr);
+                    
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              examColor.withOpacity(0.15),
+                              examColor.withOpacity(0.05)
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: examColor.withOpacity(0.3),
+                            width: 1
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: examColor,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    Icons.school,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    exam['name'] ?? 'Sınav ${index + 1}',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              formattedDate,
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 13,
+                              ),
+                            ),
+                            if (exam['description'] != null &&
+                                (exam['description'] as String).isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: Text(
+                                  exam['description'] ?? '',
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        '$daysDiff',
+                                        style: TextStyle(
+                                          fontSize: 28,
+                                          fontWeight: FontWeight.bold,
+                                          color: daysDiff > 0
+                                              ? examColor
+                                              : Colors.red,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        'GÜN',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (daysDiff < 1)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: const Text(
+                                      'Sınav Yapılıyor',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Bilgi
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.grey[700], size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Sınav tarihleri Firestore\'dan otomatik yüklenmektedir.',
+                            style: TextStyle(
+                              color: Colors.grey[700],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    ),
+  );
+}
+
+String _formatExamDate(DateTime date) {
+  const months = ["", "Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
+  return "${date.day} ${months[date.month]} ${date.year}";
+}
+
+Color _getColorByName(String colorName) {
+  switch (colorName.toLowerCase()) {
+    case 'orange':
+      return Colors.orange;
+    case 'blue':
+      return Colors.blue;
+    case 'green':
+      return Colors.green;
+    case 'red':
+      return Colors.red;
+    case 'purple':
+      return Colors.purple;
+    case 'teal':
+      return Colors.teal;
+    case 'amber':
+      return Colors.amber;
+    case 'indigo':
+      return Colors.indigo;
+    default:
+      return Colors.orange;
   }
 }
 
