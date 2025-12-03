@@ -10,6 +10,7 @@ import '../map/kampus_haritasi_sayfasi.dart';
 
 import '../forum/gonderi_detay_ekrani.dart';
 import '../../services/news_service.dart';
+import '../../services/exam_dates_service.dart';
 import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart'; 
 import '../event/etkinlik_detay_ekrani.dart';
@@ -137,27 +138,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
   }
 
   Future<List<Map<String, dynamic>>> _fetchExamDates() async {
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('sinavlar')
-          .orderBy('date', descending: false)
-          .get();
-      
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        return {
-          'id': doc.id,
-          'name': data['name'] ?? 'Sınav',
-          'date': (data['date'] as Timestamp?)?.toDate(),
-          'description': data['description'] ?? '',
-          'color': data['color'] ?? 'orange',
-          'type': data['type'] ?? 'exam',
-        };
-      }).toList();
-    } catch (e) {
-      debugPrint('Sınav tarihleri çekilemedi: $e');
-      return [];
-    }
+    return ExamDatesService().fetchNationalExamDates();
   }
 
   String _getSmartFallbackImage(String title) {

@@ -418,3 +418,196 @@ exports.recalculateUserCounters = functions.region(REGION).https.onCall(async (d
     message: `Sayaçlar güncellendi. Bildirim: ${unreadNotifCount}, Mesaj: ${totalUnreadMsg}` 
   };
 });
+
+/**
+ * =================================================================================
+ * 7. ULUSAL SINAV TARİHLERİNİ OTOMATIK GÜNCELLE
+ * =================================================================================
+ */
+
+// Ülke geneli resmi sınav tarihlerinin veritabanı (2025-2026)
+const getOfficialExamDates = () => {
+  return [
+    {
+      id: 'kpss_2025',
+      name: 'KPSS 2025',
+      date: new Date(2025, 4, 18), // 18 Mayıs 2025
+      description: 'Kamu Personeli Seçme Sınavı - Yazılı Sınav',
+      color: 'orange',
+      type: 'exam',
+      source: 'OSYM',
+      importance: 'high'
+    },
+    {
+      id: 'yks_2025',
+      name: 'YKS 2025',
+      date: new Date(2025, 5, 15), // 15 Haziran 2025
+      description: 'Yükseköğretim Kurumları Sınavı',
+      color: 'blue',
+      type: 'exam',
+      source: 'OSYM',
+      importance: 'high'
+    },
+    {
+      id: 'dus_2025',
+      name: 'DÜŞ 2025',
+      date: new Date(2025, 8, 22), // 22 Eylül 2025
+      description: 'Diş Hekimliği Uzmanlaşma Sınavı',
+      color: 'red',
+      type: 'exam',
+      source: 'OSYM',
+      importance: 'medium'
+    },
+    {
+      id: 'tus_2025',
+      name: 'TUS 2025',
+      date: new Date(2025, 3, 27), // 27 Nisan 2025
+      description: 'Tıp Uzmanlaşma Sınavı',
+      color: 'green',
+      type: 'exam',
+      source: 'OSYM',
+      importance: 'high'
+    },
+    {
+      id: 'ales_2025_1',
+      name: 'ALES 2025 (Bahar)',
+      date: new Date(2025, 4, 11), // 11 Mayıs 2025
+      description: 'Akademik Personel ve Lisansüstü Eğitim Giriş Sınavı - 1. Oturum',
+      color: 'purple',
+      type: 'exam',
+      source: 'OSYM',
+      importance: 'medium'
+    },
+    {
+      id: 'ales_2025_2',
+      name: 'ALES 2025 (Güz)',
+      date: new Date(2025, 8, 14), // 14 Eylül 2025
+      description: 'Akademik Personel ve Lisansüstü Eğitim Giriş Sınavı - 2. Oturum',
+      color: 'purple',
+      type: 'exam',
+      source: 'OSYM',
+      importance: 'medium'
+    },
+    {
+      id: 'oabt_2025',
+      name: 'ÖABT 2025',
+      date: new Date(2025, 6, 20), // 20 Temmuz 2025
+      description: 'Öğretmenlik Alan Bilgisi Testi',
+      color: 'teal',
+      type: 'exam',
+      source: 'OSYM',
+      importance: 'high'
+    },
+    {
+      id: 'kamu_personeli_yazili',
+      name: 'Yazılı Sınavlar (Kamu Personeli)',
+      date: new Date(2025, 10, 9), // 9 Kasım 2025
+      description: 'Kamu kurumları yazılı sınav takvimi',
+      color: 'amber',
+      type: 'exam',
+      source: 'DPB',
+      importance: 'medium'
+    },
+    {
+      id: 'kpss_2026',
+      name: 'KPSS 2026',
+      date: new Date(2026, 4, 17), // 17 Mayıs 2026
+      description: 'Kamu Personeli Seçme Sınavı - Yazılı Sınav',
+      color: 'orange',
+      type: 'exam',
+      source: 'OSYM',
+      importance: 'high'
+    }
+  ];
+};
+
+// HTTP isteği ile sınav tarihlerini güncelle (manuel tetikleme)
+exports.updateExamDates = functions.region(REGION).https.onCall(
+  async (data, context) => {
+    try {
+      const examDates = getOfficialExamDates();
+      const batch = db.batch();
+      let updateCount = 0;
+
+      for (const exam of examDates) {
+        const docRef = db.collection('sinavlar').doc(exam.id);
+        batch.set(docRef, {
+          ...exam,
+          date: admin.firestore.Timestamp.fromDate(exam.date),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          source: exam.source || 'OSYM'
+        }, { merge: true });
+        updateCount++;
+      }
+
+      await batch.commit();
+
+      return {
+        success: true,
+        message: `${updateCount} sınav tarihi başarıyla güncellendi`,
+        count: updateCount,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Sınav tarihleri güncelleme hatası:', error);
+      throw new functions.https.HttpsError(
+        'internal',
+        'Sınav tarihleri güncellenemedi: ' + error.message
+      );
+    }
+  }
+);
+
+// Firestore Trigger: Her gün saat 00:00'da otomatik kontrol et
+exports.scheduleExamDatesUpdate = functions.region(REGION)
+  .pubsub.schedule('0 0 * * *') // Her gün saat 00:00
+  .timeZone('Europe/Istanbul')
+  .onRun(async (context) => {
+    try {
+      const examDates = getOfficialExamDates();
+      const batch = db.batch();
+      let updateCount = 0;
+      const now = new Date();
+
+      for (const exam of examDates) {
+        // Geçmiş sınavları silme (1 haftadan daha eski)
+        const examDate = exam.date;
+        const daysDiff = (examDate - now) / (1000 * 60 * 60 * 24);
+
+        const docRef = db.collection('sinavlar').doc(exam.id);
+
+        if (daysDiff < -7) {
+          // Geçmiş sınavları sil
+          batch.delete(docRef);
+          console.log(`[DELETE] ${exam.name} silindi (${daysDiff.toFixed(0)} gün önce)`);
+        } else {
+          // Mevcut sınavları güncelle veya ekle
+          batch.set(docRef, {
+            ...exam,
+            date: admin.firestore.Timestamp.fromDate(exam.date),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            source: exam.source || 'OSYM'
+          }, { merge: true });
+          updateCount++;
+        }
+      }
+
+      await batch.commit();
+
+      console.log(`[SUCCESS] Sınav takvimi otomatik güncelleme tamamlandı. ${updateCount} sınav aktif.`);
+
+      return {
+        success: true,
+        message: 'Sınav takvimi başarıyla güncellendi',
+        updatedCount: updateCount,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('[ERROR] Sınav tarihleri otomatik güncelleme hatası:', error);
+      return {
+        success: false,
+        error: error.message,
+        timestamp: new Date().toISOString()
+      };
+    }
+  });

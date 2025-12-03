@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import '../../main.dart';
+import '../../services/exam_dates_service.dart';
 import '../../utils/app_colors.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -65,6 +66,9 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   }
 
   void _startSequentialAnimation() {
+    // Arka planda sınav tarihlerini güncelle
+    _initializeExamDates();
+
     _scaleController.forward().then((_) {
       _slideController.forward();
       // 2.5 saniye sonra sayfayı değiştir
@@ -72,6 +76,20 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
         _navigateToHome();
       });
     });
+  }
+
+  /// Sınav tarihlerini arka planda güncelle
+  Future<void> _initializeExamDates() async {
+    try {
+      final result = await ExamDatesService().triggerExamDatesUpdate();
+      if (result['success'] == true) {
+        debugPrint('✅ Sınav tarihleri güncellendi: ${result['count']} sınav');
+      } else {
+        debugPrint('⚠️ Sınav tarihleri güncellenemedi: ${result['error']}');
+      }
+    } catch (e) {
+      debugPrint('❌ Sınav tarihleri başlatma hatası: $e');
+    }
   }
 
   void _navigateToHome() {
