@@ -290,15 +290,17 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                     final data = filteredUsers[index].data() as Map<String, dynamic>;
                     final uid = filteredUsers[index].id;
                     return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         leading: CircleAvatar(
                           backgroundImage: (data['avatarUrl'] != null && data['avatarUrl'].toString().isNotEmpty)
                               ? CachedNetworkImageProvider(data['avatarUrl']) : null,
                           backgroundColor: AppColors.primaryLight,
-                          child: data['avatarUrl'] == null ? const Icon(Icons.person) : null,
+                          child: data['avatarUrl'] == null ? const Icon(Icons.person, color: AppColors.primary) : null,
                         ),
                         title: Text(data['takmaAd'] ?? 'İsimsiz', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(data['email'] ?? ''),
+                        subtitle: Text(data['email'] ?? '', style: const TextStyle(fontSize: 12)),
                         trailing: IconButton(
                           icon: const Icon(Icons.send, color: AppColors.primary),
                           onPressed: () async {

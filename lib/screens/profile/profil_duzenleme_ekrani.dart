@@ -14,6 +14,7 @@ import '../../widgets/app_header.dart';
 import '../auth/giris_ekrani.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../services/auth_service.dart';
+import '../../services/university_service.dart';
 import '../../utils/maskot_helper.dart';
 import '../../services/image_compression_service.dart';
 import '../../services/image_cache_manager.dart';
@@ -859,135 +860,143 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   }
 
   void _showChangeRequestDialog() {
-    final uniController = TextEditingController(text: _university);
-    final deptController = TextEditingController(text: _department);
-    final reasonController = TextEditingController();
+    String? selectedUniversity = _university;
+    String? selectedDepartment = _department;
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Bilgi Değişikliği Talebi"),
         content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                "Üniversite veya bölüm bilgilerinizde bir hata varsa, düzeltilmesi için talep gönderebilirsiniz.",
-                style: TextStyle(fontSize: 13, color: Colors.grey),
-              ),
-              const SizedBox(height: 15),
-              TextField(
-                controller: uniController,
-                readOnly: true,
-                decoration: const InputDecoration(
-                  labelText: "Mevcut Üniversite",
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.account_balance),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: deptController,
-                readOnly: true,
-                decoration: const InputDecoration(
-                  labelText: "Mevcut Bölüm",
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.book),
-                ),
-              ),
-              const SizedBox(height: 15),
-              const Divider(),
-              const SizedBox(height: 10),
-              TextField(
-                controller: reasonController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: "Doğru Bilgiler (lütfen detaylı yazın)",
-                  border: OutlineInputBorder(),
-                  hintText: "Örn: Üniversite adı... Bölüm adı...",
-                  prefixIcon: Icon(Icons.edit),
-                ),
-              ),
-            ],
+          child: StatefulBuilder(
+            builder: (context, setDialogState) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "Üniversite veya bölüm bilgilerinizde bir hata varsa, düzeltilmesi için talep gönderebilirsiniz.",
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 15),
+                  // Mevcut bilgi gösterimi
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Mevcut Bilgi", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+                        const SizedBox(height: 8),
+                        Text(_university ?? '-', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text(_department ?? '-', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  const Divider(),
+                  const SizedBox(height: 15),
+                  // Yeni üniversite seçimi
+                  Container(
+                    decoration: BoxDecoration(border: Border.all(color: Colors.grey[300]!), borderRadius: BorderRadius.circular(8)),
+                    child: ListTile(
+                      title: Text(selectedUniversity ?? 'Üniversite Seç', style: TextStyle(color: selectedUniversity == null ? Colors.grey : Colors.black)),
+                      trailing: const Icon(Icons.school, color: AppColors.primary),
+                      onTap: () async {
+                        final selected = await _showSelectionPanel(
+                          context: context,
+                          title: "Doğru Üniversitesini Seç",
+                          options: UniversityService().getUniversityNames(),
+                        );
+                        if (selected != null) {
+                          setDialogState(() {
+                            selectedUniversity = selected;
+                            selectedDepartment = null; // Bölüm'ü sıfırla
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Yeni bölüm seçimi
+                  Container(
+                    decoration: BoxDecoration(border: Border.all(color: Colors.grey[300]!), borderRadius: BorderRadius.circular(8)),
+                    child: ListTile(
+                      title: Text(selectedDepartment ?? 'Bölüm Seç', style: TextStyle(color: selectedDepartment == null ? Colors.grey : Colors.black)),
+                      trailing: const Icon(Icons.book, color: AppColors.primary),
+                      onTap: selectedUniversity == null ? null : () async {
+                        final selected = await _showSelectionPanel(
+                          context: context,
+                          title: "Doğru Bölümünü Seç",
+                          options: UniversityService().getDepartmentsForUniversity(selectedUniversity!),
+                        );
+                        if (selected != null) {
+                          setDialogState(() => selectedDepartment = selected);
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () {
-              uniController.dispose();
-              deptController.dispose();
-              reasonController.dispose();
-              Navigator.pop(ctx);
-            },
+            onPressed: () => Navigator.pop(ctx),
             child: const Text("İptal"),
           ),
           ElevatedButton(
             onPressed: () {
-              final reason = reasonController.text.trim();
-              
-              // Validasyon
-              if (reason.isEmpty) {
+              if (selectedUniversity == null || selectedDepartment == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text("Lütfen doğru bilgiyi yazın."),
+                    content: Text("Lütfen üniversite ve bölüm seçiniz."),
                     backgroundColor: Colors.orange,
                   ),
                 );
                 return;
               }
 
-              if (reason.length < 10) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Lütfen yeterli detay sağlayın (en az 10 karakter)."),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
-                return;
-              }
-
-              // Firestore'a talep kaydet
-              _submitChangeRequest(reason);
-              
-              uniController.dispose();
-              deptController.dispose();
-              reasonController.dispose();
+              _submitChangeRequest("$selectedUniversity / $selectedDepartment");
               Navigator.pop(ctx);
-              
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("Talebiniz yöneticiye iletildi. Teşekkürler!"),
-                  backgroundColor: Colors.green,
-                  duration: Duration(seconds: 2),
-                ),
-              );
             },
-            child: const Text("Talep Gönder"),
-          ),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            child: const Text("Talep Gönder", style: TextStyle(color: Colors.white)),
+          )
         ],
       ),
     );
   }
 
-  /// Değişiklik talebini Firestore'a kaydeder
   Future<void> _submitChangeRequest(String reason) async {
     try {
-      final userId = FirebaseAuth.instance.currentUser?.uid;
-      if (userId == null) return;
-
-      await FirebaseFirestore.instance.collection('university_change_requests').add({
-        'userId': userId,
+      await FirebaseFirestore.instance.collection('degisiklik_istekleri').add({
+        'userId': _userId,
+        'userName': _adSoyadController.text,
+        'type': 'university_change',
         'currentUniversity': _university,
         'currentDepartment': _department,
-        'requestedInfo': reason,
+        'newUniversity': reason.split(' / ')[0],
+        'newDepartment': reason.split(' / ')[1],
+        'timestamp': FieldValue.serverTimestamp(),
         'status': 'pending',
-        'createdAt': FieldValue.serverTimestamp(),
       });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Talep başarıyla gönderildi. Yöneticiler 24-48 saat içinde inceleyecektir."),
+          backgroundColor: AppColors.success,
+        ),
+      );
     } catch (e) {
-      if (kDebugMode) print('Talep gönderme hatası: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Hata: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
-
   // --- UI WIDGETLARI (GÜNCELLENMİŞ - TEMA UYUMLU) ---
   Widget _buildSectionTitle(String title, IconData icon) {
     return Padding(
@@ -1193,6 +1202,88 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
           ),
         ),
       ),
+    );
+  }
+
+  // Üniversite/Bölüm seçim paneli (Giriş ekranı gibi)
+  Future<String?> _showSelectionPanel({
+    required BuildContext context,
+    required String title,
+    required List<String> options,
+  }) async {
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        String searchQuery = '';
+        
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filteredOptions = options
+                .where((option) => option.toLowerCase().contains(searchQuery.toLowerCase()))
+                .toList();
+
+            return DraggableScrollableSheet(
+              initialChildSize: 0.9,
+              minChildSize: 0.5,
+              maxChildSize: 1.0,
+              builder: (_, scrollController) {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                  padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 12),
+                      Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[400], borderRadius: BorderRadius.circular(2))),
+                      
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      ),
+
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                        child: TextField(
+                          onChanged: (value) => setModalState(() => searchQuery = value),
+                          decoration: const InputDecoration(
+                            hintText: "Ara...",
+                            prefixIcon: Icon(Icons.search),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          ),
+                        ),
+                      ),
+                      
+                      const Divider(height: 1),
+                      
+                      Expanded(
+                        child: ListView.separated(
+                          controller: scrollController,
+                          itemCount: filteredOptions.length,
+                          separatorBuilder: (context, index) => const Divider(height: 1, indent: 16, endIndent: 16),
+                          itemBuilder: (context, index) {
+                            final option = filteredOptions[index];
+                            return ListTile(
+                              title: Text(option),
+                              onTap: () => Navigator.pop(context, option),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 }

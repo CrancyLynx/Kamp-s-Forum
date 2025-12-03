@@ -98,12 +98,19 @@ class UrunDetayEkrani extends StatelessWidget {
               final currentUser = FirebaseAuth.instance.currentUser;
 
               try {
+                // Kullanıcı adını al
+                String reporterName = 'Kullanıcı';
+                if (currentUser != null) {
+                  final userDoc = await FirebaseFirestore.instance.collection('kullanicilar').doc(currentUser.uid).get();
+                  reporterName = userDoc.data()?['takmaAd'] ?? currentUser.displayName ?? 'Kullanıcı';
+                }
+
                 await FirebaseFirestore.instance.collection('sikayetler').add({
                   'reporterId': currentUser?.uid,
-                  'reporterName': currentUser?.displayName ?? 'Kullanıcı',
+                  'reporterName': reporterName,
                   'targetId': productId,
                   'targetType': 'product',
-                  'targetTitle': productData['title'], // Ürün başlığı
+                  'targetTitle': productData['title'],
                   'targetOwnerId': productData['sellerId'],
                   'reason': reason,
                   'timestamp': FieldValue.serverTimestamp(),
