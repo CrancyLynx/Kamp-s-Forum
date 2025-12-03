@@ -189,7 +189,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
       body: SafeArea(
         child: Column(
           children: [
-            // ✅ PanelHeader + Arama Barı Birleşik (Sadece Bottom Fade)
+            // ✅ PanelHeader + Arama Barı Birleşik (Renkli Gradient + Bottom Fade)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
@@ -198,7 +198,22 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  // Bottom fade gradient (keskin çizgi yerine yumuşak geçiş)
+                  // Background gradient (renkli arka tasarım)
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            AppColors.primary.withOpacity(0.08),
+                            AppColors.primary.withOpacity(0.02),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Bottom fade gradient (aşağıya doğru yok olan)
                   Positioned(
                     bottom: -20,
                     left: -16,
@@ -210,7 +225,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Theme.of(context).scaffoldBackgroundColor.withOpacity(1.0),
+                            Theme.of(context).scaffoldBackgroundColor.withOpacity(0.3),
                             Theme.of(context).scaffoldBackgroundColor.withOpacity(0),
                           ],
                         ),

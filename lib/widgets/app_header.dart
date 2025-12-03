@@ -179,7 +179,22 @@ class PanelHeader extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // Bottom fade gradient (yumuşak geçiş)
+          // Background gradient (renkli arka tasarım)
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    accentColor.withOpacity(0.08),
+                    accentColor.withOpacity(0.02),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Bottom fade gradient (aşağıya doğru yok olan)
           Positioned(
             bottom: -20,
             left: -16,
@@ -191,7 +206,7 @@ class PanelHeader extends StatelessWidget {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    bgColor.withOpacity(1.0),
+                    bgColor.withOpacity(0.3),
                     bgColor.withOpacity(0),
                   ],
                 ),
