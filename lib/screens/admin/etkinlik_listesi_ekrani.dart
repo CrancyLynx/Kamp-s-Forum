@@ -15,11 +15,21 @@ class EtkinlikListesiEkrani extends StatefulWidget {
 }
 
 class _EtkinlikListesiEkraniState extends State<EtkinlikListesiEkrani> {
-  // En yeni etkinlikleri en üstte göster (Orijinal sıralama korundu)
-  final Stream<QuerySnapshot> _eventsStream = FirebaseFirestore.instance
-      .collection('etkinlikler')
-      .orderBy('date', descending: true)
-      .snapshots();
+  late Stream<QuerySnapshot> _eventsStream;
+  final Set<String> _deletingEvents = {}; // Silme işlemindeki etkinlikleri takip et
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeStream();
+  }
+
+  void _initializeStream() {
+    _eventsStream = FirebaseFirestore.instance
+        .collection('etkinlikler')
+        .orderBy('date', descending: true)
+        .snapshots();
+  }
 
   Future<void> _deleteEvent(String eventId) async {
     final bool? confirm = await showDialog(
@@ -42,16 +52,49 @@ class _EtkinlikListesiEkraniState extends State<EtkinlikListesiEkrani> {
 
     if (confirm == true) {
       try {
+        // UI'ı hemen güncelle (optimistik update)
+        setState(() {
+          _deletingEvents.add(eventId);
+        });
+
+        // Firestore'dan sil
         await FirebaseFirestore.instance.collection('etkinlikler').doc(eventId).delete();
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Etkinlik başarıyla silindi."), backgroundColor: AppColors.success),
+            const SnackBar(
+              content: Text("Etkinlik başarıyla silindi."),
+              backgroundColor: AppColors.success,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } on FirebaseException catch (e) {
+        setState(() {
+          _deletingEvents.remove(eventId);
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Hata oluştu: ${e.message ?? 'Bilinmeyen hata'}"),
+              backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 3),
+            ),
           );
         }
       } catch (e) {
+        setState(() {
+          _deletingEvents.remove(eventId);
+        });
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Hata oluştu: $e"), backgroundColor: AppColors.error),
+            SnackBar(
+              content: Text("Beklenmeyen hata: $e"),
+              backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 3),
+            ),
           );
         }
       }
@@ -80,29 +123,72 @@ class _EtkinlikListesiEkraniState extends State<EtkinlikListesiEkrani> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.transparent, // Arka plan NestedScrollView'dan gelir
+      backgroundColor: Colors.transparent,
       body: StreamBuilder<QuerySnapshot>(
         stream: _eventsStream,
         builder: (BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
+          // Hata durumu
           if (snapshot.hasError) {
-            return const Center(child: Text('Bir şeyler ters gitti.'));
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red, size: 60),
+                    const SizedBox(height: 16),
+                    const Text("Etkinlikler yüklenemedi", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text("${snapshot.error}", textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: () => setState(() => _initializeStream()),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text("Tekrar Dene"),
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
 
+          // Yükleniyor
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
+          // Boş liste
           if (snapshot.data!.docs.isEmpty) {
-            return const Center(
-              child: Text("Henüz etkinlik eklenmemiş.", style: TextStyle(color: Colors.grey)),
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.event_note, size: 80, color: Colors.grey[300]),
+                    const SizedBox(height: 16),
+                    Text("Henüz etkinlik eklenmemiş", 
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey[600])),
+                    const SizedBox(height: 8),
+                    Text("Yeni etkinlik eklemek için + butonunu kullan", 
+                      style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+                  ],
+                ),
+              ),
             );
           }
 
+          // Etkinlik Listesi
           return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 80), // FAB boşluğu
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
             itemCount: snapshot.data!.docs.length,
             itemBuilder: (context, index) {
-               return _buildEventCard(snapshot.data!.docs[index]);
+              final eventDoc = snapshot.data!.docs[index];
+              // Silme işlemindeyse kartı gizle
+              if (_deletingEvents.contains(eventDoc.id)) {
+                return const SizedBox.shrink();
+              }
+              return _buildEventCard(eventDoc);
             },
           );
         },
@@ -150,10 +236,19 @@ class _EtkinlikListesiEkraniState extends State<EtkinlikListesiEkrani> {
                         ? CachedNetworkImage(
                             imageUrl: data['imageUrl'],
                             fit: BoxFit.cover,
-                            placeholder: (context, url) => Container(color: Colors.grey[200]),
-                            errorWidget: (context, url, error) => Container(color: Colors.grey[200], child: const Icon(Icons.broken_image, color: Colors.grey)),
+                            placeholder: (context, url) => Container(
+                              color: Colors.grey[200],
+                              child: const Center(child: CircularProgressIndicator()),
+                            ),
+                            errorWidget: (context, url, error) => Container(
+                              color: Colors.grey[200],
+                              child: const Icon(Icons.broken_image, color: Colors.grey, size: 40),
+                            ),
                           )
-                        : Container(color: AppColors.primaryLight, child: const Icon(Icons.event_note, size: 50, color: AppColors.primary)),
+                        : Container(
+                            color: AppColors.primaryLight,
+                            child: const Icon(Icons.event_note, size: 50, color: AppColors.primary),
+                          ),
                   ),
                 ),
                 if(isPast)

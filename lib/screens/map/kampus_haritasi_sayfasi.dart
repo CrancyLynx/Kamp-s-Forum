@@ -1,20 +1,25 @@
 import 'dart:async';
 import 'dart:math' show cos, sqrt, atan2, pi, sin;
 import 'dart:ui' as ui;
+import 'dart:io' show Platform; // Platform kontrolü için eklendi
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:timeago/timeago.dart' as timeago;
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 // Servis ve Yardımcılar
 import '../../services/map_data_service.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/maskot_helper.dart';
+
+// YENİ: Ring Seferleri Paneli Importu
+import '../../widgets/map/ring_seferleri_sheet.dart';
 
 class KampusHaritasiSayfasi extends StatefulWidget {
   final String initialFilter;
@@ -47,7 +52,14 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   BitmapDescriptor? _iconUser;
   bool _isLoading = false;
   bool _isRouteActive = false;
-  bool _isMapCreated = false;
+
+  
+  // ✅ YENİ: Error state tracking
+  String? _locationError;
+  bool _permissionDenied = false;
+  
+  // Kullanıcı Üniversitesi (Ring sistemi için)
+  String? _userUniversity;
 
   // Veri Havuzları
   List<LocationModel> _firestoreLocations = [];
@@ -57,6 +69,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   final TextEditingController _searchController = TextEditingController();
   List<Map<String, dynamic>> _searchResults = [];
   Timer? _debounce;
+  DateTime? _lastApiCall; // ✅ Rate limiting
 
   // Global Key'ler (Tutorial için)
   final GlobalKey _searchBarKey = GlobalKey();
@@ -90,6 +103,30 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     super.initState();
     _currentFilter = widget.initialFilter;
     _initializeMapSequence();
+    _fetchUserUniversity(); // Üniversite bilgisini çek
+  }
+
+  // Kullanıcının kayıtlı üniversitesini öğren
+  Future<void> _fetchUserUniversity() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('kullanicilar').doc(user.uid).get();
+        if (doc.exists && mounted) {
+          final data = doc.data();
+          // submissionData içinden veya ana profilden üniversite adını al
+          String? uniName = data?['universite'];
+          if (uniName == null && data?['submissionData'] != null) {
+             uniName = data?['submissionData']['university'];
+          }
+          setState(() {
+            _userUniversity = uniName;
+          });
+        }
+      } catch (e) {
+        debugPrint("Üniversite bilgisi alınamadı: $e");
+      }
+    }
   }
 
   @override
@@ -102,24 +139,13 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     super.dispose();
   }
 
-  /// Harita Başlatma Sırası: İkonlar -> Konum -> Veriler -> Tutorial
   Future<void> _initializeMapSequence() async {
     setState(() => _isLoading = true);
-
     try {
-      // 1. İkonları hazırla
       await _prepareCustomMarkers();
-
-      // 2. Konumu al ve dinlemeye başla
       await _initializeLocationStream();
-
-      // 3. Mekanları yükle (Konum alındıktan sonra)
       await _loadPlaces();
-
-      // 4. Tutorial göster (UI çizildikten sonra)
-      if (mounted) {
-        _showTutorial();
-      }
+      if (mounted) _showTutorial();
     } catch (e) {
       debugPrint("Harita başlatma hatası: $e");
     } finally {
@@ -130,9 +156,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   // --- 1. Marker İkonlarını Oluşturma ---
   Future<void> _prepareCustomMarkers() async {
     try {
-      // YENİ: Kullanıcı ikonu
       _iconUser = await _createMarkerBitmap(Icons.person_pin, AppColors.primary);
-
       final iconUni = await _createMarkerBitmap(Icons.school, Colors.redAccent);
       final iconYemek = await _createMarkerBitmap(Icons.restaurant, Colors.orangeAccent);
       final iconDurak = await _createMarkerBitmap(Icons.directions_bus, Colors.blueAccent);
@@ -146,21 +170,18 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       );
     } catch (e) {
       debugPrint("İkon oluşturma hatası: $e");
-      // Hata olsa bile devam et, varsayılan ikonlar kullanılır.
     }
   }
 
   Future<BitmapDescriptor> _createMarkerBitmap(IconData icon, Color color) async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
-    const size = Size(120, 120); // Boyut biraz artırıldı netlik için
+    const size = Size(120, 120);
 
     final Paint paint = Paint()..color = color;
     final Paint shadowPaint = Paint()..color = Colors.black26..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
 
-    // Gölge
     canvas.drawCircle(Offset(size.width / 2, size.height / 2 + 4), size.width / 2 - 4, shadowPaint);
-    // Ana Daire
     canvas.drawCircle(Offset(size.width / 2, size.height / 2), size.width / 2 - 4, paint);
 
     final TextPainter textPainter = TextPainter(textDirection: TextDirection.ltr);
@@ -176,82 +197,154 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     return BitmapDescriptor.fromBytes(data!.buffer.asUint8List());
   }
 
-  // --- 2. Kullanıcı Konumu ---
+  // --- 2. Kullanıcı Konumu (DÜZELTİLEN KISIM) ---
   Future<void> _initializeLocationStream() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) return;
+      if (!serviceEnabled) {
+        if (mounted) {
+          setState(() => _locationError = "Konum servisleri kapalı. Lütfen açınız.");
+        }
+        return;
+      }
 
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) return;
-      }
-      if (permission == LocationPermission.deniedForever) return;
-
-      // İlk konumu hızlıca al
-      Position initialPos = await Geolocator.getCurrentPosition();
-      if (mounted) {
-        setState(() {
-          _userLocation = LatLng(initialPos.latitude, initialPos.longitude);
-        });
-        if (widget.initialFocus == null && _mapController != null) {
-          _mapController?.animateCamera(CameraUpdate.newLatLngZoom(_userLocation!, 15));
+        if (permission == LocationPermission.denied) {
+          if (mounted) {
+            setState(() {
+              _permissionDenied = true;
+              _locationError = "Konum izni reddedildi.";
+            });
+          }
+          return;
         }
       }
-
-      // Konum değişikliklerini dinle
-      _locationSubscription = Geolocator.getPositionStream().listen((Position pos) {
+      
+      if (permission == LocationPermission.deniedForever) {
         if (mounted) {
           setState(() {
-            _userLocation = LatLng(pos.latitude, pos.longitude);
-            _updateMarkers(); // Konum değiştikçe marker'ı güncelle
+            _permissionDenied = true;
+            _locationError = "Konum izni kalıcı olarak reddedildi. Ayarlardan açınız.";
           });
         }
-      });
+        return;
+      }
+
+      // Platforma özel LocationSettings
+      LocationSettings locationSettings;
+      try {
+        if (Platform.isAndroid) {
+          locationSettings = AndroidSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 10,
+            forceLocationManager: true,
+            intervalDuration: const Duration(seconds: 10),
+          );
+        } else if (Platform.isIOS) {
+          locationSettings = AppleSettings(
+            accuracy: LocationAccuracy.high,
+            activityType: ActivityType.fitness,
+            distanceFilter: 10,
+            pauseLocationUpdatesAutomatically: true,
+          );
+        } else {
+          locationSettings = const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 10,
+          );
+        }
+      } catch (e) {
+        // LocationSettings başarısız olursa fallback
+        debugPrint("LocationSettings hatası: $e");
+        locationSettings = const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 10,
+        );
+      }
+
+      // İlk konum al
+      try {
+        Position initialPos = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 10),
+        );
+        
+        if (mounted) {
+          setState(() {
+            _userLocation = LatLng(initialPos.latitude, initialPos.longitude);
+            _locationError = null; // Hata temizle
+          });
+          
+          if (widget.initialFocus == null && _mapController != null) {
+            _mapController?.animateCamera(
+              CameraUpdate.newLatLngZoom(_userLocation!, 15),
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint("İlk konum alınamadı: $e");
+        // Hata olsa da stream'i başlat
+      }
+
+      // Stream dinleme
+      _locationSubscription = Geolocator.getPositionStream(
+        locationSettings: locationSettings,
+      ).listen(
+        (Position pos) {
+          if (mounted) {
+            setState(() {
+              _userLocation = LatLng(pos.latitude, pos.longitude);
+              _updateMarkers();
+            });
+          }
+        },
+        onError: (e) {
+          debugPrint("Location stream hatası: $e");
+          if (mounted) {
+            setState(() => _locationError = "Konum alma hatası");
+          }
+        },
+      );
 
     } catch (e) {
-      debugPrint("Konum alma hatası: $e");
+      debugPrint("Konum sistemi hatası: $e");
+      if (mounted) {
+        setState(() => _locationError = "Konum servisi başlatılamadı");
+      }
     }
   }
 
   // --- 3. Mekanları Getirme (Firestore + Google Places) ---
   Future<void> _loadPlaces() async {
     if (!mounted) return;
-    
-    // Eski aboneliği temizle
     await _firestoreSubscription?.cancel();
-
-    // Merkez belirle (Kullanıcı konumu yoksa varsayılan İstanbul)
     final center = _userLocation ?? widget.initialFocus ?? const LatLng(41.0082, 28.9784);
 
-    // A. Firestore'u Dinle
     _firestoreSubscription = _mapDataService.getLocationsStream(_currentFilter).listen((firestorePlaces) {
       if (mounted) {
         _firestoreLocations = firestorePlaces;
-        _updateMarkers(); // Firestore her güncellendiğinde markerları yenile
+        _updateMarkers(); 
       }
     });
 
-    // B. Google Places API Çek
     try {
       final googlePlaces = await _mapDataService.searchNearbyPlaces(center: center, typeFilter: _currentFilter);
       if (mounted) {
         _googleLocations = googlePlaces;
-        _updateMarkers(); // Google verisi gelince markerları yenile
+        _updateMarkers(); 
       }
     } catch (e) {
       debugPrint("Google Places Hatası: $e");
     }
   }
 
-  // --- Markerları Birleştirme ve Güncelleme ---
+  // --- Markerları Birleştirme ---
   void _updateMarkers() {
     if (!mounted) return;
-
     Set<Marker> newMarkers = {};
 
-    // 1. Kullanıcı Konumu
     if (_userLocation != null) {
       newMarkers.add(
         Marker(
@@ -264,13 +357,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       );
     }
 
-    // 2. Arama Sonucu Markeri (Varsa)
-    // Eğer arama yapılmış ve bir sonuç seçilmişse, o marker `_markers` setinde `s_` prefixi ile duruyordur.
-    // Onu korumak için mevcut setten `s_` ile başlayanları alıp ekleyebiliriz veya 
-    // `_onSearchResultSelected` içinde listeye ekleyip burada tekrar oluşturabiliriz.
-    // Basitlik için burada sıfırdan oluşturuyoruz, arama sonucu logic'i aşağıda ayrıca ekleniyor.
-
-    // 3. Firestore Mekanları (Öncelikli)
     for (var loc in _firestoreLocations) {
       newMarkers.add(Marker(
         markerId: MarkerId("fs_${loc.id}"),
@@ -281,13 +367,10 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       ));
     }
 
-    // 4. Google Places Mekanları (Çakışma Kontrolü ile)
     for (var loc in _googleLocations) {
-      // Eğer aynı konumda veya çok yakınında Firestore verisi varsa, Google verisini ekleme (Firestore öncelikli)
       bool isDuplicate = _firestoreLocations.any((f) {
-        // İsim benzerliği veya mesafe kontrolü
         double dist = _calculateDistance(f.position, loc.position);
-        return dist < 0.05; // 50 metreye kadar yakınsa aynı say
+        return dist < 0.05; 
       });
 
       if (!isDuplicate) {
@@ -301,7 +384,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       }
     }
 
-    // 5. Arama Sonucu Markeri (Eğer varsa ve _markers içinde s_ ile başlıyorsa koru)
     final searchMarkers = _markers.where((m) => m.markerId.value.startsWith("s_"));
     newMarkers.addAll(searchMarkers);
 
@@ -310,9 +392,8 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     });
   }
 
-  // --- Yardımcı Fonksiyonlar ---
   double _calculateDistance(LatLng p1, LatLng p2) {
-    const R = 6371.0; // Dünya yarıçapı (km)
+    const R = 6371.0; 
     double degToRad(double deg) => deg * (pi / 180);
     double lat1Rad = degToRad(p1.latitude);
     double lon1Rad = degToRad(p1.longitude);
@@ -327,26 +408,17 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
 
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
-    _isMapCreated = true;
-    
-    // Tema kontrolü
     if (Theme.of(context).brightness == Brightness.dark) {
-      try {
-        controller.setMapStyle(_darkMapStyle);
-      } catch (e) {
-        debugPrint("Map stili yüklenemedi: $e");
-      }
+      try { controller.setMapStyle(_darkMapStyle); } catch (_) {}
     }
-
     if (widget.initialFocus != null) {
       controller.animateCamera(CameraUpdate.newLatLngZoom(widget.initialFocus!, 16));
     }
   }
 
-  // --- Arama İşlemleri ---
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-
+    
     if (query.isEmpty) {
       if (mounted) {
         setState(() {
@@ -357,63 +429,105 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       return;
     }
 
-    _debounce = Timer(const Duration(milliseconds: 500), () async {
-      final results = await _mapDataService.getPlacePredictions(query, _userLocation);
-      if (mounted) setState(() => _searchResults = results);
+    // ✅ Rate limiting: API'yi en fazla 5 saniyede bir çağır
+    final now = DateTime.now();
+    if (_lastApiCall != null && now.difference(_lastApiCall!).inSeconds < 5) {
+      return;
+    }
+
+    _debounce = Timer(const Duration(milliseconds: 800), () async {
+      setState(() => _lastApiCall = DateTime.now());
+      
+      try {
+        final results = await _mapDataService.getPlacePredictions(query, _userLocation);
+        if (mounted) {
+          setState(() => _searchResults = results);
+        }
+      } catch (e) {
+        debugPrint("Arama hatası: $e");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Arama yapılamadı")),
+          );
+        }
+      }
     });
   }
 
   Future<void> _onSearchResultSelected(String placeId) async {
     FocusScope.of(context).unfocus();
-    setState(() {
-      _searchResults = [];
-      _isLoading = true; // Yükleniyor göstergesi
+    setState(() { 
+      _searchResults = []; 
+      _isLoading = true;
+      _isRouteActive = false; // ✅ Rota temizle
     });
     _searchController.clear();
 
-    final location = await _mapDataService.getPlaceDetails(placeId);
-    
-    if (location != null && mounted) {
-      setState(() {
-        _isLoading = false;
-        // Önceki arama marker'larını temizle
-        _markers.removeWhere((m) => m.markerId.value.startsWith("s_"));
-        // Arama sonucunu marker olarak ekle (Diğerlerinden ayırt etmek için s_ prefixi)
-        _markers.add(Marker(
-          markerId: MarkerId("s_${location.id}"),
-          position: location.position,
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueMagenta),
-          infoWindow: InfoWindow(title: location.title),
-          onTap: () => _showLocationDetails(location),
-        ));
-      });
-
-      if (_mapController != null) {
-        _mapController?.animateCamera(CameraUpdate.newLatLngZoom(location.position, 17));
-        _showLocationDetails(location);
+    try {
+      final location = await _mapDataService.getPlaceDetails(placeId);
+      
+      if (location != null && mounted) {
+        setState(() {
+          _isLoading = false;
+          _markers.removeWhere((m) => m.markerId.value.startsWith("s_"));
+          _markers.add(Marker(
+            markerId: MarkerId("s_${location.id}"),
+            position: location.position,
+            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueMagenta),
+            infoWindow: InfoWindow(title: location.title),
+            onTap: () => _showLocationDetails(location),
+          ));
+        });
+        
+        if (_mapController != null) {
+          _mapController?.animateCamera(CameraUpdate.newLatLngZoom(location.position, 17));
+          await Future.delayed(const Duration(milliseconds: 300)); // ✅ Animation bitmesini bekle
+          if (mounted) {
+            _showLocationDetails(location);
+          }
+        }
+      } else {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Konum detayları alınamadı.")),
+          );
+        }
       }
-    } else {
+    } catch (e) {
+      debugPrint("Mekan detayı hatası: $e");
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Konum detayları alınamadı.")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Hata: $e")),
+        );
       }
     }
   }
 
-  // --- Rota Çizme ---
   Future<void> _drawRoute(LatLng destination) async {
     if (_userLocation == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Konumunuz alınamadı.")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Konumunuz alınamadı.")),
+      );
       return;
     }
     
-    Navigator.pop(context); // BottomSheet'i kapat
+    Navigator.pop(context); 
     setState(() => _isLoading = true);
-
+    
     try {
       final points = await _mapDataService.getRouteCoordinates(_userLocation!, destination);
       
-      if (points.isNotEmpty && mounted) {
+      if (points.isEmpty && mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Rota bulunamadı.")),
+        );
+        return;
+      }
+      
+      if (mounted) {
         setState(() {
           _polylines = {
             Polyline(
@@ -427,18 +541,28 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
             )
           };
           _isRouteActive = true;
+          _isLoading = false;
         });
-
-        // Rotayı ekrana sığdır
-        LatLngBounds bounds = _boundsFromLatLngList(points);
-        _mapController?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
-      } else {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Rota bulunamadı.")));
+        
+        if (_mapController != null) {
+          try {
+            LatLngBounds bounds = _boundsFromLatLngList(points);
+            _mapController?.animateCamera(
+              CameraUpdate.newLatLngBounds(bounds, 50),
+            );
+          } catch (e) {
+            debugPrint("Rota animation hatası: $e");
+          }
+        }
       }
     } catch (e) {
-      debugPrint("Rota hatası: $e");
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      debugPrint("Rota çizme hatası: $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Rota hatası: $e")),
+        );
+      }
     }
   }
 
@@ -456,6 +580,21 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       }
     }
     return LatLngBounds(northeast: LatLng(x1!, y1!), southwest: LatLng(x0!, y0!));
+  }
+
+  // --- YENİ: Ring Seferleri Paneli ---
+  void _showRingSchedule() {
+    if (_userUniversity == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profilinizde üniversite bilgisi bulunamadı.")));
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true, 
+      backgroundColor: Colors.transparent,
+      builder: (context) => RingSeferleriSheet(universityName: _userUniversity!), // Parametre gönderiliyor
+    );
   }
 
   // --- Yorum/Puanlama Ekranları ---
@@ -510,7 +649,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Yorum boş bırakılamaz.")));
                       return;
                     }
-                    Navigator.pop(context); // Dialogu kapat
+                    Navigator.pop(context); 
                     
                     final error = await _mapDataService.addReview(location.id, rating, comment);
                     if (!mounted) return;
@@ -539,7 +678,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     if (_userLocation != null) {
       double km = _calculateDistance(_userLocation!, location.position);
       distanceText = "${km.toStringAsFixed(2)} km";
-      int mins = (km / 4.5 * 60).round(); // Ortalama 4.5 km/sa yürüme hızı
+      int mins = (km / 4.5 * 60).round(); 
       timeText = "~$mins dk";
     }
 
@@ -809,11 +948,69 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
             onMapCreated: _onMapCreated,
             markers: _markers,
             polylines: _polylines,
-            myLocationEnabled: true,
-            myLocationButtonEnabled: false, // Kendi butonumuzu kullanıyoruz
+            // DÜZELTME: Kendi marker'ımızı kullandığımız için mavi noktayı kapattık.
+            myLocationEnabled: false, 
+            myLocationButtonEnabled: false, 
             zoomControlsEnabled: false,
             mapToolbarEnabled: false,
           ),
+
+          // ✅ YENİ: Konum izni hata durumu gösterimi
+          if (_permissionDenied)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                color: Colors.red.withOpacity(0.9),
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                child: SafeArea(
+                  bottom: false,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.location_off, color: Colors.white, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              "Konum İzni Gerekli",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            if (_locationError != null)
+                              Text(
+                                _locationError!,
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () => Geolocator.openLocationSettings(),
+                        icon: const Icon(Icons.settings, size: 16),
+                        label: const Text("Aç"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.red,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
 
           // 2. ARAMA VE FİLTRE BAR (SafeArea içinde)
           SafeArea(
@@ -926,12 +1123,23 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
               ),
             ),
 
-          // 4. ALT AKSİYON BUTONLARI (Konum & Rota)
+          // 4. ALT AKSİYON BUTONLARI (Konum & Rota & Ring)
           Positioned(
             bottom: 30, right: 20,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                // YENİ: Ring Seferleri Butonu
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: FloatingActionButton.small(
+                    heroTag: 'ringSchedule',
+                    backgroundColor: Colors.amber[700],
+                    child: const Icon(Icons.directions_bus, color: Colors.white),
+                    onPressed: _showRingSchedule, // Yeni fonksiyon
+                  ),
+                ),
+
                 if (_isRouteActive)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),

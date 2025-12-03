@@ -1,6 +1,8 @@
-// ÖNEMLİ: BU DOSYAYI GİT'E (VERSİYON KONTROLÜNE) EKLEMEYİN!
-// Bu dosyanın yolu, projenizin ana dizinindeki .gitignore dosyasına eklenmelidir.
-// Örnek: /lib/api_keys.dart
-// API anahtarlarınızı buraya ekleyin.
-const String newsApiKey = '24c2d8102991418e86bbd10b8cf27de2'; // Örnek: '24c2d8102991418e86bbd10b8cf27de2'
-const String googleMapsApiKey = 'AIzaSyCmNLUGOhCdcMp6duqTInPvsavG6dntxa8'; // Örnek: 'AIzaSyCmNLUGOhCdcMp6duqTInPvsavG6dntxa8'
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+// BU DOSYAYI GİT'E EKLEYEBİLİRSİNİZ, ÇÜNKÜ ARTIK ŞİFRE İÇERMİYOR.
+// Anahtarlar .env dosyasından çekiliyor.
+
+// Getter kullanarak uygulama çalıştığında güncel değerin çekilmesini sağlıyoruz.
+String get newsApiKey => dotenv.env['NEWS_API_KEY'] ?? '';
+String get googleMapsApiKey => dotenv.env['GOOGLE_MAPS_API_KEY'] ?? '';

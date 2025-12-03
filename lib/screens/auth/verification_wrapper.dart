@@ -84,8 +84,19 @@ class _VerificationWrapperState extends State<VerificationWrapper> {
 
   Future<void> sendSmsCode() async {
     var phone = _phoneController.text.trim();
-    if (phone.isEmpty || phone.length < 10) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Geçerli bir telefon numarası girin (+90...)")));
+    
+    // ✅ Telefon validasyonu
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Telefon numarası boş olamaz.")),
+      );
+      return;
+    }
+    
+    if (phone.length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Lütfen geçerli bir telefon numarası girin (+90...)")),
+      );
       return;
     }
     
@@ -126,7 +137,21 @@ class _VerificationWrapperState extends State<VerificationWrapper> {
 
   Future<void> verifySmsCode() async {
     final code = _smsCodeController.text.trim();
-    if (code.length < 6 || _verificationId == null) return;
+    
+    // ✅ Code validasyonu
+    if (code.isEmpty || code.length != 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("SMS kodunu tam olarak girin (6 hane).")),
+      );
+      return;
+    }
+    
+    if (_verificationId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Doğrulama ID'si kayboldu. Lütfen tekrar başlayın.")),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
     try {
@@ -135,9 +160,22 @@ class _VerificationWrapperState extends State<VerificationWrapper> {
         smsCode: code,
       );
       await linkPhoneCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      setState(() => _isLoading = false);
+      String errorMsg = "Hatalı kod.";
+      if (e.code == 'invalid-verification-code') {
+        errorMsg = "SMS kodu yanlış. Lütfen kontrol edin.";
+      } else if (e.code == 'session-expired') {
+        errorMsg = "Doğrulama süresi doldu. Lütfen yeniden başlayın.";
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMsg)),
+      );
     } catch (e) {
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Hatalı kod veya işlem başarısız.")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Hata: $e")),
+      );
     }
   }
 

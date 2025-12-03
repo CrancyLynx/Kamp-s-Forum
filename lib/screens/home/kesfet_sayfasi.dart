@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:kampus_yardim_app/screens/search/arama_sayfasi.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -12,8 +11,7 @@ import '../forum/gonderi_detay_ekrani.dart';
 import '../../services/news_service.dart';
 import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart'; 
-import '../event/etkinlik_detay_ekrani.dart'; 
-import '../../services/image_cache_manager.dart'; // YENİ: Merkezi önbellek yöneticisi
+import '../event/etkinlik_detay_ekrani.dart';
 
 class KesfetSayfasi extends StatefulWidget {
   const KesfetSayfasi({super.key});
@@ -60,11 +58,27 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
 
   void _loadData() {
     setState(() {
-      _newsFuture = NewsService().fetchTopHeadlines(category: _selectedNewsCategory);
-      _forumPostsFuture = _fetchPopularForumPosts();
+      _newsFuture = NewsService()
+          .fetchTopHeadlines(category: _selectedNewsCategory)
+          .onError((error, stackTrace) {
+            debugPrint("Haberler yükleme hatası: $error");
+            return [];
+          });
+      
+      _forumPostsFuture = _fetchPopularForumPosts()
+          .onError((error, stackTrace) {
+            debugPrint("Forum yükleme hatası: $error");
+            return [];
+          });
+      
       _topPostersFuture = _fetchTopUsers(sortBy: 'postCount');
       _mostLikedFuture = _fetchTopUsers(sortBy: 'likeCount');
-      _eventsFuture = _fetchUpcomingEvents(); 
+      
+      _eventsFuture = _fetchUpcomingEvents()
+          .onError((error, stackTrace) {
+            debugPrint("Etkinlikler yükleme hatası: $error");
+            return [];
+          });
     });
   }
 
@@ -105,7 +119,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
           .limit(5)
           .get();
       return querySnapshot.docs.where((doc) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
         return data[sortBy] is int && data[sortBy] > 0;
       }).toList();
     } catch (e) {
@@ -314,9 +328,27 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                           FutureBuilder<List<DocumentSnapshot>>(
                             future: _forumPostsFuture,
                             builder: (context, snapshot) {
+                              // ✅ Hata durumu
+                              if (snapshot.hasError) {
+                                return Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(24.0),
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.error_outline, color: Colors.red, size: 40),
+                                        const SizedBox(height: 8),
+                                        const Text("Forum yüklenemedi"),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }
+
                               if (!snapshot.hasData || snapshot.data!.isEmpty) {
                                 return const Center(child: Text("Henüz popüler tartışma yok."));
                               }
+
                               return ListView.builder(
                                 physics: const NeverScrollableScrollPhysics(), 
                                 itemCount: snapshot.data!.length,
@@ -348,13 +380,49 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
     return FutureBuilder<List<DocumentSnapshot>>(
       future: _eventsFuture,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+        // ✅ Hata durumu
+        if (snapshot.hasError) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Container(
+              height: 160,
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.red.withOpacity(0.3)),
+              ),
+              child: Center(
+                child: Text(
+                  "Etkinlikler yüklenemedi",
+                  style: TextStyle(color: Colors.red[700]),
+                ),
+              ),
+            ),
+          );
         }
+
+        // Loading
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Container(
+              height: 160,
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Text("Şu anda yaklaşan etkinlik bulunmamaktadır.", style: TextStyle(color: Colors.grey[600])),
+            child: Text(
+              "Şu anda yaklaşan etkinlik bulunmamaktadır.",
+              style: TextStyle(color: Colors.grey[600]),
+            ),
           );
         }
 
@@ -370,8 +438,10 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
               final eventDoc = events[index];
               final data = eventDoc.data() as Map<String, dynamic>;
               
-              final DateTime eventDate = (data['date'] as Timestamp).toDate();
-              final String dateString = "${_formatEventDate(eventDate)} - ${data['location'] ?? 'Kampüs Alanı'}";
+              final DateTime? eventDateTime = (data['date'] as Timestamp?)?.toDate();
+              if (eventDateTime == null) return const SizedBox.shrink();
+              
+              final String dateString = "${_formatEventDate(eventDateTime)} - ${data['location'] ?? 'Kampüs Alanı'}";
                   
               return GestureDetector(
                 onTap: () {
@@ -441,7 +511,42 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
     return FutureBuilder<List<Article>>(
       future: _newsFuture,
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return Container(height: 180, margin: const EdgeInsets.symmetric(horizontal: 16), decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(16)));
+        // ✅ Hata durumu kontrol
+        if (snapshot.hasError) {
+          return Container(
+            height: 180,
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.red.withOpacity(0.3)),
+            ),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red, size: 40),
+                  const SizedBox(height: 8),
+                  Text("Haberler yüklenemedi", style: TextStyle(color: Colors.red[700])),
+                ],
+              ),
+            ),
+          );
+        }
+
+        // Loading state
+        if (!snapshot.hasData) {
+          return Container(
+            height: 180,
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Center(child: CircularProgressIndicator()),
+          );
+        }
+
         final articles = snapshot.data!;
         if (articles.isEmpty) return const SizedBox.shrink();
 
@@ -452,25 +557,84 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
             itemCount: articles.length,
             itemBuilder: (context, index) {
               final article = articles[index];
-              final img = (article.urlToImage != null && article.urlToImage!.isNotEmpty) ? article.urlToImage! : _getSmartFallbackImage(article.title);
+              final img = (article.urlToImage != null && article.urlToImage!.isNotEmpty) 
+                  ? article.urlToImage! 
+                  : _getSmartFallbackImage(article.title);
+              
               return GestureDetector(
                 onTap: () async { 
                   final url = Uri.parse(article.url);
-                  if(await canLaunchUrl(url)) { launchUrl(url, mode: LaunchMode.externalApplication); }
+                  if (await canLaunchUrl(url)) { 
+                    launchUrl(url, mode: LaunchMode.externalApplication); 
+                  }
                 },
                 child: Container(
                   margin: const EdgeInsets.only(right: 12),
                   child: Stack(                    
                     children: [
-                      Positioned.fill(child: ClipRRect(borderRadius: BorderRadius.circular(16), child: CachedNetworkImage(imageUrl: img, fit: BoxFit.cover, errorWidget: (_,__,___) => Container(color: Colors.grey)))),
-                      Positioned.fill(child: Container(decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black.withOpacity(0.8)], stops: const [0.5, 1.0])))),
+                      Positioned.fill(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: CachedNetworkImage(
+                            imageUrl: img,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => Container(
+                              color: Colors.grey[200],
+                              child: const Center(child: CircularProgressIndicator()),
+                            ),
+                            errorWidget: (_, __, ___) => Container(
+                              color: Colors.grey[300],
+                              child: const Icon(Icons.broken_image, color: Colors.grey),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Colors.transparent, Colors.black.withOpacity(0.8)],
+                              stops: const [0.5, 1.0],
+                            ),
+                          ),
+                        ),
+                      ),
                       Positioned(
                         bottom: 12, left: 12, right: 12, 
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(4)), child: Text(article.sourceName, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                article.sourceName,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
                             const SizedBox(height: 4),
-                            Text(article.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-                        ]),
+                            Text(
+                              article.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -484,12 +648,35 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
   }
 
   Widget _buildEventCard(String title, String date, String? imageUrl) {
-    return Container(width: 140, margin: const EdgeInsets.only(right: 12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          ClipRRect(borderRadius: BorderRadius.circular(12), child: CachedNetworkImage(imageUrl: imageUrl ?? '', height: 90, width: double.infinity, fit: BoxFit.cover, placeholder: (c, u) => Container(color: Colors.grey[300]), errorWidget: (c, u, e) => Container(color: Colors.grey[300]))),
+    return Container(
+      width: 140,
+      margin: const EdgeInsets.only(right: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: CachedNetworkImage(
+              imageUrl: imageUrl ?? '',
+              height: 90,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              placeholder: (c, u) => Container(
+                color: Colors.grey[300],
+                child: const Center(child: CircularProgressIndicator()),
+              ),
+              errorWidget: (c, u, e) => Container(
+                color: Colors.grey[300],
+                child: const Icon(Icons.broken_image, color: Colors.grey),
+              ),
+            ),
+          ),
           const SizedBox(height: 6),
           Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
           Text(date, style: const TextStyle(color: Colors.grey, fontSize: 10)),
-    ]));
+        ],
+      ),
+    );
   }
 
   Widget _buildForumTile(BuildContext context, DocumentSnapshot post, Map<String, dynamic> data, int rank) {
@@ -625,9 +812,9 @@ class KampusSearchDelegate extends SearchDelegate {
           children: [
             Icon(Icons.search, size: 64, color: Colors.grey[300]),
             const SizedBox(height: 16),
-            const Text("Kampüs genelinde arama yapın", style: TextStyle(color: Colors.grey)),
+            const Text("Kampüs genelinde arama yapın", style: TextStyle(color: Colors.grey, fontSize: 16, fontWeight: FontWeight.w500)),
             const SizedBox(height: 8),
-            const Text("Mekanlar, Kullanıcılar, Forum Konuları", style: TextStyle(color: Colors.grey, fontSize: 12)),
+            Text("Mekanlar, Kullanıcılar, Forum Konuları", style: TextStyle(color: Colors.grey[400], fontSize: 12)),
           ],
         ),
       );
@@ -653,14 +840,50 @@ class KampusSearchDelegate extends SearchDelegate {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
+
+        // ✅ Hata yönetimi
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red, size: 50),
+                  const SizedBox(height: 16),
+                  const Text("Arama sırasında hata oluştu"),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () => query = query,
+                    child: const Text("Tekrar Dene"),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
         
         final placeResults = snapshot.data != null ? snapshot.data![0] as List<Map<String, dynamic>> : <Map<String, dynamic>>[];
         final userResults = snapshot.data != null ? (snapshot.data![1] as QuerySnapshot).docs : <DocumentSnapshot>[];
         final topicResults = snapshot.data != null ? (snapshot.data![2] as QuerySnapshot).docs : <DocumentSnapshot>[];
 
-        if (placeResults.isEmpty && userResults.isEmpty && topicResults.isEmpty) {
-          return const Center(child: Text("Sonuç bulunamadı."));
-        }
+                    if (placeResults.isEmpty && userResults.isEmpty && topicResults.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24.0),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.search_off, size: 64, color: Colors.grey[300]),
+                              const SizedBox(height: 16),
+                              const Text("Sonuç bulunamadı", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 8),
+                              Text("'$query' için hiçbir sonuç yok", style: TextStyle(color: Colors.grey[600])),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
 
         return ListView(
           padding: const EdgeInsets.all(8),

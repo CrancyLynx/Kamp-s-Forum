@@ -267,10 +267,10 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
                           style: TextStyle(color: Colors.black87, fontSize: 14, fontFamily: 'Segoe UI'), 
                           children: [
                             TextSpan(
-                              text: "$senderName ",
+                              text: "${senderName.isNotEmpty ? senderName : 'Bir kullanıcı'} ",
                               style: const TextStyle(fontWeight: FontWeight.bold),
                             ),
-                            TextSpan(text: message.replaceAll(senderName, '')), 
+                            TextSpan(text: message), 
                           ],
                         ),
                       ),

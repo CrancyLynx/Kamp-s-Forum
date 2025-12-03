@@ -2,9 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:kampus_yardim_app/providers/blocked_users_provider.dart';
-import 'package:kampus_yardim_app/services/presence_service.dart';
-import 'package:kampus_yardim_app/services/push_notification_service.dart'; 
 import 'package:provider/provider.dart'; 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -14,15 +11,25 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:intl/intl.dart'; 
 import 'package:intl/date_symbol_data_local.dart'; 
 import 'package:timeago/timeago.dart' as timeago;
-// Native Splash Paketi Importu
+// Native Splash Paketi
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-import '../utils/app_colors.dart';
-import '../../services/auth_service.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-// Widgetlar
+// Service & Utils
+import 'services/auth_service.dart';
+import 'services/push_notification_service.dart'; 
+import 'services/presence_service.dart';
+import 'utils/app_colors.dart';
+import 'utils/app_theme.dart'; // Tema dosyanız
+
+// Providers
+import 'providers/blocked_users_provider.dart';
+import 'providers/gamification_provider.dart'; // YENİ EKLENDİ
+
+// Widgets
 import 'widgets/in_app_notification.dart'; 
 
-// Sayfalar
+// Screens
 import 'screens/home/ana_ekran.dart'; 
 import 'screens/auth/giris_ekrani.dart'; 
 import 'screens/auth/verification_wrapper.dart'; 
@@ -54,6 +61,13 @@ Future<void> main() async {
   // Native Splash ekranını koru
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
+  // Çevresel değişkenleri (.env) yükle
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    debugPrint("UYARI: .env dosyası bulunamadı veya yüklenemedi. API anahtarları çalışmayabilir.");
+  }
+
   await initializeDateFormatting('tr_TR', null);
   await Firebase.initializeApp();
   
@@ -77,6 +91,7 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider(create: (context) => ThemeProvider(initialThemeMode)),
         ChangeNotifierProvider(create: (context) => BlockedUsersProvider()),
+        ChangeNotifierProvider(create: (context) => GamificationProvider()), // YENİ EKLENDİ
       ],
       child: const BizimUygulama(),
     ),
@@ -92,19 +107,12 @@ class BizimUygulama extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Kampüs Forum',
       navigatorKey: navigatorKey,
+      
+      // Merkezi Tema Kullanımı
       themeMode: context.watch<ThemeProvider>().themeMode,
-      theme: ThemeData(
-        primarySwatch: Colors.deepPurple,
-        brightness: Brightness.light,
-        scaffoldBackgroundColor: Colors.grey[100],
-        useMaterial3: true,
-      ),
-      darkTheme: ThemeData(
-        primarySwatch: Colors.deepPurple,
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF121212),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.lightTheme, 
+      darkTheme: AppTheme.darkTheme,
+      
       home: const AppLogic(),
     );
   }
@@ -249,6 +257,7 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> with WidgetsBindingObserver
     PresenceService().configure();
     
     final blockedUsersProvider = Provider.of<BlockedUsersProvider>(context, listen: false);
+    final gamificationProvider = Provider.of<GamificationProvider>(context, listen: false); // YENİ EKLENDİ
 
     _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (!mounted) return;
@@ -256,6 +265,11 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> with WidgetsBindingObserver
         _currentUser = user;
         if (!_authInitialized) _authInitialized = true;
       });
+
+      if (user != null && !user.isAnonymous) {
+        // Kullanıcı giriş yaptığında Gamification dinlemeyi başlat
+        gamificationProvider.startListening(user.uid);
+      }
 
       if (user == null || user.isAnonymous) {
         blockedUsersProvider.startListening(null);
@@ -302,7 +316,6 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> with WidgetsBindingObserver
   }
 }
 
-// YENİ: Firestore Stream'ini koruyan ve rebuild sırasında sıfırlanmasını önleyen widget
 class _KullaniciVerisiYukleyici extends StatefulWidget {
   final User user;
   const _KullaniciVerisiYukleyici({required this.user});
@@ -320,7 +333,6 @@ class _KullaniciVerisiYukleyiciState extends State<_KullaniciVerisiYukleyici> {
     super.initState();
     _blockedUsersProvider = Provider.of<BlockedUsersProvider>(context, listen: false);
     _blockedUsersProvider.startListening(widget.user.uid);
-    // Stream'i sadece bir kez oluşturuyoruz. Tema değişse bile burası tekrar çalışmaz.
     _userStream = FirebaseFirestore.instance.collection('kullanicilar').doc(widget.user.uid).snapshots();
   }
 
@@ -329,6 +341,10 @@ class _KullaniciVerisiYukleyiciState extends State<_KullaniciVerisiYukleyici> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.user.uid != widget.user.uid) {
       _blockedUsersProvider.startListening(widget.user.uid);
+      
+      // Gamification için de güncelleme (opsiyonel, genelde AnaKontrolcu halleder)
+      Provider.of<GamificationProvider>(context, listen: false).startListening(widget.user.uid);
+
       _userStream = FirebaseFirestore.instance.collection('kullanicilar').doc(widget.user.uid).snapshots();
     }
   }

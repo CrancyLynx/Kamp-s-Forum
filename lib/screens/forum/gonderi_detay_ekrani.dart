@@ -183,6 +183,11 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
 
   Future<void> _sendLikeNotification() async {
     if (_currentUserId == widget.authorUserId) return;
+
+    // DÜZELTME: Bildirim göndermeden önce mevcut kullanıcının adını al.
+    final myDoc = await FirebaseFirestore.instance.collection('kullanicilar').doc(_currentUserId).get();
+    final myName = myDoc.data()?['takmaAd'] ?? 'Bir kullanıcı';
+
     // Bildirimleri birleştirmek için gönderi ID'si ve beğenen kullanıcı ID'si ile eşleşen bir bildirim arayalım.
     final notificationQuery = await FirebaseFirestore.instance
         .collection('bildirimler')
@@ -196,9 +201,9 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
       // Var olan bildirimi güncelle
       final docId = notificationQuery.docs.first.id;
       await FirebaseFirestore.instance.collection('bildirimler').doc(docId).update({
-        'senderId': _currentUserId, // Son beğenenin ID'si
-        'senderName': widget.userName, // Son beğenenin adı
-        'message': '${widget.userName} ve diğerleri gönderini beğendi.',
+        'senderId': _currentUserId,
+        'senderName': myName, // Düzeltilmiş kullanıcı adı
+        'message': 've diğerleri gönderini beğendi.',
         'isRead': false,
         'timestamp': FieldValue.serverTimestamp(),
       });
@@ -210,8 +215,8 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
         'postTitle': widget.baslik,
         'type': 'like',
         'senderId': _currentUserId,
-        'senderName': widget.userName,
-        'message': '${widget.userName} gönderini beğendi.',
+        'senderName': myName, // Düzeltilmiş kullanıcı adı
+        'message': 'gönderini beğendi.',
         'isRead': false,
         'timestamp': FieldValue.serverTimestamp(),
       });
@@ -325,11 +330,11 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
       if (_currentUserId != widget.authorUserId && !mentionedUserIds.contains(widget.authorUserId)) {
         await FirebaseFirestore.instance.collection('bildirimler').add({
           'userId': widget.authorUserId,
-          'senderId': _currentUserId, // EKLENDİ
+          'senderId': _currentUserId,
           'senderName': myName,
           'type': 'new_comment',
           'postId': widget.postId,
-          'message': '$myName gönderine yorum yaptı.',
+          'message': 'gönderine yorum yaptı.',
           'isRead': false,
           'timestamp': FieldValue.serverTimestamp(),
         });
@@ -415,7 +420,7 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
 
               try {
                 await FirebaseFirestore.instance.collection('sikayetler').add({
-                  'reporterId': _currentUserId,
+                  'reporterId': _currentUserId, // Mevcut kullanıcı ID'si
                   'reporterName': widget.userName, 
                   'targetId': isComment ? commentId : widget.postId,
                   'targetType': isComment ? 'comment' : 'post',

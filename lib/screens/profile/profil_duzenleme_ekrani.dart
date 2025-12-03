@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -56,12 +57,11 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   bool _isTwoFactorEnabled = false;
   bool _isLoading = false;
 
-  // --- YENİ EKLENEN DOĞRULAMA STATE'LERİ ---
+  // --- DOĞRULAMA STATE'LERİ ---
   bool _isEmailVerified = false;
   bool _isPhoneVerified = false;
   Timer? _cooldownTimer;
   int _cooldownSeconds = 0;
-  // -----------------------------------------
 
   final List<String> _presetAvatars = [
     'https://api.dicebear.com/7.x/pixel-art/png?seed=Leo',
@@ -113,40 +113,68 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   }
 
   Future<void> _loadUserData() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-    
-    // Auth verilerini tazeleyin
-    await user.reload();
-    final updatedUser = FirebaseAuth.instance.currentUser!;
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      
+      // Auth verilerini tazeleyin
+      await user.reload();
+      final updatedUser = FirebaseAuth.instance.currentUser;
+      if (updatedUser == null) return;
 
-    final userDoc = await FirebaseFirestore.instance.collection('kullanicilar').doc(_userId).get();
-    if (userDoc.exists && mounted) {
-      final data = userDoc.data()!;
-      setState(() {
-        _takmaAdController.text = data['takmaAd'] ?? '';
-        _originalTakmaAd = data['takmaAd'];
-        _adSoyadController.text = data['ad'] ?? '';
-        _biyografiController.text = data['biyografi'] ?? '';
-        _githubController.text = data['github'] ?? '';
-        _linkedinController.text = data['linkedin'] ?? '';
-        _instagramController.text = data['instagram'] ?? '';
-        _xPlatformController.text = data['x_platform'] ?? '';
-        _isTwoFactorEnabled = data['isTwoFactorEnabled'] ?? false;
-        
-        final submissionData = data['submissionData'] as Map<String, dynamic>?;
-        _university = submissionData?['university'];
-        _department = submissionData?['department'];
-        _currentAvatarUrl = data['avatarUrl'];
+      final userDoc = await FirebaseFirestore.instance.collection('kullanicilar').doc(_userId).get();
+      
+      if (!userDoc.exists) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Kullanıcı profili bulunamadı."),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
 
-        // Auth ve Firestore verilerini birleştir
-        _emailController.text = updatedUser.email ?? '';
-        _phoneController.text = data['phoneNumber'] ?? ''; 
+      if (mounted) {
+        final data = userDoc.data();
+        if (data != null) {
+          setState(() {
+            _takmaAdController.text = data['takmaAd'] ?? '';
+            _originalTakmaAd = data['takmaAd'];
+            _adSoyadController.text = data['ad'] ?? '';
+            _biyografiController.text = data['biyografi'] ?? '';
+            _githubController.text = data['github'] ?? '';
+            _linkedinController.text = data['linkedin'] ?? '';
+            _instagramController.text = data['instagram'] ?? '';
+            _xPlatformController.text = data['x_platform'] ?? '';
+            _isTwoFactorEnabled = data['isTwoFactorEnabled'] ?? false;
+            
+            final submissionData = data['submissionData'] as Map<String, dynamic>?;
+            _university = submissionData?['university'];
+            _department = submissionData?['department'];
+            _currentAvatarUrl = data['avatarUrl'];
 
-        // Doğrulama durumlarını ayarla
-        _isEmailVerified = updatedUser.emailVerified;
-        _isPhoneVerified = updatedUser.phoneNumber != null && updatedUser.phoneNumber!.isNotEmpty;
-      });
+            // Auth ve Firestore verilerini birleştir
+            _emailController.text = updatedUser.email ?? '';
+            _phoneController.text = data['phoneNumber'] ?? ''; 
+
+            // Doğrulama durumlarını ayarla
+            _isEmailVerified = updatedUser.emailVerified;
+            _isPhoneVerified = updatedUser.phoneNumber != null && updatedUser.phoneNumber!.isNotEmpty;
+          });
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('Profil yüklemesi hatası: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Profil yüklenemedi: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -277,7 +305,27 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
       final uploadTask = storageRef.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
       final snapshot = await uploadTask.whenComplete(() => {});
       return await snapshot.ref.getDownloadURL();
+    } on FirebaseException catch (e) {
+      if (kDebugMode) print('Firebase Storage Hatası: ${e.message}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Resim yüklenemedi: ${e.message}"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return null;
     } catch (e) {
+      if (kDebugMode) print('Resim yükleme hatası: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Resim yüklenemedi: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
       return null;
     }
   }
@@ -287,49 +335,138 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
-    final newTakmaAd = _takmaAdController.text.trim();
-    if (newTakmaAd != _originalTakmaAd) {
-      final query = await FirebaseFirestore.instance.collection('kullanicilar').where('takmaAd', isEqualTo: newTakmaAd).limit(1).get();
-      if (query.docs.isNotEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Bu takma ad kullanımda."), backgroundColor: AppColors.error));
-          setState(() => _isLoading = false);
-        }
+    try {
+      final newTakmaAd = _takmaAdController.text.trim();
+      
+      // ✅ Takma ad validasyonu
+      if (newTakmaAd.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Takma ad boş olamaz."), backgroundColor: Colors.red),
+        );
+        setState(() => _isLoading = false);
         return;
       }
-    }
 
-    String? newAvatarUrl;
-    if (_isAvatarRemoved) {
-      newAvatarUrl = '';
-    } else if (_selectedPresetAvatarUrl != null) {
-      newAvatarUrl = _selectedPresetAvatarUrl;
-    } else if (_avatarImageFile != null) {
-      newAvatarUrl = await _uploadImage(_avatarImageFile!, 'profil_resimleri/$_userId.jpg');
-    }
+      if (newTakmaAd.length < 3) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Takma ad en az 3 karakter olmalıdır."), backgroundColor: Colors.red),
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
 
-    final Map<String, dynamic> updateData = {
-      'ad': _adSoyadController.text.trim(),
-      'takmaAd': _takmaAdController.text.trim(),
-      'biyografi': _biyografiController.text.trim(),
-      'github': _githubController.text.trim(),
-      'linkedin': _linkedinController.text.trim(),
-      'instagram': _instagramController.text.trim(),
-      'x_platform': _xPlatformController.text.trim(),
-    };
+      if (newTakmaAd.length > 30) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Takma ad en fazla 30 karakter olabilir."), backgroundColor: Colors.red),
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
 
-    if (newAvatarUrl != null) updateData['avatarUrl'] = newAvatarUrl;
+      // ✅ Biyografi validasyonu
+      if (_biyografiController.text.length > 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Biyografi en fazla 200 karakter olabilir."), backgroundColor: Colors.red),
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
 
-    try {
+      // ✅ Takma ad benzersizliği kontrolü
+      if (newTakmaAd != _originalTakmaAd) {
+        final query = await FirebaseFirestore.instance
+            .collection('kullanicilar')
+            .where('takmaAd', isEqualTo: newTakmaAd)
+            .limit(1)
+            .get();
+        
+        if (query.docs.isNotEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Bu takma ad zaten kullanılıyor."), backgroundColor: AppColors.error),
+            );
+            setState(() => _isLoading = false);
+          }
+          return;
+        }
+      }
+
+      String? newAvatarUrl;
+      
+      // ✅ Avatar yükleme
+      if (_isAvatarRemoved) {
+        newAvatarUrl = '';
+      } else if (_selectedPresetAvatarUrl != null) {
+        newAvatarUrl = _selectedPresetAvatarUrl;
+      } else if (_avatarImageFile != null) {
+        newAvatarUrl = await _uploadImage(_avatarImageFile!, 'profil_resimleri/$_userId.jpg');
+        if (newAvatarUrl == null) {
+          setState(() => _isLoading = false);
+          return; // Yükleme başarısız, SnackBar zaten gösterildi
+        }
+      }
+
+      final Map<String, dynamic> updateData = {
+        'ad': _adSoyadController.text.trim(),
+        'takmaAd': newTakmaAd,
+        'biyografi': _biyografiController.text.trim(),
+        'github': _githubController.text.trim(),
+        'linkedin': _linkedinController.text.trim(),
+        'instagram': _instagramController.text.trim(),
+        'x_platform': _xPlatformController.text.trim(),
+      };
+
+      if (newAvatarUrl != null) {
+        updateData['avatarUrl'] = newAvatarUrl;
+      }
+
+      // ✅ Firestore güncelleme
       await FirebaseFirestore.instance.collection('kullanicilar').doc(_userId).update(updateData);
+      
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profil güncellendi!"), backgroundColor: AppColors.success));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Profil başarıyla güncellendi!"),
+            backgroundColor: AppColors.success,
+            duration: Duration(seconds: 2),
+          ),
+        );
         Navigator.pop(context);
       }
+    } on FirebaseException catch (e) {
+      if (kDebugMode) print('Firebase Firestore Hatası: ${e.message}');
+      
+      if (mounted) {
+        String errorMessage = "Profil güncellenemedi.";
+        if (e.code == 'permission-denied') {
+          errorMessage = "Bu işlemi yapmaya yetkiniz yok.";
+        } else if (e.code == 'not-found') {
+          errorMessage = "Profil bulunamadı.";
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Hata: $e"), backgroundColor: AppColors.error));
+      if (kDebugMode) print('Profil kaydetme hatası: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Hata: $e"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -338,6 +475,7 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
     final smsCodeController = TextEditingController();
     String? verificationId;
     int step = 1;
+    bool isDialogLoading = false;
 
     showDialog(
       context: context,
@@ -352,59 +490,178 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
                 if (step == 1) ...[
                   const Text("Yeni telefon numaranızı girin (Başında +90 ile)."),
                   const SizedBox(height: 10),
-                  TextField(controller: newPhoneController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: "Telefon", border: OutlineInputBorder())),
+                  TextField(
+                    controller: newPhoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: "Telefon",
+                      border: OutlineInputBorder(),
+                      hintText: "+90 5XX XXX XXXX",
+                    ),
+                  ),
                 ] else ...[
-                  const Text("SMS kodunu girin."),
+                  const Text("SMS kodunu girin (6 haneli)."),
                   const SizedBox(height: 10),
-                  TextField(controller: smsCodeController, keyboardType: TextInputType.number, maxLength: 6, decoration: const InputDecoration(labelText: "Kod", border: OutlineInputBorder())),
+                  TextField(
+                    controller: smsCodeController,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    decoration: const InputDecoration(
+                      labelText: "SMS Kodu",
+                      border: OutlineInputBorder(),
+                      hintText: "000000",
+                    ),
+                  ),
                 ],
               ],
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("İptal")),
+              TextButton(
+                onPressed: isDialogLoading ? null : () => Navigator.pop(ctx),
+                child: const Text("İptal"),
+              ),
               ElevatedButton(
-                onPressed: () async {
-                  if (step == 1) {
-                    final phone = newPhoneController.text.trim();
-                    if (phone.length < 10) return;
-                    setDialogState(() => _isLoading = true);
-                    await _authService.verifyPhone(
-                      phoneNumber: phone,
-                      onCodeSent: (verId) {
-                        setDialogState(() { verificationId = verId; step = 2; _isLoading = false; });
-                      },
-                      onError: (msg) {
-                        setDialogState(() => _isLoading = false);
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-                      },
-                    );
-                  } else {
-                    final code = smsCodeController.text.trim();
-                    if (code.length < 6 || verificationId == null) return;
-                    setDialogState(() => _isLoading = true);
-                    try {
-                      PhoneAuthCredential credential = PhoneAuthProvider.credential(verificationId: verificationId!, smsCode: code);
-                      final user = FirebaseAuth.instance.currentUser;
-                      if (user != null) {
-                        await user.updatePhoneNumber(credential);
-                        
-                        await FirebaseFirestore.instance.collection('kullanicilar').doc(_userId).update({
-                          'phoneNumber': newPhoneController.text.trim(),
-                        });
-
-                        setState(() { 
-                          _phoneController.text = newPhoneController.text.trim();
-                          _isPhoneVerified = true;
-                        });
-                        if (mounted) { Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Güncellendi!"))); }
+                onPressed: isDialogLoading ? null : () async {
+                  try {
+                    if (step == 1) {
+                      final phone = newPhoneController.text.trim();
+                      
+                      // Telefon numarası validasyonu
+                      if (phone.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Telefon numarası boş olamaz."),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                        return;
                       }
-                    } catch (e) {
-                      setDialogState(() => _isLoading = false);
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Hata: $e")));
+                      
+                      if (!phone.startsWith('+90') || phone.length < 13) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Telefon numarasını +90 ile başlayarak girin."),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                        return;
+                      }
+
+                      setDialogState(() => isDialogLoading = true);
+                      
+                      await _authService.verifyPhone(
+                        phoneNumber: phone,
+                        onCodeSent: (verId) {
+                          setDialogState(() {
+                            verificationId = verId;
+                            step = 2;
+                            isDialogLoading = false;
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("SMS kodu gönderildi."),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        },
+                        onError: (msg) {
+                          setDialogState(() => isDialogLoading = false);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text("Hata: $msg"),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        },
+                      );
+                    } else {
+                      final code = smsCodeController.text.trim();
+                      
+                      // SMS kodu validasyonu
+                      if (code.isEmpty || code.length != 6) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("SMS kodunu tam olarak girin (6 hane)."),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      if (verificationId == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Doğrulama ID'si bulunamadı. Lütfen baştan başlayın."),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+
+                      setDialogState(() => isDialogLoading = true);
+                      
+                      try {
+                        PhoneAuthCredential credential = PhoneAuthProvider.credential(
+                          verificationId: verificationId!,
+                          smsCode: code,
+                        );
+                        final user = FirebaseAuth.instance.currentUser;
+                        if (user != null) {
+                          await user.updatePhoneNumber(credential);
+                          
+                          await FirebaseFirestore.instance
+                              .collection('kullanicilar')
+                              .doc(_userId)
+                              .update({'phoneNumber': newPhoneController.text.trim()});
+
+                          setState(() {
+                            _phoneController.text = newPhoneController.text.trim();
+                            _isPhoneVerified = true;
+                          });
+                          
+                          if (mounted) {
+                            Navigator.pop(ctx);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("Telefon numarası başarıyla güncellendi!"),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        }
+                      } on FirebaseAuthException catch (e) {
+                        setDialogState(() => isDialogLoading = false);
+                        String errorMsg = "Doğrulama başarısız.";
+                        if (e.code == 'invalid-verification-code') {
+                          errorMsg = "SMS kodu yanlış. Lütfen kontrol edin.";
+                        } else if (e.code == 'session-expired') {
+                          errorMsg = "Doğrulama süresi doldu. Lütfen yeniden başlayın.";
+                        }
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(errorMsg),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
                     }
+                  } catch (e) {
+                    setDialogState(() => isDialogLoading = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text("Hata: $e"),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
                   }
                 },
-                child: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator()) : Text(step == 1 ? "Kod Gönder" : "Doğrula"),
+                child: isDialogLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(step == 1 ? "SMS Kodu Gönder" : "Doğrula"),
               ),
             ],
           );
@@ -414,103 +671,367 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   }
 
   Future<void> _toggleMFA(bool value) async {
-    if (value && !_isPhoneVerified) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Önce telefon numaranızı doğrulamanız gerekir."), backgroundColor: Colors.orange));
-      return;
-    }
-    setState(() => _isLoading = true);
-    final error = await _authService.toggleMFA(value);
-    setState(() {
-      _isLoading = false;
-      if (error == null) {
-        _isTwoFactorEnabled = value;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value ? "2 Adımlı Doğrulama Aktif!" : "2 Adımlı Doğrulama Kapalı."), backgroundColor: value ? AppColors.success : Colors.grey));
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: AppColors.error));
+    try {
+      if (value && !_isPhoneVerified) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Önce telefon numaranızı doğrulamanız gerekir."),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
       }
-    });
+
+      setState(() => _isLoading = true);
+      final error = await _authService.toggleMFA(value);
+      
+      if (mounted) {
+        if (error == null) {
+          setState(() {
+            _isTwoFactorEnabled = value;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                value
+                    ? "2 Adımlı Doğrulama başarıyla aktif edildi!"
+                    : "2 Adımlı Doğrulama kapatıldı.",
+              ),
+              backgroundColor: value ? AppColors.success : Colors.grey,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Hata: $error"),
+              backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('2FA toggle hatası: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Bağlantı hatası. Lütfen tekrar deneyin."),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   Future<void> _deleteAccount() async {
     final passwordController = TextEditingController();
-    await showDialog<bool>(
+    
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Güvenlik Kontrolü"),
+        title: const Text("Hesabı Sil"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text("Hesabınızı silme işlemini onaylamak için lütfen şifrenizi girin."),
+            const Text(
+              "Bu işlem geri alınamaz. Hesabınıza ve tüm verilerinize erişim kaybedeceksiniz.",
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 15),
+            const Text("Lütfen onaylamak için şifrenizi girin:"),
             const SizedBox(height: 10),
-            TextField(controller: passwordController, obscureText: true, decoration: const InputDecoration(labelText: "Şifre", border: OutlineInputBorder())),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: "Şifre",
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.lock),
+              ),
+            ),
           ],
         ),
         actions: [
-           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("İptal")),
-           ElevatedButton(
-             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-             onPressed: () async {
-               Navigator.pop(ctx, false);
-               final success = await _authService.reauthenticateUser(passwordController.text);
-               if (success && mounted) _performDelete();
-               else if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Şifre yanlış."), backgroundColor: Colors.red));
-             },
-             child: const Text("Hesabımı Sil", style: TextStyle(color: Colors.white)),
-           )
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("İptal"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Hesabı Sil", style: TextStyle(color: Colors.white)),
+          )
         ],
       ),
-    );
+    ) ?? false;
+
+    if (confirmed) {
+      final success = await _authService.reauthenticateUser(passwordController.text);
+      
+      if (success && mounted) {
+        _performDelete();
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Şifre yanlış. Hesap silinemedi."),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+    
+    passwordController.dispose();
   }
 
   Future<void> _performDelete() async {
     setState(() => _isLoading = true);
     try {
-      final result = await FirebaseFunctions.instanceFor(region: 'europe-west1').httpsCallable('deleteUserAccount').call();
+      final result = await FirebaseFunctions.instanceFor(
+        region: 'europe-west1',
+      ).httpsCallable('deleteUserAccount').call();
+
       if (result.data['success'] == true && mounted) {
-        Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (context) => const GirisEkrani()), (route) => false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Hesap başarıyla silindi."),
+            backgroundColor: Colors.green,
+          ),
+        );
+        
+        // Giriş ekranına yönlendir ve tüm önceki ekranları kaldır
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const GirisEkrani()),
+          (route) => false,
+        );
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Hesap silme başarısız oldu. Lütfen tekrar deneyin."),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } on FirebaseException catch (e) {
+      if (kDebugMode) print('Firebase Hatası: ${e.code} - ${e.message}');
+      if (mounted) {
+        String errorMsg = "Hesap silinemedi.";
+        if (e.code == 'permission-denied') {
+          errorMsg = "Bu işlemi yapmaya yetkiniz yok.";
+        } else if (e.code == 'unauthenticated') {
+          errorMsg = "Oturum süresi doldu. Lütfen yeniden giriş yapın.";
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
       }
     } catch (e) {
-      if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Hata: $e")));
+      if (kDebugMode) print('Hesap silme hatası: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Hata: $e"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     } finally {
-      if(mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
-  
+
   void _showChangeRequestDialog() {
-      final uniController = TextEditingController(text: _university);
-      final deptController = TextEditingController(text: _department);
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text("Bilgi Değişikliği Talebi"),
-          content: Column(
+    final uniController = TextEditingController(text: _university);
+    final deptController = TextEditingController(text: _department);
+    final reasonController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Bilgi Değişikliği Talebi"),
+        content: SingleChildScrollView(
+          child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text("Üniversite veya bölüm bilgilerinizde bir hata varsa, düzeltilmesi için talep gönderebilirsiniz."),
+              const Text(
+                "Üniversite veya bölüm bilgilerinizde bir hata varsa, düzeltilmesi için talep gönderebilirsiniz.",
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
               const SizedBox(height: 15),
-              TextField(controller: uniController, decoration: const InputDecoration(labelText: "Üniversite", border: OutlineInputBorder())),
+              TextField(
+                controller: uniController,
+                readOnly: true,
+                decoration: const InputDecoration(
+                  labelText: "Mevcut Üniversite",
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.account_balance),
+                ),
+              ),
               const SizedBox(height: 10),
-              TextField(controller: deptController, decoration: const InputDecoration(labelText: "Bölüm", border: OutlineInputBorder())),
+              TextField(
+                controller: deptController,
+                readOnly: true,
+                decoration: const InputDecoration(
+                  labelText: "Mevcut Bölüm",
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.book),
+                ),
+              ),
+              const SizedBox(height: 15),
+              const Divider(),
+              const SizedBox(height: 10),
+              TextField(
+                controller: reasonController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: "Doğru Bilgiler (lütfen detaylı yazın)",
+                  border: OutlineInputBorder(),
+                  hintText: "Örn: Üniversite adı... Bölüm adı...",
+                  prefixIcon: Icon(Icons.edit),
+                ),
+              ),
             ],
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("İptal")),
-            ElevatedButton(onPressed: () { Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Talebiniz yöneticiye iletildi."))); }, child: const Text("Talep Gönder")),
-          ],
         ),
-      );
+        actions: [
+          TextButton(
+            onPressed: () {
+              uniController.dispose();
+              deptController.dispose();
+              reasonController.dispose();
+              Navigator.pop(ctx);
+            },
+            child: const Text("İptal"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final reason = reasonController.text.trim();
+              
+              // Validasyon
+              if (reason.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Lütfen doğru bilgiyi yazın."),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+                return;
+              }
+
+              if (reason.length < 10) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Lütfen yeterli detay sağlayın (en az 10 karakter)."),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+                return;
+              }
+
+              // Firestore'a talep kaydet
+              _submitChangeRequest(reason);
+              
+              uniController.dispose();
+              deptController.dispose();
+              reasonController.dispose();
+              Navigator.pop(ctx);
+              
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Talebiniz yöneticiye iletildi. Teşekkürler!"),
+                  backgroundColor: Colors.green,
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+            child: const Text("Talep Gönder"),
+          ),
+        ],
+      ),
+    );
   }
 
-  // --- UI WIDGETLARI ---
+  /// Değişiklik talebini Firestore'a kaydeder
+  Future<void> _submitChangeRequest(String reason) async {
+    try {
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      if (userId == null) return;
+
+      await FirebaseFirestore.instance.collection('university_change_requests').add({
+        'userId': userId,
+        'currentUniversity': _university,
+        'currentDepartment': _department,
+        'requestedInfo': reason,
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      if (kDebugMode) print('Talep gönderme hatası: $e');
+    }
+  }
+
+  // --- UI WIDGETLARI (GÜNCELLENMİŞ - TEMA UYUMLU) ---
   Widget _buildSectionTitle(String title, IconData icon) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 16),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: AppColors.primary),
+          Icon(icon, size: 20, color: AppColors.primary),
           const SizedBox(width: 8),
           Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primary)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStandardInput(TextEditingController controller, String label, IconData icon, {String? prefixText, int maxLines = 1, bool readOnly = false, VoidCallback? onTap}) {
+    // Theme.of(context).inputDecorationTheme sayesinde stil otomatik gelir.
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: TextFormField(
+        controller: controller,
+        readOnly: readOnly,
+        onTap: onTap,
+        maxLines: maxLines,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon),
+          prefixText: prefixText,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSocialInput(TextEditingController controller, String label, IconData icon, String prefixUrl) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: TextFormField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: FaIcon(icon, size: 20), // FontAwesome ikonları için
+          ),
+          prefixText: prefixUrl,
+        ),
       ),
     );
   }
@@ -526,6 +1047,7 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   }) {
     bool onCooldown = cooldown > 0;
     return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: Icon(icon, color: Colors.grey[600]),
       title: Text(title, style: const TextStyle(fontSize: 13, color: Colors.grey)),
       subtitle: Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
@@ -542,43 +1064,11 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
     );
   }
 
-  Widget _buildModernInput(TextEditingController controller, String label, dynamic iconData, {String? prefixText, int maxLines = 1, bool readOnly = false, VoidCallback? onTap}) {
-    final Widget prefixIconWidget = iconData is IconData
-        ? Icon(iconData, size: 20, color: Colors.grey[600])
-        : FaIcon(iconData, size: 20, color: Colors.grey[600]);
-        
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withOpacity(0.2)),
-      ),
-      child: TextFormField(
-        controller: controller,
-        readOnly: readOnly,
-        onTap: onTap,
-        maxLines: maxLines,
-        style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: prefixIconWidget,
-          prefixText: prefixText,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          isDense: true, 
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Profili Düzenle", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: AppColors.primary,
-        elevation: 0,
+        title: const Text("Profili Düzenle"),
         actions: [
           IconButton(
             key: _saveButtonKey,
@@ -588,177 +1078,118 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
         ],
       ),
       body: SingleChildScrollView(
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-            
-            Center(
-              child: GestureDetector(
-                key: _avatarAreaKey,
-                onTap: _showImageSourceActionSheet,
-                child: Stack(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).scaffoldBackgroundColor, 
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(color: AppColors.primary.withOpacity(0.2), blurRadius: 15, spreadRadius: 5)
-                        ]
-                      ),
-                      child: CircleAvatar(
-                        radius: 65,
+        padding: const EdgeInsets.all(20),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              // Avatar Alanı
+              Center(
+                child: GestureDetector(
+                  key: _avatarAreaKey,
+                  onTap: _showImageSourceActionSheet,
+                  child: Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 60,
                         backgroundColor: Colors.grey[200],
                         backgroundImage: _isAvatarRemoved ? null : (_avatarImageFile != null
                             ? FileImage(_avatarImageFile!) as ImageProvider
                             : _selectedPresetAvatarUrl != null
-                              ? CachedNetworkImageProvider(_selectedPresetAvatarUrl!, cacheManager: CustomCacheManager.instance)
+                              ? CachedNetworkImageProvider(_selectedPresetAvatarUrl!)
                               : (_currentAvatarUrl != null && _currentAvatarUrl!.isNotEmpty)
-                                  ? CachedNetworkImageProvider(_currentAvatarUrl!, cacheManager: CustomCacheManager.instance)
+                                  ? CachedNetworkImageProvider(_currentAvatarUrl!)
                                   : null),
                         child: (_isAvatarRemoved || (_avatarImageFile == null && _selectedPresetAvatarUrl == null && (_currentAvatarUrl == null || _currentAvatarUrl!.isEmpty)))
-                            ? const Icon(Icons.person, size: 70, color: Colors.grey)
+                            ? const Icon(Icons.person, size: 60, color: Colors.grey)
                             : null,
                       ),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary, 
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 3),
+                      Positioned(
+                        bottom: 0, right: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                          child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
                         ),
-                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-            
-            const SizedBox(height: 30),
 
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Form(
-                key: _formKey,
+              _buildSectionTitle("Kişisel Bilgiler", Icons.person_outline),
+              _buildStandardInput(_adSoyadController, "Ad Soyad", Icons.person),
+              _buildStandardInput(_takmaAdController, "Takma Ad", Icons.alternate_email),
+              _buildStandardInput(_biyografiController, "Hakkımda", Icons.info_outline, maxLines: 3),
+
+              _buildSectionTitle("Hesap & Güvenlik", Icons.security),
+              // Doğrulama Kartı
+              Card(
+                margin: EdgeInsets.zero,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.withOpacity(0.2))),
+                elevation: 0,
                 child: Column(
                   children: [
-                    _buildSectionTitle("Kişisel Bilgiler", Icons.person_outline),
-                    _buildModernInput(_adSoyadController, "Ad Soyad", Icons.person),
-                    _buildModernInput(_takmaAdController, "Takma Ad", Icons.alternate_email),
-                    _buildModernInput(_biyografiController, "Hakkımda", Icons.info_outline, maxLines: 3),
-
-                    const SizedBox(height: 10),
-                    _buildSectionTitle("Hesap & Güvenlik", Icons.security),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.withOpacity(0.2)),
-                      ),
-                      child: Column(
-                        children: [
-                          _buildVerificationTile(
-                            icon: Icons.email_outlined,
-                            title: "E-posta Adresi",
-                            value: _emailController.text,
-                            isVerified: _isEmailVerified,
-                            onVerify: _isEmailVerified ? null : _sendVerificationEmail,
-                            cooldown: _cooldownSeconds,
-                          ),
-                          const Divider(height: 1, indent: 16, endIndent: 16),
-                          _buildVerificationTile(
-                            icon: Icons.phone_android,
-                            title: "Telefon Numarası",
-                            value: _phoneController.text.isEmpty ? 'Eklenmemiş' : _phoneController.text,
-                            isVerified: _isPhoneVerified,
-                            onVerify: _showPhoneUpdateDialog,
-                            verifyText: _isPhoneVerified ? "Değiştir" : "Doğrula",
-                          ),
-                          const Divider(height: 1, indent: 16, endIndent: 16),
-                          SwitchListTile(
-                            title: const Text("İki Adımlı Doğrulama (2FA)", style: TextStyle(fontWeight: FontWeight.w500)),
-                            subtitle: Text(_isTwoFactorEnabled ? "Aktif" : "Pasif", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                            value: _isTwoFactorEnabled,
-                            activeColor: AppColors.success,
-                            onChanged: (val) => _toggleMFA(val),
-                            secondary: Icon(_isTwoFactorEnabled ? Icons.lock : Icons.lock_open, color: _isTwoFactorEnabled ? AppColors.success : Colors.grey),
-                          ),
-                        ],
-                      ),
+                    _buildVerificationTile(
+                      icon: Icons.email_outlined,
+                      title: "E-posta Adresi",
+                      value: _emailController.text,
+                      isVerified: _isEmailVerified,
+                      onVerify: _isEmailVerified ? null : _sendVerificationEmail,
+                      cooldown: _cooldownSeconds,
                     ),
-
-                    const SizedBox(height: 10),
-                    _buildSectionTitle("Akademik Bilgiler", Icons.school_outlined),
-                    Opacity(
-                      opacity: 0.8, 
-                      child: Column(
-                        children: [
-                          _buildModernInput(TextEditingController(text: _university ?? 'Belirtilmemiş'), "Üniversite", Icons.account_balance, readOnly: true),
-                          _buildModernInput(TextEditingController(text: _department ?? 'Belirtilmemiş'), "Bölüm", Icons.book_outlined, readOnly: true),
-                        ],
-                      ),
+                    const Divider(height: 1),
+                    _buildVerificationTile(
+                      icon: Icons.phone_android,
+                      title: "Telefon Numarası",
+                      value: _phoneController.text.isEmpty ? 'Eklenmemiş' : _phoneController.text,
+                      isVerified: _isPhoneVerified,
+                      onVerify: _showPhoneUpdateDialog,
+                      verifyText: _isPhoneVerified ? "Değiştir" : "Doğrula",
                     ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: _showChangeRequestDialog,
-                        icon: const Icon(Icons.edit_note, size: 16),
-                        label: const Text("Değişiklik Talep Et"),
-                        style: TextButton.styleFrom(foregroundColor: AppColors.primary),
-                      ),
+                    const Divider(height: 1),
+                    SwitchListTile(
+                      title: const Text("İki Adımlı Doğrulama (2FA)", style: TextStyle(fontWeight: FontWeight.w500)),
+                      subtitle: Text(_isTwoFactorEnabled ? "Aktif" : "Pasif", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                      value: _isTwoFactorEnabled,
+                      activeColor: AppColors.success,
+                      onChanged: (val) => _toggleMFA(val),
+                      secondary: Icon(_isTwoFactorEnabled ? Icons.lock : Icons.lock_open, color: _isTwoFactorEnabled ? AppColors.success : Colors.grey),
                     ),
-
-                    const SizedBox(height: 10),
-                    _buildSectionTitle("Sosyal Medya", Icons.link),
-                    _buildModernInput(_githubController, "GitHub", FontAwesomeIcons.github, prefixText: "github.com/"),
-                    _buildModernInput(_linkedinController, "LinkedIn", FontAwesomeIcons.linkedinIn, prefixText: "linkedin.com/in/"),
-                    _buildModernInput(_instagramController, "Instagram", FontAwesomeIcons.instagram, prefixText: "instagram.com/"),
-                    _buildModernInput(_xPlatformController, "X (Twitter)", FontAwesomeIcons.xTwitter, prefixText: "x.com/"),
-
-                    const SizedBox(height: 30),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _saveProfile,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.success,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          elevation: 2,
-                        ),
-                        child: const Text("Kaydet", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 20),
-                    Divider(color: Colors.grey.withOpacity(0.3)),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 45,
-                      child: TextButton.icon(
-                        onPressed: _isLoading ? null : _deleteAccount,
-                        icon: const Icon(Icons.delete_forever, color: Colors.red),
-                        label: const Text("Hesabımı Sil", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                        style: TextButton.styleFrom(
-                          backgroundColor: Colors.red.withOpacity(0.1),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 30),
                   ],
                 ),
               ),
-            ),
-          ],
+
+              _buildSectionTitle("Akademik Bilgiler", Icons.school_outlined),
+              _buildStandardInput(TextEditingController(text: _university), "Üniversite", Icons.account_balance, readOnly: true),
+              _buildStandardInput(TextEditingController(text: _department), "Bölüm", Icons.book_outlined, readOnly: true),
+              Align(alignment: Alignment.centerRight, child: TextButton(onPressed: _showChangeRequestDialog, child: const Text("Değişiklik Talep Et"))),
+
+              _buildSectionTitle("Sosyal Medya", Icons.link),
+              _buildSocialInput(_githubController, "GitHub", FontAwesomeIcons.github, "github.com/"),
+              _buildSocialInput(_linkedinController, "LinkedIn", FontAwesomeIcons.linkedinIn, "linkedin.com/in/"),
+              _buildSocialInput(_instagramController, "Instagram", FontAwesomeIcons.instagram, "instagram.com/"),
+              _buildSocialInput(_xPlatformController, "X (Twitter)", FontAwesomeIcons.xTwitter, "x.com/"),
+
+              const SizedBox(height: 30),
+              
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _saveProfile,
+                  child: const Text("Kaydet"),
+                ),
+              ),
+              
+              const SizedBox(height: 20),
+              TextButton(
+                onPressed: _deleteAccount,
+                child: const Text("Hesabımı Sil", style: TextStyle(color: AppColors.error)),
+              ),
+              const SizedBox(height: 40),
+            ],
+          ),
         ),
       ),
     );

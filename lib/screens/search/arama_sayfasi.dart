@@ -135,7 +135,7 @@ class _AramaSayfasiState extends State<AramaSayfasi> {
 
     // Kullanıcıları Ekle
     for (var doc in usersSnapshot.docs) {
-      final data = doc.data() as Map<String, dynamic>;
+      final data = doc.data();
       // Sadece prefix eşleşenleri veya tam eşleşenleri al
       if ((data['takmaAd'] ?? '').toLowerCase().startsWith(queryLower)) { 
         mergedList.add({
@@ -150,7 +150,7 @@ class _AramaSayfasiState extends State<AramaSayfasi> {
 
     // Konuları Ekle
     for (var doc in postsSnapshot.docs) {
-      final data = doc.data() as Map<String, dynamic>;
+      final data = doc.data();
       // Sadece prefix eşleşenleri veya tam eşleşenleri al
       if ((data['baslik'] ?? '').toLowerCase().startsWith(queryLower)) {
         mergedList.add({

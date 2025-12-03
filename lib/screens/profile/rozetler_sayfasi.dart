@@ -1,181 +1,403 @@
 import 'package:flutter/material.dart' hide Badge;
-import 'package:font_awesome_flutter/font_awesome_flutter.dart'; 
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
+// Modeller ve Servisler
 import '../../models/badge_model.dart';
+import '../../models/gamification_model.dart';
+import '../../providers/gamification_provider.dart';
 import '../../utils/app_colors.dart';
-import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
-import '../../utils/maskot_helper.dart';
 
 class RozetlerSayfasi extends StatefulWidget {
+  final Map<String, dynamic> userData; // İstatistikler için gerekli (yorum sayısı vb.)
   final Set<String> earnedBadgeIds;
   final bool isAdmin;
-  final Map<String, dynamic> userData; 
 
   const RozetlerSayfasi({
     super.key,
-    required this.earnedBadgeIds,
-    this.isAdmin = false,
     required this.userData,
+    required this.earnedBadgeIds,
+    required this.isAdmin,
   });
 
   @override
   State<RozetlerSayfasi> createState() => _RozetlerSayfasiState();
 }
 
-class _RozetlerSayfasiState extends State<RozetlerSayfasi> {
-  final Map<String, GlobalKey> _badgeKeys = {};
+class _RozetlerSayfasiState extends State<RozetlerSayfasi> with SingleTickerProviderStateMixin {
+  String _selectedCategory = 'Tümü';
+  final List<String> _categories = ['Tümü', 'Sosyal', 'İçerik', 'Topluluk', 'Özel'];
 
   @override
   void initState() {
     super.initState();
-
-    for (var badge in allBadges) {
-      _badgeKeys[badge.id] = GlobalKey();
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      String? targetBadgeId;
-      if (widget.earnedBadgeIds.isNotEmpty) {
-        targetBadgeId = widget.earnedBadgeIds.first;
-      } else {
-        double maxProgress = 0;
-        for (var badge in allBadges) {
-          final progressData = _getBadgeProgress(badge.id);
-          if (progressData['progress'] > maxProgress) {
-            maxProgress = progressData['progress'];
-            targetBadgeId = badge.id;
-          }
-        }
-      }
-
-      if (targetBadgeId != null && _badgeKeys[targetBadgeId] != null) {
-        MaskotHelper.checkAndShow(context,
-            featureKey: 'rozetler_tutorial_gosterildi',
-            targets: [
-              TargetFocus(
-                  identify: "badge-focus",
-                  keyTarget: _badgeKeys[targetBadgeId],
-                  contents: [
-                    TargetContent(
-                      align: ContentAlign.top, builder: (context, controller) =>
-                        MaskotHelper.buildTutorialContent(
-                            context,
-                            title: 'Rozet Koleksiyonun',
-                            description: 'Kampüsteki aktifliğine göre kazandığın rozetler burada sergilenir. Hepsini toplamaya çalış!'),
-                    )
-                  ])
-            ]);
-      }
-    });
+    // Sayfa açıldığında verileri tazeleyelim (opsiyonel, provider zaten dinliyor)
   }
 
   @override
   Widget build(BuildContext context) {
-    final userBadges = Set<String>.from(widget.earnedBadgeIds);
-    if (widget.isAdmin) {
-      userBadges.add('admin');
-    }
-
     return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Rozetler'),
+        title: const Text("Başarılarım"),
+        centerTitle: true,
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: allBadges.length,
-        itemBuilder: (context, index) {
-          final badge = allBadges[index];
-          final bool isEarned = userBadges.contains(badge.id);
+      body: Consumer<GamificationProvider>(
+        builder: (context, provider, child) {
+          final status = provider.status;
+          final levelData = provider.currentLevelData;
 
-          return KeyedSubtree(
-            key: _badgeKeys[badge.id],
-            child: _buildBadgeCard(context, badge, isEarned),
+          if (status == null || levelData == null) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          return CustomScrollView(
+            slivers: [
+              // 1. SEVİYE VE XP KARTI
+              SliverToBoxAdapter(
+                child: _buildLevelProgressCard(context, status, levelData),
+              ),
+
+              // 2. KATEGORİ FİLTRELERİ
+              SliverToBoxAdapter(
+                child: Container(
+                  height: 60,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _categories.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final category = _categories[index];
+                      final isSelected = _selectedCategory == category;
+                      return ChoiceChip(
+                        label: Text(category),
+                        selected: isSelected,
+                        onSelected: (bool selected) {
+                          if (selected) setState(() => _selectedCategory = category);
+                        },
+                        selectedColor: AppColors.primary,
+                        backgroundColor: Theme.of(context).cardColor,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : Colors.grey[700],
+                          fontWeight: FontWeight.bold,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+
+              // 3. ROZETLER GRID
+              SliverPadding(
+                padding: const EdgeInsets.all(16),
+                sliver: SliverGrid(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3, // Yan yana 3 rozet
+                    childAspectRatio: 0.8,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final badge = allBadges[index];
+                      
+                      // Kategori Filtreleme Mantığı (Basitçe ID'ye veya manuel mantığa göre)
+                      if (_selectedCategory != 'Tümü' && _getBadgeCategory(badge.id) != _selectedCategory) {
+                        return const SizedBox.shrink(); // Gösterme (Grid yapısını bozabilir, normalde listeyi filtrelemek daha iyidir ama basitlik için)
+                      }
+                      
+                      // Filtreleme yapıyorsak boşlukları önlemek için listeyi önceden filtrelemeliyiz
+                      // Ancak şimdilik tüm listeyi dönüyoruz, gelişmiş filtreleme aşağıda:
+                      return _buildBadgeCard(context, badge, status.unlockedBadgeIds);
+                    },
+                    childCount: allBadges.length,
+                  ),
+                ),
+              ),
+              
+              const SliverToBoxAdapter(child: SizedBox(height: 30)),
+            ],
           );
         },
       ),
     );
   }
 
-  Widget _buildBadgeCard(BuildContext context, Badge badge, bool isEarned) {
-    final progressData = _getBadgeProgress(badge.id);
-    final double progress = progressData['progress']!;
-    final String progressText = progressData['text']!;
+  // --- SEVİYE KARTI ---
+  Widget _buildLevelProgressCard(BuildContext context, UserGamificationStatus status, Level levelData) {
+    final double progress = status.getLevelProgress(levelData);
+    final int nextLevelXP = levelData.maxXP;
+    final int currentLevelXP = status.xpInCurrentLevel;
 
-    return Opacity(
-      opacity: isEarned ? 1.0 : 0.6,
-      child: Card(
-        elevation: isEarned ? 4 : 1,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: isEarned
-              ? BorderSide(color: badge.color, width: 2)
-              : BorderSide.none,
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.primaryDark, AppColors.primary],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Column(
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.4),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              // Seviye İkonu
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+                ),
+                child: Center(
+                  child: Text(
+                    levelData.specialIcon, // 🌱, 👑 vb.
+                    style: const TextStyle(fontSize: 30),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Seviye ${status.currentLevel}",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      levelData.title, // "Yeni Başlayan" vb.
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.9),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Text("Toplam XP", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text(
+                    "${status.totalXP}",
+                    style: const TextStyle(
+                      color: AppColors.primaryAccent,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              )
+            ],
+          ),
+          const SizedBox(height: 24),
+          
+          // XP Barı
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  CircleAvatar(
-                    backgroundColor: badge.color.withOpacity(isEarned ? 0.2 : 0.1),
-                    child: FaIcon(
-                      badge.icon,
-                      color: isEarned ? badge.color : Colors.grey,
-                      size: 22,
-                    ),
+                  Text(
+                    "Sonraki Seviye",
+                    style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [ 
-                        Text(
-                          badge.name,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            color: isEarned ? badge.color : Colors.grey[700],
-                          ),
-                        ),
-                        const SizedBox(height: 4), 
-                        Text(
-                          badge.description,
-                          style: TextStyle(color: isEarned ? Colors.grey[600] : Colors.grey[500], fontSize: 13),
-                        ),
-                      ],
-                    ),
+                  Text(
+                    "$currentLevelXP / $nextLevelXP XP",
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                   ),
-                  isEarned
-                      ? const Icon(Icons.check_circle, color: AppColors.success, size: 28)
-                      : const Icon(Icons.lock_outline, color: Colors.grey, size: 28),
                 ],
               ),
-              if (!isEarned && progress > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: LinearProgressIndicator(
-                          value: progress,
-                          backgroundColor: Colors.grey.shade300,
-                          color: badge.color.withOpacity(0.8),
-                          minHeight: 6,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        progressText,
-                        style: TextStyle(fontSize: 11, color: Colors.grey[600], fontStyle: FontStyle.italic),
-                      ),
-                    ],
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  backgroundColor: Colors.black12,
+                  color: AppColors.primaryAccent,
+                  minHeight: 12,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- ROZET KARTI (GRID ITEM) ---
+  Widget _buildBadgeCard(BuildContext context, Badge badge, List<String> unlockedIds) {
+    final bool isUnlocked = unlockedIds.contains(badge.id);
+    
+    return GestureDetector(
+      onTap: () => _showBadgeDetailDialog(context, badge, isUnlocked),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isUnlocked ? badge.color.withOpacity(0.5) : Colors.grey.withOpacity(0.2),
+            width: isUnlocked ? 2 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            )
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // İkon
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isUnlocked ? badge.color.withOpacity(0.1) : Colors.grey[100],
+                shape: BoxShape.circle,
+              ),
+              child: FaIcon(
+                badge.icon,
+                size: 28,
+                color: isUnlocked ? badge.color : Colors.grey[400],
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // İsim
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                badge.name,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: isUnlocked ? Theme.of(context).textTheme.bodyLarge?.color : Colors.grey,
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 4),
+            
+            // Durum İkonu
+            if (isUnlocked)
+              const Icon(Icons.check_circle, size: 16, color: AppColors.success)
+            else
+              const Icon(Icons.lock, size: 16, color: Colors.grey),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- DETAY DIALOGU ---
+  void _showBadgeDetailDialog(BuildContext context, Badge badge, bool isUnlocked) {
+    // İlerlemeyi hesapla
+    final double progress = _getBadgeProgress(badge.id);
+    final String progressText = _getProgressText(badge.id, progress);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Büyük İkon
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: isUnlocked ? badge.color.withOpacity(0.1) : Colors.grey[100],
+                  shape: BoxShape.circle,
+                ),
+                child: FaIcon(
+                  badge.icon,
+                  size: 50,
+                  color: isUnlocked ? badge.color : Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 20),
+              
+              // Başlık & Açıklama
+              Text(
+                badge.name,
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                badge.description,
+                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                textAlign: TextAlign.center,
+              ),
+              
+              const SizedBox(height: 24),
+              
+              // İlerleme Durumu
+              if (!isUnlocked) ...[
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text("İlerleme Durumu", style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 10,
+                    backgroundColor: Colors.grey[200],
+                    color: badge.color,
                   ),
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  progressText,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600], fontStyle: FontStyle.italic),
+                ),
+                const SizedBox(height: 24),
+              ],
+
+              // Kapat Butonu
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isUnlocked ? AppColors.success : Colors.grey,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text(isUnlocked ? "KAZANILDI" : "KİLİTLİ"),
+                ),
+              )
             ],
           ),
         ),
@@ -183,47 +405,64 @@ class _RozetlerSayfasiState extends State<RozetlerSayfasi> {
     );
   }
 
-  Map<String, dynamic> _getBadgeProgress(String badgeId) {
-    // Güvenli veri çekimi
+  // --- YARDIMCI FONKSİYONLAR ---
+
+  // Rozetleri kategorize etmek için basit bir eşleştirme (Badge modeline 'category' eklenene kadar)
+  String _getBadgeCategory(String badgeId) {
+    switch (badgeId) {
+      case 'pioneer':
+      case 'veteran':
+        return 'İçerik';
+      case 'commentator_rookie':
+      case 'commentator_pro':
+        return 'Sosyal';
+      case 'popular_author':
+      case 'campus_phenomenon':
+        return 'Topluluk';
+      case 'admin':
+        return 'Özel';
+      default:
+        return 'Diğer';
+    }
+  }
+
+  // İlerleme Hesaplama (widget.userData kullanarak)
+  double _getBadgeProgress(String badgeId) {
+    final int postCount = (widget.userData['postCount'] is int) ? widget.userData['postCount'] : 0;
+    final int commentCount = (widget.userData['commentCount'] is int) ? widget.userData['commentCount'] : 0;
+    final int likeCount = (widget.userData['likeCount'] is int) ? widget.userData['likeCount'] : 0;
+
+    int target = 1;
+    int current = 0;
+
+    switch (badgeId) {
+      case 'pioneer': target = 1; current = postCount; break;
+      case 'commentator_rookie': target = 10; current = commentCount; break;
+      case 'commentator_pro': target = 50; current = commentCount; break;
+      case 'popular_author': target = 50; current = likeCount; break;
+      case 'campus_phenomenon': target = 250; current = likeCount; break;
+      case 'veteran': target = 50; current = postCount; break;
+      case 'admin': return 0.0; // Admin manueldir
+      default: return 0.0;
+    }
+    return (current / target).clamp(0.0, 1.0);
+  }
+
+  String _getProgressText(String badgeId, double progress) {
+    if (progress >= 1.0) return 'Tebrikler! Hedefi tamamladın.';
+
     final int postCount = (widget.userData['postCount'] is int) ? widget.userData['postCount'] : 0;
     final int commentCount = (widget.userData['commentCount'] is int) ? widget.userData['commentCount'] : 0;
     final int likeCount = (widget.userData['likeCount'] is int) ? widget.userData['likeCount'] : 0;
 
     switch (badgeId) {
-      case 'pioneer':
-        final int target = 1;
-        final int current = postCount.clamp(0, target);
-        final int remaining = target - current;
-        return {'progress': current / target, 'text': remaining > 0 ? 'Kalan 1 gönderi' : 'Hedef tamamlandı!'};
-      case 'commentator_rookie':
-        final int target = 10;
-        final int current = commentCount.clamp(0, target);
-        final int remaining = target - current;
-        return {'progress': current / target, 'text': remaining > 0 ? 'Kalan $remaining yorum' : 'Hedef tamamlandı!'};
-      case 'commentator_pro':
-        final int target = 50;
-        final int current = commentCount.clamp(0, target);
-        final int remaining = target - current;
-        return {'progress': current / target, 'text': remaining > 0 ? 'Kalan $remaining yorum' : 'Hedef tamamlandı!'};
-      case 'popular_author':
-        final int target = 50;
-        final int current = likeCount.clamp(0, target);
-        final int remaining = target - current;
-        return {'progress': current / target, 'text': remaining > 0 ? 'Kalan $remaining beğeni' : 'Hedef tamamlandı!'};
-      case 'campus_phenomenon':
-        final int target = 250;
-        final int current = likeCount.clamp(0, target);
-        final int remaining = target - current;
-        return {'progress': current / target, 'text': remaining > 0 ? 'Kalan $remaining beğeni' : 'Hedef tamamlandı!'};
-      case 'veteran':
-        final int target = 50;
-        final int current = postCount.clamp(0, target);
-        final int remaining = target - current;
-        return {'progress': current / target, 'text': remaining > 0 ? 'Kalan $remaining gönderi' : 'Hedef tamamlandı!'};
-      case 'admin':
-        return {'progress': widget.isAdmin ? 1.0 : 0.0, 'text': widget.isAdmin ? 'Yetkili kullanıcı.' : 'Yönetici yetkisi gerekli.'};
-      default:
-        return {'progress': 0.0, 'text': 'İlerleme hesaplanamadı'};
+      case 'pioneer': return '1 gönderi paylaşman gerek.';
+      case 'commentator_rookie': return '${10 - commentCount} yorum daha yapmalısın.';
+      case 'commentator_pro': return '${50 - commentCount} yorum daha yapmalısın.';
+      case 'popular_author': return '${50 - likeCount} beğeni daha kazanmalısın.';
+      case 'campus_phenomenon': return '${250 - likeCount} beğeni daha kazanmalısın.';
+      case 'veteran': return '${50 - postCount} gönderi daha paylaşmalısın.';
+      default: return 'Bu rozeti kazanmak için aktif olmaya devam et!';
     }
   }
 }

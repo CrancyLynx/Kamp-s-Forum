@@ -1,4 +1,7 @@
 import 'dart:convert';
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -58,6 +61,7 @@ class MapDataService {
   factory MapDataService() => _instance;
   MapDataService._internal();
 
+  // GÜNCELLEME: .env üzerinden okunan getter kullanılıyor
   final String _apiKey = ApiKeys.googleMapsApiKey;
   
   // Custom Icons Cache
@@ -169,7 +173,10 @@ class MapDataService {
 
     try {
       final url = Uri.parse('$baseUrl&radius=$radius&keyword=${Uri.encodeComponent(keyword)}');
-      final response = await http.get(url);
+      final response = await http.get(url).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw TimeoutException('Arama isteği zaman aşımına uğradı.'),
+      );
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'OK') {
@@ -246,63 +253,196 @@ class MapDataService {
 
   // --- DİĞER METODLAR (DEĞİŞMEDİ) ---
   Future<List<Map<String, dynamic>>> getPlacePredictions(String query, LatLng? userLocation) async {
-    if (query.length < 3) return [];
-    String locationParam = '';
-    if (userLocation != null) {
-      locationParam = '&location=${userLocation.latitude},${userLocation.longitude}&radius=5000';
-    }
-    final url = Uri.parse('https://maps.googleapis.com/maps/api/place/autocomplete/json?input=$query$locationParam&language=tr&key=$_apiKey');
+    if (query.isEmpty) return [];
+    
+    final trimmedQuery = query.trim();
+    if (trimmedQuery.length < 2) return [];
+
     try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'OK') return List<Map<String, dynamic>>.from(data['predictions']);
+      String locationParam = '';
+      if (userLocation != null) {
+        locationParam = '&location=${userLocation.latitude},${userLocation.longitude}&radius=5000';
       }
-    } catch (e) { print("Autocomplete Error: $e"); }
-    return [];
+
+      final url = Uri.parse('https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${Uri.encodeComponent(trimmedQuery)}$locationParam&language=tr&key=$_apiKey');
+
+      final response = await http.get(url).timeout(
+        const Duration(seconds: 8),
+        onTimeout: () => throw TimeoutException('Tahmin sorgusu zaman aşımına uğradı.'),
+      );
+
+      if (response.statusCode != 200) {
+        if (kDebugMode) print("HTTP Hatası: Tahminler alınamadı");
+        return [];
+      }
+
+      final data = json.decode(response.body);
+
+      if (data['status'] != 'OK') {
+        if (data['status'] == 'ZERO_RESULTS') return [];
+        if (kDebugMode) print("Tahmin API: ${data['error_message'] ?? data['status']}");
+        return [];
+      }
+
+      final predictions = data['predictions'];
+      if (predictions == null || predictions is! List) return [];
+
+      return List<Map<String, dynamic>>.from(predictions);
+    } catch (e) {
+      if (kDebugMode) print("Tahmin Hatası: $e");
+      return [];
+    }
   }
 
   Future<LocationModel?> getPlaceDetails(String placeId) async {
-    if (_placeDetailsCache.containsKey(placeId)) return _placeDetailsCache[placeId];
-    final url = Uri.parse('https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&fields=name,geometry,photos,rating,formatted_address,opening_hours&language=tr&key=$_apiKey');
+    if (placeId.isEmpty) {
+      if (kDebugMode) print("Hata: Boş placeId değeri");
+      return null;
+    }
+
+    if (_placeDetailsCache.containsKey(placeId)) {
+      return _placeDetailsCache[placeId];
+    }
+
     try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'OK') {
-          final result = data['result'];
-          final loc = result['geometry']['location'];
-          String? openNowText;
-          if (result['opening_hours'] != null && result['opening_hours']['open_now'] != null) {
-            openNowText = result['opening_hours']['open_now'] ? 'Şu an Açık' : 'Kapalı';
-          }
-          final model = LocationModel(
-            id: placeId, title: result['name'], snippet: result['formatted_address'] ?? '',
-            position: LatLng(loc['lat'], loc['lng']), type: 'arama_sonucu',
-            rating: (result['rating'] as num?)?.toDouble() ?? 0.0,
-            photoUrls: _extractPhotoUrls(result['photos']), openingHours: openNowText,
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
-          );
-          _placeDetailsCache[placeId] = model;
-          return model;
+      final url = Uri.parse('https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&fields=name,geometry,photos,rating,formatted_address,opening_hours&language=tr&key=$_apiKey');
+      
+      final response = await http.get(url).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw TimeoutException('Mekan detayları sorgusu zaman aşımına uğradı.'),
+      );
+
+      if (response.statusCode != 200) {
+        if (kDebugMode) print("HTTP Hatası: Mekan detayları alınamadı");
+        return null;
+      }
+
+      final data = json.decode(response.body);
+
+      if (data['status'] != 'OK') {
+        String errorMsg = data['error_message'] ?? data['status'] ?? 'Bilinmeyen hata';
+        if (kDebugMode) print("Mekan Detay API Hatası: $errorMsg");
+        if (data['status'] == 'ZERO_RESULTS') return null;
+        return null;
+      }
+
+      final result = data['result'];
+      if (result == null) {
+        if (kDebugMode) print("API boş sonuç döndürdü");
+        return null;
+      }
+
+      final geometry = result['geometry'];
+      if (geometry == null || geometry['location'] == null) {
+        if (kDebugMode) print("Mekan geometry bilgisi eksik");
+        return null;
+      }
+
+      final loc = geometry['location'];
+      final name = result['name'] ?? 'Bilinmeyen Mekan';
+      final address = result['formatted_address'] ?? '';
+
+      String? openNowText;
+      if (result['opening_hours'] != null && result['opening_hours']['open_now'] != null) {
+        try {
+          openNowText = result['opening_hours']['open_now'] ? 'Şu an Açık' : 'Kapalı';
+        } catch (e) {
+          if (kDebugMode) print('Açık/Kapalı durumu işlenirken hata: $e');
         }
       }
-    } catch (e) { print("Details Error: $e"); }
-    return null;
+
+      final model = LocationModel(
+        id: placeId,
+        title: name,
+        snippet: address,
+        position: LatLng(
+          (loc['lat'] as num?)?.toDouble() ?? 0.0,
+          (loc['lng'] as num?)?.toDouble() ?? 0.0,
+        ),
+        type: 'arama_sonucu',
+        rating: (result['rating'] as num?)?.toDouble() ?? 0.0,
+        photoUrls: _extractPhotoUrls(result['photos']),
+        openingHours: openNowText,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
+      );
+
+      _placeDetailsCache[placeId] = model;
+      return model;
+    } catch (e) {
+      if (kDebugMode) print("Mekan Detay Hatası: $e");
+      return null;
+    }
   }
 
   Future<List<LatLng>> getRouteCoordinates(LatLng origin, LatLng destination) async {
-    final url = Uri.parse('https://maps.googleapis.com/maps/api/directions/json?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&mode=walking&key=$_apiKey');
+    if (origin.latitude == destination.latitude && origin.longitude == destination.longitude) {
+      if (kDebugMode) print("Uyarı: Başlangıç ve bitiş aynı noktada");
+      return [];
+    }
+
     try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'OK' && (data['routes'] as List).isNotEmpty) {
-          return _decodePolyline(data['routes'][0]['overview_polyline']['points']);
-        }
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/directions/json'
+        '?origin=${origin.latitude},${origin.longitude}'
+        '&destination=${destination.latitude},${destination.longitude}'
+        '&mode=walking&language=tr&key=$_apiKey'
+      );
+
+      final response = await http.get(url).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw TimeoutException('Rota sorgusu zaman aşımına uğradı.'),
+      );
+
+      if (response.statusCode != 200) {
+        if (kDebugMode) print("HTTP Hatası: Rota alınamadı");
+        return [];
       }
-    } catch (e) { print("Directions Error: $e"); }
-    return [];
+
+      final data = json.decode(response.body);
+
+      if (data['status'] != 'OK') {
+        String errorMsg = data['error_message'] ?? data['status'] ?? 'Bilinmeyen hata';
+        if (kDebugMode) print("Rota API Hatası: $errorMsg");
+        return [];
+      }
+
+      final routes = data['routes'];
+      if (routes == null || routes.isEmpty) {
+        if (kDebugMode) print("Uyarı: Rota sonucu boş");
+        return [];
+      }
+
+      try {
+        final firstRoute = routes[0];
+        final overviewPolyline = firstRoute['overview_polyline'];
+        
+        if (overviewPolyline == null || overviewPolyline['points'] == null) {
+          if (kDebugMode) print("Uyarı: Polyline verileri eksik");
+          return [];
+        }
+
+        final polylinePoints = overviewPolyline['points'] as String?;
+        if (polylinePoints == null || polylinePoints.isEmpty) {
+          if (kDebugMode) print("Uyarı: Polyline string boş");
+          return [];
+        }
+
+        final coordinates = _decodePolyline(polylinePoints);
+        
+        if (coordinates.isEmpty) {
+          if (kDebugMode) print("Uyarı: Polyline decode'ı sonucu boş");
+          return [];
+        }
+
+        return coordinates;
+      } catch (e) {
+        if (kDebugMode) print("Rota verileri işlenirken hata: $e");
+        return [];
+      }
+    } catch (e) {
+      if (kDebugMode) print("Rota Hatası: $e");
+      return [];
+    }
   }
 
   Future<void> voteForStatus(String locationId, String status) async {
@@ -345,9 +485,30 @@ class MapDataService {
 
   /// Bir mekana yeni bir yorum ve puan ekler.
   /// Transaction kullanarak mekanın ortalama puanını ve yorum sayısını günceller.
+  /// Hata durumunda error mesajı döndürür, başarıda null döndürür.
   Future<String?> addReview(String locationId, double rating, String comment) async {
+    // User validation
     final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return "Yorum yapmak için giriş yapmalısınız.";
+    if (currentUser == null) {
+      return "Yorum yapmak için giriş yapmalısınız.";
+    }
+
+    // Input validation
+    if (locationId.isEmpty) {
+      return "Geçersiz mekan ID'si.";
+    }
+
+    if (rating < 0 || rating > 5) {
+      return "Puan 0-5 arasında olmalıdır.";
+    }
+
+    if (comment.trim().isEmpty) {
+      return "Yorum boş olamaz.";
+    }
+
+    if (comment.length > 500) {
+      return "Yorum en fazla 500 karakter olabilir.";
+    }
 
     final locationRef = FirebaseFirestore.instance.collection('locations').doc(locationId);
     final reviewRef = locationRef.collection('reviews').doc(currentUser.uid);
@@ -355,32 +516,45 @@ class MapDataService {
     try {
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final locationSnapshot = await transaction.get(locationRef);
-        if (!locationSnapshot.exists) throw Exception("Mekan bulunamadı!");
+        if (!locationSnapshot.exists) {
+          throw Exception('Mekan bulunamadı');
+        }
 
         // Yeni yorumu ekle/güncelle
         transaction.set(reviewRef, {
           'userId': currentUser.uid,
-          'userName': currentUser.displayName ?? 'Kullanıcı',
+          'userName': currentUser.displayName ?? 'Anonim Kullanıcı',
           'userAvatar': currentUser.photoURL,
           'rating': rating,
-          'comment': comment,
+          'comment': comment.trim(),
           'timestamp': FieldValue.serverTimestamp(),
         });
 
-        // Ortalama puanı ve yorum sayısını güncelle
-        // Not: Bu işlem çok sayıda eşzamanlı yazmada hatalı sonuç verebilir.
-        // İdeali, bu hesaplamayı bir Cloud Function ile yapmaktır.
-        // Ancak istemci tarafı için bu pratik bir çözümdür.
+        // Yorum sayısını güncelle
         transaction.update(locationRef, {
           'reviewCount': FieldValue.increment(1),
-          // Ortalama puanı güncellemek için daha karmaşık bir mantık gerekir.
-          // Şimdilik sadece yorum sayısını artırıyoruz. Gerçek bir ortalama için
-          // tüm yorumları okumak veya toplam puanı tutmak gerekir.
         });
       });
+
+      if (kDebugMode) print('Yorum başarıyla eklendi: $locationId');
       return null; // Başarılı
+    } on FirebaseException catch (e) {
+      if (kDebugMode) print("Firebase Hatası: ${e.message}");
+      
+      if (e.code == 'permission-denied') {
+        return "Bu işlemi yapmaya yetkiniz yok.";
+      }
+      if (e.code == 'not-found') {
+        return "Mekan bulunamadı.";
+      }
+      if (e.code == 'unavailable') {
+        return "Veritabanı şu anda kullanılamıyor. Lütfen biraz sonra tekrar deneyiniz.";
+      }
+      
+      return "Hata: ${e.message}";
     } catch (e) {
-      return "Bir hata oluştu: $e";
+      if (kDebugMode) print("Yorum Ekleme Hatası: $e");
+      return "Yorum eklenirken hata: $e";
     }
   }
 

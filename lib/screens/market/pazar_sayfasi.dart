@@ -13,7 +13,7 @@ import '../notification/bildirim_ekrani.dart'; // DÜZELTİLDİ: Doğru dosya yo
 import '../../widgets/animated_list_item.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/maskot_helper.dart';
-import '../../services/image_cache_manager.dart';
+
 
 class PazarSayfasi extends StatefulWidget {
   const PazarSayfasi({super.key});

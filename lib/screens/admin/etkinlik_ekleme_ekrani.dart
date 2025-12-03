@@ -6,10 +6,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart'; 
 import '../../utils/app_colors.dart';
+import '../../services/image_compression_service.dart'; // Sıkıştırma servisi
 
 class EtkinlikEklemeEkrani extends StatefulWidget {
   final DocumentSnapshot? event;
-
   const EtkinlikEklemeEkrani({super.key, this.event});
 
   @override
@@ -38,12 +38,10 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
       _titleController.text = data['title'] ?? '';
       _locationController.text = data['location'] ?? '';
       _descriptionController.text = data['description'] ?? '';
-      // Kayıt linki kaldırıldığı için artık buradan çekmiyoruz.
       _currentImageUrl = data['imageUrl']; 
       _selectedDate = (data['date'] as Timestamp?)?.toDate();
     }
   }
-
 
   @override
   void dispose() {
@@ -52,52 +50,45 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
     _descriptionController.dispose();
     super.dispose();
   }
-  
-  // Resim Seçme İşlemi (Image Quality 70 korundu)
+
   Future<void> _pickImage() async {
     if (_isPickingImage) return;
-
     setState(() => _isPickingImage = true);
 
     try {
       final picker = ImagePicker();
-      final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
-
+      final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+      
       if (pickedFile != null) {
-        if(mounted) {
+        File original = File(pickedFile.path);
+        // Servis üzerinden sıkıştırma
+        File? compressed = await ImageCompressionService.compressImage(original);
+        
+        if (mounted) {
           setState(() {
-            _selectedImage = File(pickedFile.path);
+            _selectedImage = compressed ?? original;
           });
         }
       }
     } catch (e) {
-      if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Resim seçilemedi: $e"), backgroundColor: AppColors.error));
+      debugPrint("Resim seçme hatası: $e");
     } finally {
       if (mounted) setState(() => _isPickingImage = false);
     }
   }
 
-  // Resim Yükleme İşlemi (Firebase Storage)
   Future<String?> _uploadImage() async {
-    if (_selectedImage != null) {
-      try {
-        final String fileName = 'events/${DateTime.now().millisecondsSinceEpoch}.jpg';
-        final Reference storageRef = FirebaseStorage.instance.ref().child(fileName);
-        
-        final UploadTask uploadTask = storageRef.putFile(_selectedImage!);
-        final TaskSnapshot snapshot = await uploadTask.whenComplete(() => {});
-        return await snapshot.ref.getDownloadURL();
-      } catch (e) {
-        if(mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Resim yüklenirken hata oluştu: $e"), backgroundColor: AppColors.error));
-        }
-        return null;
-      }
-    }
-    return _currentImageUrl;
+    // Yeni resim seçilmediyse mevcut URL'yi (varsa) koru
+    if (_selectedImage == null) return _currentImageUrl;
+    
+    try {
+      final String fileName = 'events/${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final Reference storageRef = FirebaseStorage.instance.ref().child(fileName);
+      await storageRef.putFile(_selectedImage!);
+      return await storageRef.getDownloadURL();
+    } catch (_) { return null; }
   }
   
-  // Tarih ve Saat Seçimi (Saat seçimi eklendi)
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -108,87 +99,80 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: AppColors.primary, 
-              onPrimary: Colors.white, 
-              onSurface: AppColors.black87,
+              primary: AppColors.primary,
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
             ),
           ),
           child: child!,
         );
       },
     );
-    if (picked != null) {
-      // Saat Seçici
-      if(mounted) {
-        final TimeOfDay? time = await showTimePicker(
-            context: context, 
-            initialTime: TimeOfDay.now(),
-            builder: (context, child) {
-                return Theme(data: Theme.of(context).copyWith(colorScheme: const ColorScheme.light(primary: AppColors.primary)), child: child!);
-            }
-        );
-        
-        if (time != null && mounted) {
-           setState(() {
-             _selectedDate = DateTime(picked.year, picked.month, picked.day, time.hour, time.minute);
-           });
+
+    if (picked != null && mounted) {
+      final TimeOfDay? time = await showTimePicker(
+        context: context, 
+        initialTime: TimeOfDay.now(),
+        builder: (context, child) {
+          return Theme(
+            data: Theme.of(context).copyWith(
+              colorScheme: const ColorScheme.light(primary: AppColors.primary),
+            ),
+            child: child!,
+          );
         }
+      );
+      
+      if (time != null && mounted) {
+         setState(() => _selectedDate = DateTime(picked.year, picked.month, picked.day, time.hour, time.minute));
       }
     }
   }
 
   Future<void> _saveEvent() async {
-    if (!_formKey.currentState!.validate() || _selectedDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Lütfen tüm zorunlu alanları doldurun ve bir tarih seçin."), backgroundColor: AppColors.warning));
+    if (!_formKey.currentState!.validate()) return;
+    
+    if (_selectedDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Lütfen tarih ve saat seçin."), backgroundColor: AppColors.warning));
       return;
-    }
-
-    if (_selectedImage == null && _currentImageUrl == null) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Lütfen bir etkinlik resmi seçin."), backgroundColor: AppColors.warning));
-       return;
     }
 
     setState(() => _isLoading = true);
     
     final String? finalImageUrl = await _uploadImage();
 
-    if (finalImageUrl == null && (_selectedImage != null || _currentImageUrl == null)) {
-      setState(() => _isLoading = false);
-      return; 
-    }
+    // Mevcut katılımcıları koru (Düzenleme moduysa)
+    final List currentAttendees = _isEditing 
+        ? ((widget.event!.data() as Map<String, dynamic>)['attendees'] ?? []) 
+        : [];
 
-    // Katılımcı Listesini Koruma Mantığı (Aynen Korundu)
     final eventData = {
       'title': _titleController.text.trim(),
       'location': _locationController.text.trim(),
       'description': _descriptionController.text.trim(), 
       'date': Timestamp.fromDate(_selectedDate!),
       'imageUrl': finalImageUrl ?? '', 
-      'attendees': _isEditing ? (widget.event!.data() as Map<String, dynamic>)['attendees'] ?? [] : [], 
+      'attendees': currentAttendees,
     };
 
     try {
       if (_isEditing) {
-        await FirebaseFirestore.instance
-            .collection('etkinlikler')
-            .doc(widget.event!.id)
-            .update(eventData);
+        await FirebaseFirestore.instance.collection('etkinlikler').doc(widget.event!.id).update(eventData);
       } else {
         await FirebaseFirestore.instance.collection('etkinlikler').add({
-          ...eventData,
-          'createdAt': FieldValue.serverTimestamp(),
+          ...eventData, 
+          'createdAt': FieldValue.serverTimestamp()
         });
       }
-
+      
       if (mounted) {
-        final successMessage = _isEditing ? "Etkinlik başarıyla güncellendi!" : "Etkinlik başarıyla eklendi!";
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(successMessage), backgroundColor: AppColors.success));
-        Navigator.of(context).pop();
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Etkinlik kaydedildi!"), backgroundColor: AppColors.success));
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Hata oluştu: $e"), backgroundColor: AppColors.error));
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Hata: $e"), backgroundColor: AppColors.error));
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if(mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -196,9 +180,9 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? "Etkinliği Düzenle" : "Yeni Etkinlik Ekle"),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        title: Text(_isEditing ? "Etkinliği Düzenle" : "Yeni Etkinlik"), 
+        backgroundColor: AppColors.primary, 
+        foregroundColor: Colors.white
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
@@ -207,79 +191,94 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildImageSelector(), // Resim Seçici
-              const SizedBox(height: 24),
-
-              _buildModernInput(
-                controller: _titleController, 
-                label: "Etkinlik Başlığı", 
-                icon: Icons.title
-              ),
-              const SizedBox(height: 16),
-              _buildModernInput(
-                controller: _descriptionController, 
-                label: "Etkinlik Açıklaması", 
-                icon: Icons.description_outlined,
-                maxLines: 4,
-              ),
-              const SizedBox(height: 16),
-              _buildModernInput(
-                controller: _locationController, 
-                label: "Yer/Konum (Örn: Konferans Salonu)", 
-                icon: Icons.location_on_outlined
-              ),
-              
-              const SizedBox(height: 24),
-              
-              const Text("Etkinlik Tarihi ve Saati", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 8),
+              // Görsel Alanı
               GestureDetector(
-                onTap: () => _selectDate(context),
+                onTap: _pickImage,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                  height: 200,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.grey.shade300),
+                    image: _selectedImage != null 
+                        ? DecorationImage(image: FileImage(_selectedImage!), fit: BoxFit.cover)
+                        : (_currentImageUrl != null && _currentImageUrl!.isNotEmpty
+                            ? DecorationImage(image: CachedNetworkImageProvider(_currentImageUrl!), fit: BoxFit.cover) 
+                            : null)
+                  ),
+                  child: (_selectedImage == null && (_currentImageUrl == null || _currentImageUrl!.isEmpty)) 
+                      ? const Column(
+                          mainAxisAlignment: MainAxisAlignment.center, 
+                          children: [
+                            Icon(Icons.add_a_photo, size: 40, color: Colors.grey), 
+                            SizedBox(height: 8), 
+                            Text("Kapak Fotoğrafı Ekle")
+                          ]
+                        ) 
+                      : null,
+                ),
+              ),
+              const SizedBox(height: 24),
+              
+              _buildModernInput(controller: _titleController, label: "Başlık", icon: Icons.title),
+              const SizedBox(height: 16),
+              _buildModernInput(controller: _locationController, label: "Konum", icon: Icons.location_on),
+              const SizedBox(height: 16),
+              _buildModernInput(controller: _descriptionController, label: "Açıklama", icon: Icons.description, maxLines: 4),
+              const SizedBox(height: 20),
+              
+              // Tarih Seçici Butonu
+              InkWell(
+                onTap: () => _selectDate(context),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Theme.of(context).cardColor,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)]
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
+                    border: Border.all(color: Colors.grey.withOpacity(0.2))
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.calendar_month, color: AppColors.primary),
-                      const SizedBox(width: 12),
+                      Container(
+                        padding: const EdgeInsets.all(8), 
+                        decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), 
+                        child: const Icon(Icons.calendar_today, color: AppColors.primary)
+                      ),
+                      const SizedBox(width: 16),
                       Text(
                         _selectedDate == null 
-                          ? "Tarih ve Saat Seçiniz" 
-                          : DateFormat('dd MMMM yyyy, HH:mm').format(_selectedDate!),
+                            ? "Tarih ve Saat Seç" 
+                            : DateFormat('dd MMM yyyy, HH:mm', 'tr').format(_selectedDate!),
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 16, 
                           fontWeight: FontWeight.w500,
-                          color: _selectedDate == null ? Colors.grey : Theme.of(context).textTheme.bodyLarge?.color,
-                        ),
+                          color: _selectedDate == null ? Colors.grey : Theme.of(context).textTheme.bodyLarge?.color
+                        )
                       ),
                     ],
                   ),
                 ),
               ),
-              
-              const SizedBox(height: 40),
 
-              Center(
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 55,
-                  child: ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _saveEvent,
-                    icon: _isLoading 
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : Icon(_isEditing ? Icons.save : Icons.add, color: Colors.white),
-                    label: Text(_isLoading ? "Kaydediliyor..." : "Etkinliği Kaydet", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.success,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      elevation: 5,
-                    ),
+              const SizedBox(height: 30),
+              
+              SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _saveEvent,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary, 
+                    foregroundColor: Colors.white, 
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 4
                   ),
+                  child: _isLoading 
+                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
+                      : const Text("Kaydet", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -288,103 +287,26 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
       ),
     );
   }
-  
-  Widget _buildImageSelector() {
-    final bool hasImage = _selectedImage != null || (_currentImageUrl != null && _currentImageUrl!.isNotEmpty);
-    final String? displayUrl = _selectedImage != null ? null : _currentImageUrl;
 
-    return Center(
-      child: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            height: 220,
-            decoration: BoxDecoration(
-              color: AppColors.primaryLight.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.primary.withOpacity(0.5), width: 1),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(18),
-              child: hasImage
-                  ? (_selectedImage != null
-                      ? Image.file(_selectedImage!, fit: BoxFit.cover)
-                      : CachedNetworkImage(
-                          imageUrl: displayUrl!,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                          errorWidget: (context, url, error) => const Center(child: Icon(Icons.image_not_supported, color: AppColors.error, size: 50)),
-                        ))
-                  : Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.add_photo_alternate, size: 60, color: AppColors.primary.withOpacity(0.6)),
-                          const SizedBox(height: 8),
-                          Text("Etkinlik Afişi Yükle", style: TextStyle(color: AppColors.primary.withOpacity(0.8), fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              ElevatedButton.icon(
-                onPressed: _pickImage,
-                icon: const Icon(Icons.photo_library, size: 18),
-                label: const Text("Galeri"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-              if (_selectedImage != null || _currentImageUrl != null)
-                Padding(
-                  padding: const EdgeInsets.only(left: 12.0),
-                  child: IconButton(
-                    style: IconButton.styleFrom(backgroundColor: AppColors.error.withOpacity(0.1)),
-                    icon: const Icon(Icons.delete_outline, color: AppColors.error),
-                    onPressed: () {
-                      setState(() {
-                        _selectedImage = null;
-                        _currentImageUrl = null;
-                      });
-                    },
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildModernInput({required TextEditingController controller, required String label, required IconData icon, bool isOptional = false, int maxLines = 1, bool enabled = true}) {
+  Widget _buildModernInput({required TextEditingController controller, required String label, required IconData icon, int maxLines = 1}) {
     return Container(
       decoration: BoxDecoration(
-        color: enabled ? Colors.white : Colors.grey.shade100,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: TextFormField(
         controller: controller,
         maxLines: maxLines,
-        enabled: enabled,
         decoration: InputDecoration(
           labelText: label,
           prefixIcon: Icon(icon, color: AppColors.primary),
-          border: InputBorder.none,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          filled: true,
+          fillColor: Colors.transparent, // Container rengini kullanır
           contentPadding: const EdgeInsets.all(16),
         ),
-        validator: (v) {
-          if (v!.trim().isEmpty && !isOptional) {
-            return "$label boş olamaz";
-          }
-          return null;
-        },
+        validator: (v) => v!.trim().isEmpty ? "Bu alan gerekli" : null,
       ),
     );
   }

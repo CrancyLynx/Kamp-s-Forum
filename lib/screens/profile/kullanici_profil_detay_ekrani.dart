@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:kampus_yardim_app/widgets/forum/gonderi_karti.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -14,13 +16,13 @@ import '../../utils/maskot_helper.dart';
 import '../chat/sohbet_detay_ekrani.dart';
 import 'profil_duzenleme_ekrani.dart';
 import 'engellenen_kullanicilar_ekrani.dart';
-import '../forum/forum_sayfasi.dart'; // GonderiKarti için
+
 import '../../widgets/animated_list_item.dart';
 import 'rozetler_sayfasi.dart';
 import '../admin/admin_panel_ekrani.dart';
 import '../auth/giris_ekrani.dart'; 
 import '../admin/kullanici_listesi_ekrani.dart';
-import '../../services/image_cache_manager.dart';
+
 import '../../services/auth_service.dart';
 import '../../main.dart'; // ThemeProvider için
 
@@ -158,17 +160,71 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
           return StreamBuilder<DocumentSnapshot>(
             stream: FirebaseFirestore.instance.collection('kullanicilar').doc(_targetUserId).snapshots(),
             builder: (context, snapshot) {
+              // ✅ Loading state
               if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Scaffold(body: Center(child: CircularProgressIndicator()));
-              }
-              if (!snapshot.hasData || !snapshot.data!.exists) {
-                return Scaffold(
-                  appBar: AppBar(title: const Text("Hata")),
-                  body: const Center(child: Text("Kullanıcı bulunamadı.")),
+                return const Scaffold(
+                  body: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text("Profil yükleniyor..."),
+                      ],
+                    ),
+                  ),
                 );
               }
 
-              final userData = snapshot.data!.data() as Map<String, dynamic>;
+              // ✅ Error state
+              if (snapshot.hasError) {
+                return Scaffold(
+                  appBar: AppBar(title: const Text("Hata")),
+                  body: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, size: 80, color: Colors.red),
+                        const SizedBox(height: 16),
+                        const Text("Profil yüklenemedi.", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        Text(snapshot.error.toString(), style: const TextStyle(fontSize: 12, color: Colors.grey), textAlign: TextAlign.center),
+                        const SizedBox(height: 20),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text("Geri Dön"),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              // ✅ No data state
+              if (!snapshot.hasData || !snapshot.data!.exists) {
+                return Scaffold(
+                  appBar: AppBar(title: const Text("Profil Bulunamadı")),
+                  body: const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.person_off, size: 80, color: Colors.grey),
+                        SizedBox(height: 16),
+                        Text("Bu kullanıcı bilgileri bulunamadı.", style: TextStyle(fontSize: 16)),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              final userData = snapshot.data!.data() as Map<String, dynamic>?;
+              if (userData == null) {
+                return Scaffold(
+                  appBar: AppBar(title: const Text("Hata")),
+                  body: const Center(child: Text("Kullanıcı verisi işlenemiyor.")),
+                );
+              }
+
               final List<String> earnedBadges = List<String>.from(userData['earnedBadges'] ?? []);
               final bool isUserAdmin = (userData['role'] == 'admin');
 
@@ -590,7 +646,45 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
           .limit(20)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+        // Loading state
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        // Error state
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 60, color: Colors.red[300]),
+                const SizedBox(height: 10),
+                Text(
+                  "Gönderiler yüklenemedi.",
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 15),
+                ElevatedButton(
+                  onPressed: () {
+                    // Sayfayı yenile
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (context) => KullaniciProfilDetayEkrani(
+                          userId: _targetUserId,
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text("Yeniden Dene"),
+                ),
+              ],
+            ),
+          );
+        }
+
+        // No data state
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return Center(
             child: Column(
@@ -598,12 +692,16 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
               children: [
                 Icon(Icons.article_outlined, size: 60, color: Colors.grey[300]),
                 const SizedBox(height: 10),
-                Text("Henüz gönderi yok.", style: TextStyle(color: Colors.grey[500])),
+                Text(
+                  "Henüz gönderi yok.",
+                  style: TextStyle(color: Colors.grey[500]),
+                ),
               ],
             ),
           );
         }
 
+        // Success state
         return ListView.builder(
           padding: const EdgeInsets.all(12),
           itemCount: snapshot.data!.docs.length,
@@ -624,7 +722,10 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
           children: [
             Icon(Icons.bookmark_border, size: 60, color: Colors.grey[300]),
             const SizedBox(height: 10),
-            Text("Kaydedilen gönderi yok.", style: TextStyle(color: Colors.grey[500])),
+            Text(
+              "Kaydedilen gönderi yok.",
+              style: TextStyle(color: Colors.grey[500]),
+            ),
           ],
         ),
       );
@@ -635,10 +736,65 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     return FutureBuilder<List<DocumentSnapshot>>(
       future: Future.wait(idsToShow.map((id) => FirebaseFirestore.instance.collection('gonderiler').doc(id).get())),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-        final docs = snapshot.data?.where((doc) => doc.exists).toList() ?? [];
-        if (docs.isEmpty) return const Center(child: Text("Kaydedilenler bulunamadı.", style: TextStyle(color: Colors.grey)));
+        // Loading state
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
 
+        // Error state
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 60, color: Colors.red[300]),
+                const SizedBox(height: 10),
+                Text(
+                  "Kaydedilenler yüklenemedi.",
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 15),
+                ElevatedButton(
+                  onPressed: () {
+                    // Sayfayı yenile
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (context) => KullaniciProfilDetayEkrani(
+                          userId: _targetUserId,
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text("Yeniden Dene"),
+                ),
+              ],
+            ),
+          );
+        }
+
+        // Docs filtering
+        final docs = snapshot.data?.where((doc) => doc.exists).toList() ?? [];
+        
+        // No data state
+        if (docs.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.bookmark_border, size: 60, color: Colors.grey[300]),
+                const SizedBox(height: 10),
+                Text(
+                  "Kaydedilenler bulunamadı.",
+                  style: TextStyle(color: Colors.grey[500]),
+                ),
+              ],
+            ),
+          );
+        }
+
+        // Success state
         return ListView.builder(
           padding: const EdgeInsets.all(12),
           itemCount: docs.length,
@@ -693,23 +849,66 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
 
     try {
       if (isFollowing) {
-        await targetRef.update({'followers': FieldValue.arrayRemove([_currentUserId]), 'followerCount': FieldValue.increment(-1)});
-        await myRef.update({'following': FieldValue.arrayRemove([_targetUserId]), 'followingCount': FieldValue.increment(-1)});
-      } else {
-        await targetRef.update({'followers': FieldValue.arrayUnion([_currentUserId]), 'followerCount': FieldValue.increment(1)});
-        await myRef.update({'following': FieldValue.arrayUnion([_targetUserId]), 'followingCount': FieldValue.increment(1)});
-        
-        await FirebaseFirestore.instance.collection('bildirimler').add({
-          'userId': _targetUserId,
-          'type': 'follow',
-          'senderId': _currentUserId,
-          'message': 'Seni takip etmeye başladı.',
-          'isRead': false,
-          'timestamp': FieldValue.serverTimestamp(),
+        await targetRef.update({
+          'followers': FieldValue.arrayRemove([_currentUserId]),
+          'followerCount': FieldValue.increment(-1),
         });
+        await myRef.update({
+          'following': FieldValue.arrayRemove([_targetUserId]),
+          'followingCount': FieldValue.increment(-1),
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Takip bırakıldı"), duration: Duration(seconds: 2)),
+          );
+        }
+      } else {
+        await targetRef.update({
+          'followers': FieldValue.arrayUnion([_currentUserId]),
+          'followerCount': FieldValue.increment(1),
+        });
+        await myRef.update({
+          'following': FieldValue.arrayUnion([_targetUserId]),
+          'followingCount': FieldValue.increment(1),
+        });
+
+        // Bildirim gönder
+        try {
+          final myDoc = await myRef.get();
+          final myData = myDoc.data();
+          final myName = (myData?['takmaAd'] as String?) ?? 'Bir kullanıcı';
+
+          await FirebaseFirestore.instance.collection('bildirimler').add({
+            'userId': _targetUserId,
+            'type': 'new_follower',
+            'senderId': _currentUserId,
+            'senderName': myName,
+            'message': 'seni takip etmeye başladı.',
+            'isRead': false,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+        } catch (notifError) {
+          if (kDebugMode) print('Bildirim gönderilemedi: $notifError');
+        }
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Takip başarılı"), duration: Duration(seconds: 2)),
+          );
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("İşlem başarısız: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("İşlem başarısız: $e"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      if (kDebugMode) print('Takip toggle hatası: $e');
     }
   }
 

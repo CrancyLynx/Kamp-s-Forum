@@ -32,12 +32,14 @@ class Article {
 }
 
 class NewsService {
-  static const String _apiKey = newsApiKey;
+  // GÜNCELLEME: static const yerine getter kullanıyoruz.
+  // Çünkü api_keys.dart artık runtime'da değer dönüyor.
+  String get _apiKey => newsApiKey;
+  
   final String _baseUrl = 'https://newsapi.org/v2/top-headlines';
 
   Future<List<Article>> fetchTopHeadlines({String? category}) async {
     // API Key yoksa veya limit dolduysa direkt mock veriye dön
-    // 'YOUR_NEWS_API_KEY_HERE' kontrolü, api_keys.dart dosyasındaki default değeri kontrol eder.
     if (_apiKey.isEmpty || _apiKey.contains('API_KEY')) {
       return _getMockArticles(category);
     }

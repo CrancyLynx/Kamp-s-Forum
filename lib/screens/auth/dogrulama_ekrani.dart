@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:kampus_yardim_app/services/auth_service.dart';
 import '../../utils/app_colors.dart';
 import '../../services/auth_service.dart';
 import '../../main.dart'; 
@@ -95,8 +94,25 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
 
   Future<void> sendSmsCode() async {
     var phone = _phoneController.text.trim();
-    if (phone.isEmpty || phone.length < 10) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Geçerli bir telefon numarası girin (+90...)")));
+    
+    // ✅ Telefon validasyonu
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Telefon numarası boş olamaz."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    
+    if (phone.length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Lütfen geçerli bir telefon numarası girin (en az 10 hane)."),
+          backgroundColor: Colors.orange,
+        ),
+      );
       return;
     }
     
@@ -116,7 +132,12 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
         },
         verificationFailed: (FirebaseAuthException e) {
           setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Doğrulama Hatası: ${e.message}")));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Doğrulama Hatası: ${e.message}"),
+              backgroundColor: Colors.red,
+            ),
+          );
         },
         codeSent: (String verificationId, int? resendToken) {
           setState(() {
@@ -124,6 +145,12 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
             _currentStep = 3; 
             _isLoading = false;
           });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("SMS kodu gönderildi."),
+              backgroundColor: Colors.green,
+            ),
+          );
         },
         codeAutoRetrievalTimeout: (String verificationId) {
            if (mounted) setState(() => _verificationId = verificationId);
@@ -131,13 +158,38 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
       );
     } catch (e) {
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Hata: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Hata: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
   Future<void> verifySmsCode() async {
     final code = _smsCodeController.text.trim();
-    if (code.length < 6 || _verificationId == null) return;
+    
+    // ✅ Code validasyonu
+    if (code.isEmpty || code.length != 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("SMS kodunu tam olarak girin (6 hane)."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    
+    if (_verificationId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Doğrulama ID'si kayboldu. Lütfen tekrar başlayın."),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
     try {
@@ -146,9 +198,28 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
         smsCode: code,
       );
       await linkPhoneCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      setState(() => _isLoading = false);
+      String errorMsg = "Hatalı kod.";
+      if (e.code == 'invalid-verification-code') {
+        errorMsg = "SMS kodu yanlış. Lütfen kontrol edin.";
+      } else if (e.code == 'session-expired') {
+        errorMsg = "Doğrulama süresi doldu. Lütfen yeniden başlayın.";
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errorMsg),
+          backgroundColor: Colors.red,
+        ),
+      );
     } catch (e) {
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Hatalı kod veya işlem başarısız.")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Hata: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
