@@ -1189,27 +1189,19 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                   color: Theme.of(context).cardColor,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppColors.primary.withOpacity(0.08),
+                      AppColors.primary.withOpacity(0.02),
+                    ],
+                  ),
                 ),
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    // Background gradient (renkli arka)
-                    Positioned.fill(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              AppColors.primary.withOpacity(0.08),
-                              AppColors.primary.withOpacity(0.02),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Bottom fade gradient (aşağıya doğru yok olan)
+                    // Bottom fade gradient (çizgi hissi olmadan)
                     Positioned(
                       bottom: -12,
                       left: -12,
@@ -1221,7 +1213,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             colors: [
-                              Theme.of(context).cardColor.withOpacity(0.3),
+                              Theme.of(context).cardColor.withOpacity(0.2),
                               Theme.of(context).cardColor.withOpacity(0),
                             ],
                           ),

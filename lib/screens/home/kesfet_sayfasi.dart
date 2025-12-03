@@ -189,31 +189,24 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
       body: SafeArea(
         child: Column(
           children: [
-            // ✅ PanelHeader + Arama Barı Birleşik (Renkli Gradient + Bottom Fade)
+            // ✅ PanelHeader + Arama Barı Birleşik (Renkli Gradient + Soft Fade)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: Theme.of(context).scaffoldBackgroundColor,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppColors.primary.withOpacity(0.08),
+                    AppColors.primary.withOpacity(0.02),
+                  ],
+                ),
               ),
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  // Background gradient (renkli arka tasarım)
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            AppColors.primary.withOpacity(0.08),
-                            AppColors.primary.withOpacity(0.02),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Bottom fade gradient (aşağıya doğru yok olan)
+                  // Bottom fade gradient (çizgi hissi olmadan yumuşak geçiş)
                   Positioned(
                     bottom: -20,
                     left: -16,
@@ -225,7 +218,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Theme.of(context).scaffoldBackgroundColor.withOpacity(0.3),
+                            Theme.of(context).scaffoldBackgroundColor.withOpacity(0.2),
                             Theme.of(context).scaffoldBackgroundColor.withOpacity(0),
                           ],
                         ),

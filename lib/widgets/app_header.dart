@@ -175,26 +175,19 @@ class PanelHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: bgColor,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            accentColor.withOpacity(0.08),
+            accentColor.withOpacity(0.02),
+          ],
+        ),
       ),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // Background gradient (renkli arka tasarım)
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    accentColor.withOpacity(0.08),
-                    accentColor.withOpacity(0.02),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          // Bottom fade gradient (aşağıya doğru yok olan)
+          // Bottom fade gradient (aşağıya doğru yok olan - çizgi hissi olmadan)
           Positioned(
             bottom: -20,
             left: -16,
@@ -206,7 +199,7 @@ class PanelHeader extends StatelessWidget {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    bgColor.withOpacity(0.3),
+                    bgColor.withOpacity(0.2),
                     bgColor.withOpacity(0),
                   ],
                 ),
