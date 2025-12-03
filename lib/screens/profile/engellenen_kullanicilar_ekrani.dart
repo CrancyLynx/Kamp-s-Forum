@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../utils/app_colors.dart';
+import '../../widgets/app_header.dart';
 
 class EngellenenKullanicilarEkrani extends StatelessWidget {
   const EngellenenKullanicilarEkrani({super.key});
@@ -10,7 +12,7 @@ class EngellenenKullanicilarEkrani extends StatelessWidget {
     final currentUserId = FirebaseAuth.instance.currentUser!.uid;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Engellenenler")),
+      appBar: SimpleAppHeader(title: 'Engellenenler'),
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance.collection('kullanicilar').doc(currentUserId).snapshots(),
         builder: (context, snapshot) {

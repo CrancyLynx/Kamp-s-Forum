@@ -10,6 +10,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:provider/provider.dart';
 import '../../providers/blocked_users_provider.dart';
 import '../../utils/app_colors.dart';
+import '../../widgets/app_header.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart';
 import '../../widgets/typing_indicator.dart'; 
 
@@ -244,14 +245,7 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
     final blockedUsersProvider = Provider.of<BlockedUsersProvider>(context);
     if (blockedUsersProvider.isUserBlocked(widget.receiverId)) {
       return Scaffold(
-        appBar: AppBar(
-          backgroundColor: AppColors.primary,
-          title: Text(widget.receiverName, style: const TextStyle(color: Colors.white)),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
+        appBar: SimpleAppHeader(title: widget.receiverName),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
@@ -282,79 +276,7 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: AppColors.primary,
-        elevation: 0,
-        leadingWidth: 70,
-        leading: InkWell(
-          onTap: () => Navigator.pop(context),
-          borderRadius: BorderRadius.circular(50),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.arrow_back, size: 24, color: Colors.white),
-              const SizedBox(width: 4),
-              Hero(
-                tag: 'avatar_${widget.receiverId}',
-                child: CircleAvatar(
-                  radius: 18,
-                  backgroundImage: (widget.receiverAvatarUrl != null && widget.receiverAvatarUrl!.isNotEmpty)
-                      ? CachedNetworkImageProvider(widget.receiverAvatarUrl!)
-                      : null,
-                  backgroundColor: Colors.white24,
-                  child: (widget.receiverAvatarUrl == null || widget.receiverAvatarUrl!.isEmpty)
-                      ? Text(widget.receiverName.isNotEmpty ? widget.receiverName[0].toUpperCase() : '?', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
-                      : null,
-                ),
-              ),
-            ],
-          ),
-        ),
-        title: InkWell(
-          onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => KullaniciProfilDetayEkrani(userId: widget.receiverId, userName: widget.receiverName)));
-          },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.receiverName, 
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)
-              ),
-              StreamBuilder<DocumentSnapshot>(
-                stream: _chatStream,
-                builder: (context, chatSnapshot) {
-                  bool isReceiverTyping = false;
-                  if (chatSnapshot.hasData && chatSnapshot.data!.exists) {
-                     final data = chatSnapshot.data!.data() as Map<String, dynamic>;
-                     isReceiverTyping = (data['typing'] as Map?)?[widget.receiverId] == true;
-                  }
-
-                  if (isReceiverTyping) {
-                    return const Text("yazıyor...", style: TextStyle(fontSize: 12, color: AppColors.primaryAccent, fontStyle: FontStyle.italic));
-                  }
-                  
-                  return StreamBuilder<DocumentSnapshot>(
-                    stream: FirebaseFirestore.instance.collection('kullanicilar').doc(widget.receiverId).snapshots(),
-                    builder: (context, userSnap) {
-                      if (!userSnap.hasData) return const SizedBox.shrink();
-                      final userData = userSnap.data!.data() as Map<String, dynamic>?;
-                      final isOnline = userData?['isOnline'] ?? false;
-                      final lastSeen = userData?['lastSeen'] as Timestamp?;
-
-                      return Text(
-                        isOnline ? "Çevrimiçi" : _formatLastSeen(lastSeen),
-                        style: const TextStyle(fontSize: 12, color: Colors.white70),
-                      );
-                    },
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-      
+      appBar: SimpleAppHeader(title: widget.receiverName),
       body: Container( 
         color: chatBackgroundColor, 
         child: Column(

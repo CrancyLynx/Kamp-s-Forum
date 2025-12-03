@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 import '../../utils/app_colors.dart';
+import '../../widgets/app_header.dart';
 import '../../models/badge_model.dart';
 import '../../utils/maskot_helper.dart';
 import '../chat/sohbet_detay_ekrani.dart';
@@ -143,7 +144,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
   Widget build(BuildContext context) {
     if (_targetUserId == 'deleted_user') {
        return Scaffold(
-         appBar: AppBar(title: const Text("Profil Bulunamadı")),
+         appBar: SimpleAppHeader(title: 'Profil Bulunamadı'),
          body: const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.person_off, size: 80, color: Colors.grey), SizedBox(height: 16), Text("Bu kullanıcı hesabını silmiş.", style: TextStyle(fontSize: 18, color: Colors.grey))])),
        );
     }
@@ -179,7 +180,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
               // ✅ Error state
               if (snapshot.hasError) {
                 return Scaffold(
-                  appBar: AppBar(title: const Text("Hata")),
+                  appBar: SimpleAppHeader(title: 'Hata'),
                   body: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -203,7 +204,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
               // ✅ No data state
               if (!snapshot.hasData || !snapshot.data!.exists) {
                 return Scaffold(
-                  appBar: AppBar(title: const Text("Profil Bulunamadı")),
+                  appBar: SimpleAppHeader(title: 'Profil Bulunamadı'),
                   body: const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -220,7 +221,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
               final userData = snapshot.data!.data() as Map<String, dynamic>?;
               if (userData == null) {
                 return Scaffold(
-                  appBar: AppBar(title: const Text("Hata")),
+                  appBar: SimpleAppHeader(title: 'Hata'),
                   body: const Center(child: Text("Kullanıcı verisi işlenemiyor.")),
                 );
               }

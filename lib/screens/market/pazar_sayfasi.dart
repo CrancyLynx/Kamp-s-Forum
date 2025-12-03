@@ -13,6 +13,7 @@ import '../notification/bildirim_ekrani.dart'; // DÜZELTİLDİ: Doğru dosya yo
 import '../../widgets/animated_list_item.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/maskot_helper.dart';
+import '../../widgets/app_header.dart';  // YENİ: Modern header widget'ı
 
 
 class PazarSayfasi extends StatefulWidget {
@@ -111,54 +112,46 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
       body: SafeArea(
         child: Column(
           children: [
-            // 1. ÜST BAR & ARAMA
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardColor,
-                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
-              ),
-              child: Column(
+            // ✅ YENİ: Modern senkronize header
+            PanelHeader(
+              title: 'Kampüs Pazarı',
+              subtitle: 'Ürün al ve sat',
+              icon: Icons.shopping_bag_rounded,
+              accentColor: AppColors.primary,
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    key: _searchBarKey,
-                    children: [
-                      Icon(Icons.shopping_bag_outlined, color: Theme.of(context).textTheme.bodyLarge?.color, size: 28),
-                      const SizedBox(width: 8),
-                      Text("Kampüs Pazarı", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.bodyLarge?.color)),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.chat_bubble_outline),
-                        tooltip: 'Mesajlar',
-                        onPressed: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const SohbetListesiEkrani()));
-                        },
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.notifications_none),
-                        tooltip: 'Bildirimler',
-                        onPressed: () {
-                          // DÜZELTİLDİ: Sınıf ismi BildirimEkrani olarak güncellendi
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const BildirimEkrani()));
-                        },
-                      ),
-                    ],
+                  IconButton(
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    tooltip: 'Mesajlar',
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const SohbetListesiEkrani()));
+                    },
                   ),
-                  const SizedBox(height: 12),
-                  Container(
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
-                      decoration: const InputDecoration(
-                        hintText: "Ders kitabı, not, eşya ara...",
-                        prefixIcon: Icon(Icons.search, color: Colors.grey),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
+                  IconButton(
+                    icon: const Icon(Icons.notifications_none),
+                    tooltip: 'Bildirimler',
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const BildirimEkrani()));
+                    },
                   ),
                 ],
+              ),
+            ),
+            
+            // ✅ ARAMA BAR
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: TextField(
+                key: _searchBarKey,
+                controller: _searchController,
+                onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
+                decoration: InputDecoration(
+                  hintText: "Ders kitabı, not, eşya ara...",
+                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                ),
               ),
             ),
 

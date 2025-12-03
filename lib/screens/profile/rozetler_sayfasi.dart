@@ -7,6 +7,7 @@ import '../../models/badge_model.dart';
 import '../../models/gamification_model.dart';
 import '../../providers/gamification_provider.dart';
 import '../../utils/app_colors.dart';
+import '../../widgets/app_header.dart';
 
 class RozetlerSayfasi extends StatefulWidget {
   final Map<String, dynamic> userData; // İstatistikler için gerekli (yorum sayısı vb.)
@@ -38,11 +39,10 @@ class _RozetlerSayfasiState extends State<RozetlerSayfasi> with SingleTickerProv
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: const Text("Başarılarım"),
+      appBar: AppHeader(
+        title: "Başarılarım",
+        showLogo: false,
         centerTitle: true,
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: Consumer<GamificationProvider>(

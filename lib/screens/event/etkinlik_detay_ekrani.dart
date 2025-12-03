@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import '../../utils/app_colors.dart';
+import '../../widgets/app_header.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../utils/maskot_helper.dart';
@@ -123,7 +124,7 @@ class _EtkinlikDetayEkraniState extends State<EtkinlikDetayEkrani> {
       stream: _eventStream,
       builder: (context, snapshot) {
         if (!snapshot.hasData || !snapshot.data!.exists) {
-          return Scaffold(appBar: AppBar(title: const Text("Etkinlik Silinmiş")), body: const Center(child: Text("Bu etkinlik artık mevcut değil.")));
+          return Scaffold(appBar: SimpleAppHeader(title: 'Etkinlik Silinmiş'), body: const Center(child: Text("Bu etkinlik artık mevcut değil.")));
         }
         
         final data = snapshot.data!.data() as Map<String, dynamic>;

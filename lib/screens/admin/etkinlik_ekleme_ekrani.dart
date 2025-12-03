@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart'; 
 import '../../utils/app_colors.dart';
+import '../../widgets/app_header.dart';
 import '../../services/image_compression_service.dart'; // Sıkıştırma servisi
 
 class EtkinlikEklemeEkrani extends StatefulWidget {
@@ -179,10 +180,8 @@ class _EtkinlikEklemeEkraniState extends State<EtkinlikEklemeEkrani> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_isEditing ? "Etkinliği Düzenle" : "Yeni Etkinlik"), 
-        backgroundColor: AppColors.primary, 
-        foregroundColor: Colors.white
+      appBar: SimpleAppHeader(
+        title: _isEditing ? "Etkinliği Düzenle" : "Yeni Etkinlik",
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),

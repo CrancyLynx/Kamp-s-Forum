@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart'; 
 import '../../utils/app_colors.dart';
+import '../../widgets/app_header.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../utils/maskot_helper.dart';
 import '../forum/gonderi_detay_ekrani.dart';
@@ -167,10 +168,8 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Bildirimler"),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+      appBar: AppHeader(
+        title: 'Bildirimler',
         actions: [
           IconButton(
             key: _markAllReadButtonKey, 

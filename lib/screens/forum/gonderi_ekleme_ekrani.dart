@@ -6,6 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart'; 
 import 'forum_sayfasi.dart'; 
 import '../../utils/app_colors.dart';
+import '../../widgets/app_header.dart';  // YENİ: Modern header widget'ı
 // YENİ: Servis importu
 import '../../services/image_compression_service.dart';
 import '../../services/gamification_service.dart'; // ✅ XP SİSTEMİ
@@ -323,19 +324,20 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Konu Başlat", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: AppColors.primary,
-        elevation: 0,
+      appBar: SimpleAppHeader(
+        title: 'Konu Başlat',
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
             child: _isLoading 
-                ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)))
+                ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)))
                 : TextButton(
                     onPressed: _gonderiEkle,
-                    style: TextButton.styleFrom(backgroundColor: Colors.white.withOpacity(0.2), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
-                    child: const Text("Paylaş", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    style: TextButton.styleFrom(
+                      backgroundColor: AppColors.primary.withOpacity(0.2),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))
+                    ),
+                    child: const Text("Paylaş", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
                   ),
           )
         ],

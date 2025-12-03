@@ -6,6 +6,7 @@ import 'package:timeago/timeago.dart' as timeago; // Timeago eklendi
 import '../../services/auth_service.dart';
 import '../../widgets/animated_list_item.dart';
 import '../../utils/app_colors.dart';
+import '../../widgets/app_header.dart';  // YENİ: Modern header widget'ı
 import '../notification/bildirim_ekrani.dart';
 import 'gonderi_ekleme_ekrani.dart';
 import 'anket_ekleme_ekrani.dart';
@@ -239,16 +240,22 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        title: const Text("Kampüs Forum", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 22, letterSpacing: -0.5, color: AppColors.primary)),
+      appBar: AppHeader(
+        title: 'Kampüs Forum',
+        showLogo: true,
+        centerTitle: false,
+        elevation: 2,
         actions: [
           if (!widget.isGuest) ...[
-            IconButton(icon: const Icon(Icons.chat_bubble_outline_rounded, color: Colors.grey), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SohbetListesiEkrani()))),
-            IconButton(icon: const Icon(Icons.notifications_none_rounded, color: Colors.grey), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BildirimEkrani()))),
-          ] 
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline_rounded),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SohbetListesiEkrani())),
+            ),
+            IconButton(
+              icon: const Icon(Icons.notifications_none_rounded),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BildirimEkrani())),
+            ),
+          ]
         ],
       ),
       body: Column(

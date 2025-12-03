@@ -5,6 +5,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../utils/app_colors.dart';
+import '../../widgets/app_header.dart';
 // YENİ: Servis importu
 import '../../services/image_compression_service.dart';
 
@@ -106,7 +107,7 @@ class _UrunEklemeEkraniState extends State<UrunEklemeEkrani> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("İlan Ver"), backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+      appBar: SimpleAppHeader(title: 'İlan Ver'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Form(

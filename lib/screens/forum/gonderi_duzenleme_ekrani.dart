@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../utils/app_colors.dart';
+import '../../widgets/app_header.dart';
 
 class GonderiDuzenlemeEkrani extends StatefulWidget {
   final String postId;
@@ -63,12 +65,11 @@ class _GonderiDuzenlemeEkraniState extends State<GonderiDuzenlemeEkrani> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Gönderiyi Düzenle"),
-        backgroundColor: Colors.deepPurple,
+      appBar: SimpleAppHeader(
+        title: 'Gönderiyi Düzenle',
         actions: [
           IconButton(
-            icon: const Icon(Icons.save),
+            icon: const Icon(Icons.save_rounded, color: AppColors.primary),
             onPressed: _isLoading ? null : _saveChanges,
           ),
         ],

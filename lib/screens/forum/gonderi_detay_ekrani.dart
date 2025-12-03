@@ -12,6 +12,7 @@ import 'dart:io';
 import 'package:provider/provider.dart';
 import '../../providers/blocked_users_provider.dart';
 import '../../utils/app_colors.dart';
+import '../../widgets/app_header.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart';
 import 'gonderi_duzenleme_ekrani.dart';
 import '../../widgets/animated_list_item.dart';
@@ -490,9 +491,7 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
     final blockedUsersProvider = Provider.of<BlockedUsersProvider>(context);
     if (blockedUsersProvider.isUserBlocked(widget.authorUserId)) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text("İçerik Gizlendi"),
-        ),
+        appBar: SimpleAppHeader(title: 'İçerik Gizlendi'),
         body: const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,

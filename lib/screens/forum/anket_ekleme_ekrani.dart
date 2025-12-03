@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart'; 
 import 'package:firebase_storage/firebase_storage.dart'; 
 import '../../utils/app_colors.dart';
+import '../../widgets/app_header.dart';  // YENİ: Modern header
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../utils/maskot_helper.dart';
 
@@ -268,16 +269,12 @@ class _AnketEklemeEkraniState extends State<AnketEklemeEkrani> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Anket Oluştur"),
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        elevation: 0,
-        iconTheme: IconThemeData(color: Theme.of(context).textTheme.bodyLarge?.color),
-        titleTextStyle: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color, fontSize: 20, fontWeight: FontWeight.bold),
+      appBar: SimpleAppHeader(
+        title: 'Anket Oluştur',
         actions: [
           _isLoading 
-            ? const Center(child: Padding(padding: EdgeInsets.only(right: 16), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))))
-            : TextButton( // --- KEY EKLE ---
+            ? const Center(child: Padding(padding: EdgeInsets.only(right: 16), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2))))
+            : TextButton(
                 key: _shareButtonKey,
                 onPressed: _createPoll,
                 child: const Text("Paylaş", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),

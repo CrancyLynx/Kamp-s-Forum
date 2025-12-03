@@ -10,6 +10,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../utils/app_colors.dart';
+import '../../widgets/app_header.dart';
 import '../auth/giris_ekrani.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../services/auth_service.dart';
@@ -1067,12 +1068,12 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Profili Düzenle"),
+      appBar: SimpleAppHeader(
+        title: "Profili Düzenle",
         actions: [
           IconButton(
             key: _saveButtonKey,
-            icon: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.check),
+            icon: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)) : const Icon(Icons.check_rounded, color: AppColors.primary),
             onPressed: _isLoading ? null : _saveProfile,
           )
         ],

@@ -236,26 +236,27 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       LocationSettings locationSettings;
       try {
         if (Platform.isAndroid) {
-          // ✅ DÜZELTİLDİ: forceLocationManager kaldırıldı (FusedLocationProvider kullanılacak)
-          // ✅ DÜZELTİLDİ: accuracy best yapıldı (en yüksek doğruluk)
-          // ✅ DÜZELTİLDİ: intervalDuration 5 saniyeye düşürüldü
-          // ✅ DÜZELTİLDİ: distanceFilter 5 metreye düşürüldü
+          // ✅ GÜNCELLENDİ: bestForNavigation (maksimum doğruluk - navigasyon için)
+          // ✅ GÜNCELLENDİ: intervalDuration 2 saniyeye düşürüldü (daha hızlı güncellemeler)
+          // ✅ GÜNCELLENDİ: distanceFilter 2 metreye düşürüldü (anında güncelleme)
+          // ✅ GÜNCELLENDİ: pauseLocationUpdatesAutomatically false (sürekli takip)
           locationSettings = AndroidSettings(
-            accuracy: LocationAccuracy.best,
-            distanceFilter: 5,
-            intervalDuration: const Duration(seconds: 5),
+            accuracy: LocationAccuracy.bestForNavigation,
+            distanceFilter: 2,
+            intervalDuration: const Duration(seconds: 2),
+            forceLocationManager: false,
           );
         } else if (Platform.isIOS) {
           locationSettings = AppleSettings(
-            accuracy: LocationAccuracy.best,
+            accuracy: LocationAccuracy.bestForNavigation,
             activityType: ActivityType.fitness,
-            distanceFilter: 5,
-            pauseLocationUpdatesAutomatically: true,
+            distanceFilter: 2,
+            pauseLocationUpdatesAutomatically: false,
           );
         } else {
           locationSettings = const LocationSettings(
-            accuracy: LocationAccuracy.best,
-            distanceFilter: 5,
+            accuracy: LocationAccuracy.bestForNavigation,
+            distanceFilter: 2,
           );
         }
       } catch (e) {
@@ -267,11 +268,11 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
         );
       }
 
-      // İlk konum al - ✅ best accuracy ile
+      // İlk konum al - ✅ bestForNavigation ile (maksimum doğruluk)
       try {
         Position initialPos = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.best,
-          timeLimit: const Duration(seconds: 15),
+          desiredAccuracy: LocationAccuracy.bestForNavigation,
+          timeLimit: const Duration(seconds: 20),
         );
         
         if (mounted) {

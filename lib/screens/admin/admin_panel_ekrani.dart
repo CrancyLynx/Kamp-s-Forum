@@ -211,12 +211,25 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) => [
           SliverAppBar(
-            title: const Text("Yönetim Paneli", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.admin_panel_settings_rounded, color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 12),
+                const Text("Yönetim Paneli", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 20)),
+              ],
+            ),
             backgroundColor: AppColors.primary,
-            centerTitle: true,
+            centerTitle: false,
             pinned: true,
             floating: true,
-            elevation: 0,
+            elevation: 2,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back, color: Colors.white), 
               onPressed: () => Navigator.pop(context)
@@ -227,14 +240,14 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
               indicatorColor: AppColors.primaryAccent,
               indicatorWeight: 4,
               labelColor: Colors.white,
-              unselectedLabelColor: Colors.white.withOpacity(0.7),
+              unselectedLabelColor: Colors.white.withOpacity(0.6),
               tabs: const [
-                Tab(icon: Icon(Icons.person_add), text: "Onay"),
-                Tab(icon: Icon(Icons.change_circle), text: "Talepler"),
-                Tab(icon: Icon(Icons.group), text: "Kullanıcılar"),
-                Tab(icon: Icon(Icons.report_problem), text: "Şikayetler"),
-                Tab(icon: Icon(Icons.event_note), text: "Etkinlikler"),
-                Tab(icon: Icon(Icons.bar_chart), text: "İstatistik"),
+                Tab(icon: Icon(Icons.person_add_rounded), text: "Onay"),
+                Tab(icon: Icon(Icons.change_circle_rounded), text: "Talepler"),
+                Tab(icon: Icon(Icons.group_rounded), text: "Kullanıcılar"),
+                Tab(icon: Icon(Icons.report_problem_rounded), text: "Şikayetler"),
+                Tab(icon: Icon(Icons.event_note_rounded), text: "Etkinlikler"),
+                Tab(icon: Icon(Icons.bar_chart_rounded), text: "İstatistik"),
               ],
             ),
           ),

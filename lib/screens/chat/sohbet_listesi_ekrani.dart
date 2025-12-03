@@ -8,6 +8,7 @@ import '../../providers/blocked_users_provider.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../utils/maskot_helper.dart';
 import '../../utils/app_colors.dart';
+import '../../widgets/app_header.dart';
 import '../../widgets/animated_list_item.dart';
 import 'sohbet_detay_ekrani.dart';
 
@@ -81,9 +82,10 @@ class _SohbetListesiEkraniState extends State<SohbetListesiEkrani> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: const Text("Mesajlar", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: AppColors.primary,
+      appBar: AppHeader(
+        title: "Mesajlar",
+        showLogo: false,
+        centerTitle: false,
         elevation: 0,
       ),
       body: StreamBuilder<QuerySnapshot>(

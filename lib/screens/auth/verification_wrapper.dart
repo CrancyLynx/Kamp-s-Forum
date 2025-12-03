@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../utils/app_colors.dart';
+import '../../widgets/app_header.dart';
 import '../../services/auth_service.dart';
 import '../../main.dart'; 
 
@@ -199,16 +200,14 @@ class _VerificationWrapperState extends State<VerificationWrapper> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Hesap Doğrulama"),
-        centerTitle: true,
-        automaticallyImplyLeading: false,
+      appBar: SimpleAppHeader(
+        title: 'Hesap Doğrulama',
         actions: FirebaseAuth.instance.currentUser != null
             ? [
                 IconButton(
                   icon: const Icon(Icons.logout),
                   onPressed: () => AuthService().signOut(),
-                  tooltip: "Çıkış Yap",
+                  tooltip: "Cıkış Yap",
                 )
               ]
             : null,
