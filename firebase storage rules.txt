@@ -2,6 +2,23 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    /* ====================================================================
+       FIREBASE STORAGE GÜVENLİK KURALLARIVASI
+       
+       Güncelleme Tarihi: 2025-12-04
+       Yazı: Backend Team
+       
+       KOLEKSİYON TÜRLERİ:
+       1. Profil Resimleri: Herkese açık okuma, sahip yazma
+       2. Gönderi Resimleri: Herkese açık okuma, sahip yazma
+       3. Sohbet Resimleri: Sohbet katılımcılarına okuma, yazma
+       4. Sistem Resimleri: Herkese açık okuma, backend yazma
+       5. Badge/Achievement: Herkese açık, admin tarafından yönetilir
+       
+       DOSYA BOYUTU LIMITI: 10MB (isValidImage kontrolü)
+       DOSYA TİPİ: İmaj dosyaları (image/*)
+       ==================================================================== */
+
     // --- YARDIMCI FONKSİYONLAR ---
     function isSignedIn() {
       return request.auth != null;
@@ -28,6 +45,13 @@ service firebase.storage {
       allow read: if true;
       allow write: if isSignedIn() && isOwnerOfFile(fileName) && isValidImage();
       allow delete: if isSignedIn() && isOwnerOfFile(fileName);
+    }
+    
+    // Sistem kullanıcılarının profil resimleri (Maskotur resmi)
+    match /sistem_profil_resimleri/{fileName} {
+      allow read: if true;
+      allow write: if false; // Sadece backend Cloud Functions tarafından yazılır
+      allow delete: if false;
     }
 
     // 2. Gönderi Resimleri
@@ -67,6 +91,25 @@ service firebase.storage {
     match /events/{fileName} {
       allow read: if true;
       allow write: if isSignedIn() && isValidImage(); // Geniş izin, admin kontrolü kodda yapılmalı
+    }
+    
+    // 8. Bildirim İkonları (Sistem tarafından kullanılan)
+    match /notification_icons/{fileName} {
+      allow read: if true;
+      allow write: if false; // Sadece backend
+    }
+    
+    // 9. Mekan Fotoğrafları (Location/Map Service)
+    match /location_photos/{locationId}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && isValidImage(); // User-generated content
+      allow delete: if isSignedIn(); // Kendi fotoğraflarını silebilir
+    }
+    
+    // 10. Badge ve Achievement İkonları
+    match /badges/{fileName} {
+      allow read: if true;
+      allow write: if false; // Sadece admin
     }
   }
 }

@@ -2,6 +2,26 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    /* ====================================================================
+       FIREBASE CLOUD FIRESTORE GÜVENLİK KURALLARIVASI
+       
+       Güncelleme Tarihi: 2025-12-04
+       Yazı: Backend Team
+       
+       TEMEL KULLANICI ROLLERİ:
+       - Herkese açık (public): Gezdirme, arama
+       - Oturum açmış (signed-in): Gönderi, sohbet, bildirim
+       - Sahip (owner): Kendi verilerini düzenle
+       - Admin (admin): Tüm sistem yönetimi
+       - Sistem (system): Otomatik hoşgeldin mesajları
+       
+       TEMEL KURALLARI:
+       1. Kimlik doğrulaması (Authentication)
+       2. Yetkilendirme (Authorization)
+       3. Alan seviyesi validation (Field-level)
+       4. Veri bütünlüğü (Data integrity)
+       ==================================================================== */
+    
     // --- YARDIMCI FONKSİYONLAR ---
     
     function isSignedIn() {
@@ -24,6 +44,11 @@ service cloud.firestore {
              !('earnedBadges' in fields) && 
              !('verified' in fields);
     }
+    
+    function isSystemUser() {
+      return isSignedIn() && 
+             get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.get('isSystem', false) == true;
+    }
 
     // -----------------------------------------------------------
     // 1. KULLANICILAR KOLEKSİYONU
@@ -38,7 +63,7 @@ service cloud.firestore {
       allow update: if 
         isAdmin() ||
         (isOwner(userId) && checkRestrictedFields(request.resource.data.diff(resource.data).affectedKeys())) ||
-        (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followers', 'followerCount', 'likeCount', 'commentCount', 'postCount', 'savedPosts'])); // savedPosts eklendi
+        (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followers', 'followerCount', 'likeCount', 'commentCount', 'postCount', 'savedPosts', 'fcmTokens', 'blockedUsers', 'blockedByUsers', 'lastSeen', 'status']));
         
       allow delete: if isOwner(userId) || isAdmin();
     }
@@ -118,8 +143,15 @@ match /{document=**} {
     
     match /bildirimler/{notificationId} { 
       allow read: if isOwner(resource.data.userId) || isAdmin(); 
-      allow create: if isSignedIn();
-      allow update, delete: if isOwner(resource.data.userId) || isAdmin();
+      allow create: if isSignedIn() || isSystemUser(); // Sistem bildirim oluşturabiliyor
+      allow update: if isOwner(resource.data.userId) || isAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']));
+      allow delete: if isOwner(resource.data.userId) || isAdmin();
+    }
+    
+    // Sistem kullanıcıları (Hoşgeldin maskotu vb)
+    match /sistem_kullanicilar/{userId} {
+      allow read: if true; // Herkese sistem kullanıcılarını görüntülemesine izin ver
+      allow create, update, delete: if isAdmin();
     }
     
     match /sikayetler/{reportId} { 
@@ -130,6 +162,24 @@ match /{document=**} {
     match /degisiklik_istekleri/{requestId} { 
       allow read, update, delete: if isAdmin();
       allow create: if isSignedIn(); 
+    }
+    
+    // Mesaj Ayarları (Sohbet stüdyosu özellikleri, notifikasyon tercihler vs)
+    match /mesaj_ayarlari/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId);
+    }
+    
+    // Bildirim Ayarları (User notif preferences)
+    match /bildirim_ayarlari/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId);
+    }
+    
+    // Engelli Kullanıcı Listesi (User blocks)
+    match /bloke_edilenler/{blockingUserId}/{blockedUserId} {
+      allow read: if isOwner(blockingUserId) || isAdmin();
+      allow write: if isOwner(blockingUserId);
     }
     
     // İstatistikler
