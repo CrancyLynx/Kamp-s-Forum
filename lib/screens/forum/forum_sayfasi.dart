@@ -273,45 +273,34 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
               ),
             ),
 
-            // Kategori filtreleri
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 8),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  // Kategori Filtreleri
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: kFilterCategories.map((category) {
-                        final isSelected = _selectedFilter == category;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8.0),
-                          child: ChoiceChip(
-                            label: Text(category),
-                            selected: isSelected,
-                            onSelected: (selected) {
-                              if (selected) {
-                                setState(() => _selectedFilter = category);
-                                _resetAndFetch();
-                              }
-                            },
-                            selectedColor: AppColors.primary,
-                            backgroundColor: isDark ? Colors.grey[800] : Colors.grey[100],
-                            labelStyle: TextStyle(
-                              color: isSelected ? Colors.white : Colors.grey,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            side: BorderSide(color: Colors.grey.withOpacity(0.2)),
-                          ),
-                        );
-                      }).toList(),
+            // Kategori filtreleri - Kompakt tasarım
+            SizedBox(
+              height: 50,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: kFilterCategories.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  final category = kFilterCategories[index];
+                  final isSelected = _selectedFilter == category;
+                  return ChoiceChip(
+                    label: Text(category),
+                    selected: isSelected,
+                    onSelected: (bool selected) {
+                      if (selected) {
+                        setState(() => _selectedFilter = category);
+                        _resetAndFetch();
+                      }
+                    },
+                    selectedColor: AppColors.primary,
+                    backgroundColor: isDark ? Colors.grey[800] : Colors.grey[100],
+                    labelStyle: TextStyle(
+                      color: isSelected ? Colors.white : Colors.grey,
+                      fontWeight: FontWeight.bold,
                     ),
-                  ),
-                ],
+                  );
+                },
               ),
             ),
           Expanded(
