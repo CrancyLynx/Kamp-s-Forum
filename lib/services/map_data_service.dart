@@ -402,15 +402,6 @@ class MapDataService {
     }
   }
 
-  // Tiplere göre otomatik kategori belirleme (Tümü seçeneği için)
-  String _determineTypeFromTags(List<String> types) {
-    if (types.contains('university')) return 'universite';
-    if (types.contains('library')) return 'kutuphane';
-    if (types.contains('bus_station') || types.contains('transit_station')) return 'durak';
-    if (types.contains('restaurant') || types.contains('cafe') || types.contains('bakery')) return 'yemek';
-    return 'diger';
-  }
-
   // --- DİĞER METODLAR (DEĞİŞMEDİ) ---
   Future<List<Map<String, dynamic>>> getPlacePredictions(String query, LatLng? userLocation) async {
     if (query.isEmpty) return [];

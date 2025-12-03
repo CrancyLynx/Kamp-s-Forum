@@ -11,7 +11,6 @@ import 'package:provider/provider.dart';
 import '../../providers/blocked_users_provider.dart';
 import '../../utils/app_colors.dart';
 import '../../widgets/app_header.dart';
-import '../profile/kullanici_profil_detay_ekrani.dart';
 import '../../widgets/typing_indicator.dart'; 
 
 class SohbetDetayEkrani extends StatefulWidget {
@@ -226,18 +225,6 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
         'typing': { _currentUserId: isTyping }
       }, SetOptions(merge: true));
     } catch (_) {}
-  }
-
-  String _formatLastSeen(Timestamp? timestamp) {
-    if (timestamp == null) return '';
-    final date = timestamp.toDate();
-    final now = DateTime.now();
-    final diff = now.difference(date);
-
-    if (diff.inMinutes < 2) return "Çevrimiçi";
-    if (diff.inMinutes < 60) return "Son görülme: ${diff.inMinutes} dk önce";
-    if (diff.inHours < 24) return "Son görülme: ${diff.inHours} sa önce";
-    return "Son görülme: ${DateFormat('dd.MM.yyyy').format(date)}";
   }
 
   @override

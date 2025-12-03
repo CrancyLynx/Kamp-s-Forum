@@ -189,7 +189,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
       body: SafeArea(
         child: Column(
           children: [
-            // ✅ PanelHeader + Arama Barı Birleşik
+            // ✅ PanelHeader + Arama Barı Birleşik (Gradient Fade)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
@@ -201,175 +201,188 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                     AppColors.primary.withOpacity(0.05),
                   ],
                 ),
-                border: Border(
-                  bottom: BorderSide(
-                    color: isDark 
-                      ? Colors.white.withOpacity(0.05)
-                      : Colors.black.withOpacity(0.05),
-                    width: 1,
-                  ),
-                ),
               ),
-              child: Column(
+              child: Stack(
                 children: [
-                  // Başlık Satırı
-                  Row(
-                    children: [
-                      // İkon container
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.explore_rounded,
-                          color: AppColors.primary,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      // Başlık
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            Text(
-                              'Kampüsü Keşfet',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              'Haberler, etkinlikler ve daha fazlası',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
+                  // Gradient fade çizgisi yerine
+                  Positioned(
+                    bottom: -1,
+                    left: 0,
+                    right: 0,
+                    height: 20,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            AppColors.primary.withOpacity(0.05),
+                            AppColors.primary.withOpacity(0),
                           ],
                         ),
                       ),
-                      // Chat + Bildirim Butonları
-                      StreamBuilder<DocumentSnapshot>(
-                        stream: FirebaseFirestore.instance
-                            .collection('kullanicilar')
-                            .doc(FirebaseAuth.instance.currentUser?.uid ?? '')
-                            .snapshots(),
-                        builder: (context, snapshot) {
-                          int unreadMsgCount = 0;
-                          int unreadNotifCount = 0;
-
-                          if (snapshot.hasData && snapshot.data?.exists == true) {
-                            final data = snapshot.data!.data() as Map<String, dynamic>?;
-                            unreadMsgCount = data?['totalUnreadMessages'] ?? 0;
-                            unreadNotifCount = data?['unreadNotifications'] ?? 0;
-                          }
-
-                          return Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Stack(
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.chat_bubble_outline_rounded, size: 20),
-                                    onPressed: () {
-                                      if (FirebaseAuth.instance.currentUser == null) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text("Sohbeti görmek için giriş yapmalısınız.")),
-                                        );
-                                      } else {
-                                        // TODO: Navigate to chat
-                                      }
-                                    },
-                                    padding: const EdgeInsets.all(4),
-                                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                  ),
-                                  if (unreadMsgCount > 0)
-                                    Positioned(
-                                      right: 8,
-                                      top: 8,
-                                      child: Container(
-                                        padding: const EdgeInsets.all(2),
-                                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                                        constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
-                                        child: Text(
-                                          unreadMsgCount > 9 ? '9+' : unreadMsgCount.toString(),
-                                          style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              Stack(
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.notifications_none_rounded, size: 20),
-                                    onPressed: () {
-                                      if (FirebaseAuth.instance.currentUser == null) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text("Bildirimleri görmek için giriş yapmalısınız.")),
-                                        );
-                                      } else {
-                                        // TODO: Navigate to notifications
-                                      }
-                                    },
-                                    padding: const EdgeInsets.all(4),
-                                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                  ),
-                                  if (unreadNotifCount > 0)
-                                    Positioned(
-                                      right: 12,
-                                      top: 12,
-                                      child: Container(
-                                        width: 6,
-                                        height: 6,
-                                        decoration: BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  // Arama Barı
-                  GestureDetector(
-                    onTap: () {
-                       showSearch(
-                         context: context, 
-                         delegate: KampusSearchDelegate()
-                       );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.grey[800] : Colors.grey[200],
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
+                  Column(
+                    children: [
+                      // Başlık Satırı
+                      Row(
                         children: [
-                          Icon(Icons.search, color: Colors.grey[600], size: 20),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              "Kullanıcı, Konu veya Mekan ara...", 
-                              style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                              overflow: TextOverflow.ellipsis,
+                          // İkon container
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
                             ),
+                            child: const Icon(
+                              Icons.explore_rounded,
+                              color: AppColors.primary,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          // Başlık
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Text(
+                                  'Kampüsü Keşfet',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Haberler, etkinlikler ve daha fazlası',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Chat + Bildirim Butonları
+                          StreamBuilder<DocumentSnapshot>(
+                            stream: FirebaseFirestore.instance
+                                .collection('kullanicilar')
+                                .doc(FirebaseAuth.instance.currentUser?.uid ?? '')
+                                .snapshots(),
+                            builder: (context, snapshot) {
+                              int unreadMsgCount = 0;
+                              int unreadNotifCount = 0;
+
+                              if (snapshot.hasData && snapshot.data?.exists == true) {
+                                final data = snapshot.data!.data() as Map<String, dynamic>?;
+                                unreadMsgCount = data?['totalUnreadMessages'] ?? 0;
+                                unreadNotifCount = data?['unreadNotifications'] ?? 0;
+                              }
+
+                              return Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Stack(
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.chat_bubble_outline_rounded, size: 20),
+                                        onPressed: () {
+                                          if (FirebaseAuth.instance.currentUser == null) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text("Sohbeti görmek için giriş yapmalısınız.")),
+                                            );
+                                          } else {
+                                            // TODO: Navigate to chat
+                                          }
+                                        },
+                                        padding: const EdgeInsets.all(4),
+                                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                      ),
+                                      if (unreadMsgCount > 0)
+                                        Positioned(
+                                          right: 8,
+                                          top: 8,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(2),
+                                            decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                            constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                                            child: Text(
+                                              unreadMsgCount > 9 ? '9+' : unreadMsgCount.toString(),
+                                              style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  Stack(
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.notifications_none_rounded, size: 20),
+                                        onPressed: () {
+                                          if (FirebaseAuth.instance.currentUser == null) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text("Bildirimleri görmek için giriş yapmalısınız.")),
+                                            );
+                                          } else {
+                                            // TODO: Navigate to notifications
+                                          }
+                                        },
+                                        padding: const EdgeInsets.all(4),
+                                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                      ),
+                                      if (unreadNotifCount > 0)
+                                        Positioned(
+                                          right: 12,
+                                          top: 12,
+                                          child: Container(
+                                            width: 6,
+                                            height: 6,
+                                            decoration: BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              );
+                            },
                           ),
                         ],
                       ),
-                    ),
+                      const SizedBox(height: 12),
+                      // Arama Barı
+                      GestureDetector(
+                        onTap: () {
+                           showSearch(
+                             context: context, 
+                             delegate: KampusSearchDelegate()
+                           );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.grey[800] : Colors.grey[200],
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.search, color: Colors.grey[600], size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  "Kullanıcı, Konu veya Mekan ara...", 
+                                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
             ),
 
             // Ana içerik

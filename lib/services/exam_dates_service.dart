@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_functions/firebase_functions.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class ExamDatesService {
   static final ExamDatesService _instance = ExamDatesService._internal();
@@ -53,7 +53,7 @@ class ExamDatesService {
         'message': result.data['message'] ?? 'Sınav tarihleri güncellendi',
         'count': result.data['count'] ?? 0,
       };
-    } on FirebaseFunctionsException catch (e) {
+    } on FirebaseException catch (e) {
       print('Cloud Function hatası: ${e.message}');
       return {
         'success': false,
