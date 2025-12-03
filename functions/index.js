@@ -24,20 +24,84 @@ exports.sendPushNotification = functions.region(REGION).firestore
     const notificationData = snap.data();
     const userId = notificationData.userId; // Bildirimi alacak kişi
     const senderId = notificationData.senderId; // Bildirimi gönderen/tetikleyen kişi
+    const type = notificationData.type;
+    const docId = snap.id;
 
-    // Kendi kendine bildirim gönderme engeli
-    // TEST EDERKEN DİKKAT: Farklı bir hesaptan işlem yapmalısın!
+    // ===== SPAM KONTROLÜ =====
+    // 1. Kendi kendine bildirim engeli
     if (senderId === userId) {
-      console.log("Kendi kendine bildirim gönderilmiyor.");
+      console.log(`[SPAM] Kendi kendine bildirim engellendi: ${userId}`);
+      await db.collection("bildirimler").doc(docId).delete();
       return null;
     }
 
+    // 2. Null/undefined kontrol
+    if (!userId || !senderId || !type) {
+      console.log(`[SPAM] Eksik alan: userId=${userId}, senderId=${senderId}, type=${type}`);
+      await db.collection("bildirimler").doc(docId).delete();
+      return null;
+    }
+
+    // 3. Engelleme listesi kontrolü (göndericinin, alıcıyı engellemiş mi?)
     try {
-      // Koleksiyon adının Firestore'daki ile birebir aynı olduğundan emin olun ("kullanicilar")
+      const senderDoc = await db.collection("kullanicilar").doc(senderId).get();
+      if (senderDoc.exists) {
+        const senderData = senderDoc.data();
+        const senderBlockedUsers = senderData.blockedUsers || [];
+        if (senderBlockedUsers.includes(userId)) {
+          console.log(`[SPAM] Engellenen kullanıcıya bildirim gönderilemiyor: ${senderId} -> ${userId}`);
+          await db.collection("bildirimler").doc(docId).delete();
+          return null;
+        }
+      }
+    } catch (e) {
+      console.warn(`[WARN] Engelleme listesi kontrolü hatası: ${e.message}`);
+    }
+
+    // 4. Duplicate kontrol (son 10 saniye içinde aynı tipi bildirim var mı?)
+    try {
+      const tenSecondsAgo = new Date(Date.now() - 10000);
+      const duplicateCheck = await db.collection("bildirimler")
+        .where("userId", "==", userId)
+        .where("senderId", "==", senderId)
+        .where("type", "==", type)
+        .where("timestamp", ">=", tenSecondsAgo)
+        .limit(2)
+        .get();
+
+      if (duplicateCheck.docs.length > 1) {
+        console.log(`[SPAM] Duplicate bildirim engellendi: ${userId} <- ${senderId} (${type})`);
+        await db.collection("bildirimler").doc(docId).delete();
+        return null;
+      }
+    } catch (e) {
+      console.warn(`[WARN] Duplicate kontrol hatası: ${e.message}`);
+    }
+
+    // 5. Rate limiting - her kullanıcı en fazla dakikada 5 bildirim
+    try {
+      const oneMinuteAgo = new Date(Date.now() - 60000);
+      const recentNotifs = await db.collection("bildirimler")
+        .where("userId", "==", userId)
+        .where("timestamp", ">=", oneMinuteAgo)
+        .get();
+
+      if (recentNotifs.size >= 5) {
+        console.log(`[SPAM] Rate limit aşıldı: ${userId} (${recentNotifs.size}/dakika)`);
+        await db.collection("bildirimler").doc(docId).delete();
+        return null;
+      }
+    } catch (e) {
+      console.warn(`[WARN] Rate limit kontrolü hatası: ${e.message}`);
+    }
+
+    // ===== FCM GÖNDERME =====
+    try {
       const userDoc = await db.collection("kullanicilar").doc(userId).get();
 
       if (!userDoc.exists) {
-        console.log(`Kullanıcı bulunamadı: ${userId}`);
+        console.log(`[ERROR] Kullanıcı bulunamadı: ${userId}`);
+        await db.collection("bildirimler").doc(docId).delete();
         return null;
       }
 
@@ -45,7 +109,7 @@ exports.sendPushNotification = functions.region(REGION).firestore
       const tokens = userData.fcmTokens || [];
 
       if (tokens.length === 0) {
-        console.log(`Kullanıcının kayıtlı FCM token'ı yok: ${userId}`);
+        console.log(`[WARN] FCM token yok: ${userId}`);
         return null;
       }
 
@@ -59,32 +123,37 @@ exports.sendPushNotification = functions.region(REGION).firestore
           notification: {
             sound: "default",
             clickAction: "FLUTTER_NOTIFICATION_CLICK",
+            color: "#673AB7",
           },
         },
         apns: {
           payload: {
             aps: {
               sound: "default",
+              badge: 1,
             },
           },
         },
         data: {
           click_action: "FLUTTER_NOTIFICATION_CLICK",
-          type: notificationData.type || "general",
+          type: type,
           postId: notificationData.postId || "",
           chatId: notificationData.chatId || "",
           senderName: notificationData.senderName || "",
+          senderId: senderId,
         },
       };
 
       const response = await admin.messaging().sendEachForMulticast(message);
 
-      // Geçersiz tokenları temizleme mantığı
+      console.log(`[SUCCESS] Bildirim gönderildi: ${userId} <- ${senderId} (${response.successCount}/${tokens.length})`);
+
+      // Geçersiz tokenları temizle
       const tokensToRemove = [];
       response.responses.forEach((result, index) => {
         const error = result.error;
         if (error) {
-          console.error("FCM Hatası:", error.code, error.message);
+          console.error(`[TOKEN_ERROR] ${error.code}: ${error.message}`);
           if (error.code === "messaging/invalid-registration-token" ||
               error.code === "messaging/registration-token-not-registered") {
             tokensToRemove.push(tokens[index]);
@@ -96,14 +165,13 @@ exports.sendPushNotification = functions.region(REGION).firestore
         await db.collection("kullanicilar").doc(userId).update({
           fcmTokens: admin.firestore.FieldValue.arrayRemove(...tokensToRemove),
         });
-        console.log(`${tokensToRemove.length} geçersiz token silindi.`);
+        console.log(`[CLEANUP] ${tokensToRemove.length} geçersiz token silindi.`);
       }
 
-      console.log(`Bildirim başarıyla gönderildi. Hedef: ${userId}, Başarılı: ${response.successCount}`);
       return {success: true};
 
     } catch (error) {
-      console.error("Bildirim gönderme genel hatası:", error);
+      console.error(`[CRITICAL] Bildirim gönderme hatası: ${error.message}`);
       return null;
     }
   });

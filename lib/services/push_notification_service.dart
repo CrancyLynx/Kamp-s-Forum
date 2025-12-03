@@ -1,11 +1,10 @@
 import 'dart:async'; 
+import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter/foundation.dart';
-
-// Arka plan mesaj işleyicisi
+import 'package:flutter/foundation.dart';// Arka plan mesaj işleyicisi
 @pragma('vm:entry-point')
 Future<void> firebaseBackgroundMessageHander(RemoteMessage message) async {
   if (kDebugMode) {
@@ -98,40 +97,92 @@ class PushNotificationService {
 
   void _setupLocalNotifications() {
     const androidInitializationSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosInitializationSettings = DarwinInitializationSettings();
+    const iosInitializationSettings = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
     const initializationSettings = InitializationSettings(
       android: androidInitializationSettings,
       iOS: iosInitializationSettings,
     );
 
-    _localNotifications.initialize(initializationSettings);
+    _localNotifications.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: (NotificationResponse response) {
+        if (kDebugMode) {
+          print("[TAP] Notification tapped: ${response.payload}");
+        }
+        // Handle payload here if needed
+      },
+      onDidReceiveBackgroundNotificationResponse: _notificationTapHandler,
+    );
+  }
+
+  // Notification tap handler (static for background handling)
+  @pragma('vm:entry-point')
+  static void _notificationTapHandler(NotificationResponse response) {
+    if (kDebugMode) {
+      print("[BACKGROUND_TAP] Notification tapped in background: ${response.payload}");
+    }
   }
 
   void _handleForegroundMessages() {
     _setupLocalNotifications();
 
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      _messageStreamController.add(message); 
+      if (kDebugMode) {
+        print("[FOREGROUND] Bildirim alındı: ${message.messageId}");
+        print("[FOREGROUND] Type: ${message.data['type']}");
+      }
+
+      // Stream'e ekle (UI dinleyici için)
+      _messageStreamController.add(message);
 
       final notification = message.notification;
       final android = message.notification?.android;
 
+      // Android: Local notification göster
       if (notification != null && android != null) {
         _localNotifications.show(
           notification.hashCode,
-          notification.title,
-          notification.body,
+          notification.title ?? "Kampüs Forum",
+          notification.body ?? "Yeni bildiriminiz var",
           NotificationDetails(
             android: AndroidNotificationDetails(
-              'high_importance_channel', 
-              'Kampüs Bildirimleri', 
+              'high_importance_channel',
+              'Kampüs Bildirimleri',
               importance: Importance.max,
               priority: Priority.high,
               icon: android.smallIcon,
+              sound: const RawResourceAndroidNotificationSound('notification'),
+              enableVibration: true,
+              playSound: true,
+            ),
+            iOS: const DarwinNotificationDetails(
+              sound: 'notification.aiff',
+              presentAlert: true,
+              presentBadge: true,
+              presentSound: true,
             ),
           ),
-          payload: message.data.toString(),
+          payload: message.data.isNotEmpty ? jsonEncode(message.data) : null,
         );
+
+        if (kDebugMode) {
+          print("[SUCCESS] Local notification gösterildi: ${notification.title}");
+        }
+      } else {
+        if (kDebugMode) {
+          print("[WARN] Notification veya Android detayı null: ${message.toMap()}");
+        }
+      }
+    });
+
+    // Handle notification taps (app in foreground)
+    _localNotifications.getNotificationAppLaunchDetails().then((details) {
+      if (details?.notificationResponse != null && kDebugMode) {
+        print("[TAP] Notification tap detected: ${details?.notificationResponse?.payload}");
       }
     });
   }

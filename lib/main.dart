@@ -19,6 +19,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'services/auth_service.dart';
 import 'services/push_notification_service.dart'; 
 import 'services/presence_service.dart';
+import 'services/welcome_service.dart';
 import 'utils/app_colors.dart';
 import 'utils/app_theme.dart'; // Tema dosyanız
 
@@ -334,6 +335,31 @@ class _KullaniciVerisiYukleyiciState extends State<_KullaniciVerisiYukleyici> {
     _blockedUsersProvider = Provider.of<BlockedUsersProvider>(context, listen: false);
     _blockedUsersProvider.startListening(widget.user.uid);
     _userStream = FirebaseFirestore.instance.collection('kullanicilar').doc(widget.user.uid).snapshots();
+    
+    // Hoşgeldin mesajını gönder
+    _sendWelcomeMessages();
+  }
+
+  Future<void> _sendWelcomeMessages() async {
+    try {
+      // Sistem maskotu başlat
+      await WelcomeService.initializeSystemUser();
+      
+      // Kullanıcının daha önce hoşgeldin almış olup olmadığını kontrol et
+      final hasWelcome = await WelcomeService.hasReceivedWelcome(widget.user.uid);
+      
+      if (!hasWelcome) {
+        // Hoşgeldin sohbetini gönder
+        await WelcomeService.sendWelcomeMessage(widget.user.uid);
+        
+        // Hoşgeldin bildirimi gönder
+        await WelcomeService.sendWelcomeNotification(widget.user.uid);
+        
+        debugPrint('[WELCOME] Yeni kullanıcı hoşgeldin mesajları başlatıldı');
+      }
+    } catch (e) {
+      debugPrint('[WELCOME] Hoşgeldin mesaj hatası: $e');
+    }
   }
 
   @override

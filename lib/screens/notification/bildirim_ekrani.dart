@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart'; 
@@ -130,20 +131,34 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
   }
 
   void _handleNotificationTap(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+    final data = doc.data() as Map<String, dynamic>?;
+    if (data == null || data.isEmpty) return;
+
+    final String? senderId = data['senderId'];
+    final String? postId = data['postId'];
+    final String? senderName = data['senderName'];
+    final bool isSpam = data['isSpam'] ?? false;
+
+    // Spam bildirimine tıklanırsa görmezden gel
+    if (isSpam) {
+      debugPrint('[NOTIFICATION] Spam bildirimine tıklandı - görmezden gel');
+      return;
+    }
+
+    // Sender ID validasyonu
+    if (senderId == null || senderId.isEmpty) {
+      debugPrint('[NOTIFICATION] SenderId boş - navigasyon yapılamadı');
+      return;
+    }
 
     // Önce okundu olarak işaretle
     if (data['isRead'] == false) {
       doc.reference.update({'isRead': true});
     }
 
-    final String? type = data['type'];
-    final String? postId = data['postId'];
-    final String? senderId = data['senderId'];
-    final String? senderName = data['senderName'];
-
     // Yönlendirme yap
-    if ((type == 'like' || type == 'new_comment' || type == 'comment_reply') && postId != null) {
+    final notificationType = data['type'] as String?;
+    if ((notificationType == 'like' || notificationType == 'new_comment' || notificationType == 'comment_reply') && postId != null) {
       // Gönderi detayına git
       FirebaseFirestore.instance.collection('gonderiler').doc(postId).get().then((postDoc) {
         if (postDoc.exists && mounted) {
@@ -155,7 +170,7 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
            if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("İlgili gönderi bulunamadı veya silinmiş.")));
         }
       });
-    } else if ((type == 'new_follower' || type == 'follow') && senderId != null) {
+    } else if (notificationType == 'new_follower' || notificationType == 'follow') {
       // Takipçinin profiline git
        Navigator.push(
         context,
@@ -183,7 +198,10 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
         stream: FirebaseFirestore.instance
             .collection('bildirimler')
             .where('userId', isEqualTo: _currentUserId)
+            .where('isSpam', isNotEqualTo: true) // Spam bildirimleri filtrele
+            .orderBy('isSpam')
             .orderBy('timestamp', descending: true)
+            .limit(500) // En son 500 bildirim
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -245,12 +263,24 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
   }
 
   Widget _buildNotificationItem(DocumentSnapshot doc, BuildContext context) {
-    final data = doc.data() as Map<String, dynamic>;
+    final data = doc.data() as Map<String, dynamic>?;
+    
+    // Null safety check
+    if (data == null || data.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     final bool isRead = data['isRead'] ?? false;
     final String message = data['message'] ?? 'Bildirim';
     final String senderName = data['senderName'] ?? 'Sistem';
     final Timestamp? timestamp = data['timestamp'];
+    final bool isSpam = data['isSpam'] ?? false;
     final String timeAgo = timestamp != null ? _formatTimestamp(timestamp) : '';
+
+    // Spam bildirimi UI'da gösterilmeyecek
+    if (isSpam) {
+      return const SizedBox.shrink();
+    }
 
     return Dismissible(
       key: Key(doc.id),
@@ -348,6 +378,10 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
       case 'new_follower':
         icon = Icons.person_add;
         color = Colors.green;
+        break;
+      case 'welcome':
+        icon = Icons.waving_hand;
+        color = Colors.amber;
         break;
       default:
         icon = Icons.notifications;
