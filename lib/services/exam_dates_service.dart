@@ -59,72 +59,58 @@ class ExamDatesService {
     }
   }
 
-  /// Geçmiş sınavları (25 gün öncesi) filtreler, sadece gelecek sınavları döndürür
+  /// Tüm sınavları döndürür (geçmiş + gelecek) - gelecek sınavlar en üste
   List<Map<String, dynamic>> _filterUpcomingExams(
       List<Map<String, dynamic>> exams) {
     final now = DateTime.now();
-    final cutoffDate = now.add(Duration(days: 25));
 
-    // Tarih >= cutoffDate olan sınavları filtrele
-    final upcoming = exams.where((exam) {
+    // Sınavları 2 gruba böl: geçmiş ve gelecek
+    final future = <Map<String, dynamic>>[];
+    final past = <Map<String, dynamic>>[];
+
+    for (var exam in exams) {
       final examDate = exam['date'] as DateTime?;
-      if (examDate == null) return false;
-      return examDate.isAfter(cutoffDate) || 
-             examDate.year == cutoffDate.year &&
-             examDate.month == cutoffDate.month &&
-             examDate.day == cutoffDate.day;
-    }).toList();
+      if (examDate == null) continue;
 
-    print('✅ Gelecek sınavlar: ${upcoming.length} adet (25+ gün sonra)');
-    
-    // Eğer hiç sınav yoksa
-    if (upcoming.isEmpty) {
-      print('⚠️ Gelecek sınav bulunamadı');
+      // Saat bilgisini standardize et (00:00)
+      final examDateNormalized = DateTime(examDate.year, examDate.month, examDate.day);
+      final nowNormalized = DateTime(now.year, now.month, now.day);
+
+      if (examDateNormalized.isAfter(nowNormalized)) {
+        // Gelecek sınav - gün sayısını ekle
+        final daysUntil = examDateNormalized.difference(nowNormalized).inDays;
+        exam['daysUntil'] = daysUntil;
+        future.add(exam);
+      } else {
+        // Geçmiş sınav - gün sayısını ekle (negatif)
+        final daysPassed = nowNormalized.difference(examDateNormalized).inDays;
+        exam['daysPassed'] = daysPassed;
+        past.add(exam);
+      }
     }
 
-    return upcoming;
+    // Gelecek sınavları tarihe göre sırala (en yakın en üste)
+    future.sort((a, b) => (a['daysUntil'] as int).compareTo(b['daysUntil'] as int));
+
+    // Geçmiş sınavları tarihe göre sırala (en yakın en üste)
+    past.sort((a, b) => (b['daysPassed'] as int).compareTo(a['daysPassed'] as int));
+
+    // Gelecek sınavlar + Geçmiş sınavlar
+    final result = [...future, ...past];
+
+    print('✅ Toplam sınavlar: ${result.length} adet (Gelecek: ${future.length}, Geçmiş: ${past.length})');
+
+    return result;
   }
 
-  /// Test amaçlı örnek sınav tarihleri (25+ gün sonra olan sınavlar)
+  /// Test amaçlı örnek sınav tarihleri (gerçek tarihler + geçmiş sınavlar)
   List<Map<String, dynamic>> _getTestExamDates() {
-    final now = DateTime.now();
-    final futureDate = now.add(Duration(days: 25));
-    
     return [
-      {
-        'id': 'kpss_2025',
-        'name': 'KPSS 2025',
-        'date': futureDate.add(Duration(days: 30)), // 55 gün sonra
-        'description': 'Kamu Personeli Seçme Sınavı',
-        'color': 'orange',
-        'type': 'exam',
-        'source': 'OSYM',
-        'importance': 'high',
-      },
-      {
-        'id': 'yks_2025',
-        'name': 'YKS 2025',
-        'date': futureDate.add(Duration(days: 50)), // 75 gün sonra
-        'description': 'Yükseköğretim Kurumları Sınavı',
-        'color': 'blue',
-        'type': 'exam',
-        'source': 'OSYM',
-        'importance': 'high',
-      },
-      {
-        'id': 'dus_2025',
-        'name': 'DÜŞ 2025',
-        'date': futureDate.add(Duration(days: 120)), // 145 gün sonra
-        'description': 'Diş Hekimliği Uzmanlaşma Sınavı',
-        'color': 'red',
-        'type': 'exam',
-        'source': 'OSYM',
-        'importance': 'medium',
-      },
+      // ✅ Gelecek Sınavlar (2025-2026)
       {
         'id': 'tus_2025',
         'name': 'TUS 2025',
-        'date': futureDate.add(Duration(days: 25)), // Tam 50 gün sonra
+        'date': DateTime(2025, 4, 27),
         'description': 'Tıp Uzmanlaşma Sınavı',
         'color': 'green',
         'type': 'exam',
@@ -134,7 +120,7 @@ class ExamDatesService {
       {
         'id': 'ales_2025_spring',
         'name': 'ALES 2025 (Bahar)',
-        'date': futureDate.add(Duration(days: 35)), // 60 gün sonra
+        'date': DateTime(2025, 5, 11),
         'description': 'Akademik Personel ve Lisansüstü Eğitim Giriş Sınavı',
         'color': 'purple',
         'type': 'exam',
@@ -142,19 +128,29 @@ class ExamDatesService {
         'importance': 'medium',
       },
       {
-        'id': 'ales_2025_fall',
-        'name': 'ALES 2025 (Güz)',
-        'date': futureDate.add(Duration(days: 110)), // 135 gün sonra
-        'description': 'Akademik Personel ve Lisansüstü Eğitim Giriş Sınavı',
-        'color': 'purple',
+        'id': 'kpss_2025',
+        'name': 'KPSS 2025',
+        'date': DateTime(2025, 5, 18),
+        'description': 'Kamu Personeli Seçme Sınavı',
+        'color': 'orange',
         'type': 'exam',
         'source': 'OSYM',
-        'importance': 'medium',
+        'importance': 'high',
+      },
+      {
+        'id': 'yks_2025',
+        'name': 'YKS 2025',
+        'date': DateTime(2025, 6, 15),
+        'description': 'Yükseköğretim Kurumları Sınavı',
+        'color': 'blue',
+        'type': 'exam',
+        'source': 'OSYM',
+        'importance': 'high',
       },
       {
         'id': 'oabt_2025',
         'name': 'ÖABT 2025',
-        'date': futureDate.add(Duration(days: 75)), // 100 gün sonra
+        'date': DateTime(2025, 7, 20),
         'description': 'Öğretmen Atama Sınavı Başarı Testi',
         'color': 'teal',
         'type': 'exam',
@@ -162,9 +158,29 @@ class ExamDatesService {
         'importance': 'high',
       },
       {
+        'id': 'ales_2025_fall',
+        'name': 'ALES 2025 (Güz)',
+        'date': DateTime(2025, 9, 14),
+        'description': 'Akademik Personel ve Lisansüstü Eğitim Giriş Sınavı',
+        'color': 'purple',
+        'type': 'exam',
+        'source': 'OSYM',
+        'importance': 'medium',
+      },
+      {
+        'id': 'dus_2025',
+        'name': 'DÜŞ 2025',
+        'date': DateTime(2025, 9, 22),
+        'description': 'Diş Hekimliği Uzmanlaşma Sınavı',
+        'color': 'red',
+        'type': 'exam',
+        'source': 'OSYM',
+        'importance': 'medium',
+      },
+      {
         'id': 'kamu_yazili_2025',
         'name': 'Kamu Yazılı 2025',
-        'date': futureDate.add(Duration(days: 160)), // 185 gün sonra
+        'date': DateTime(2025, 11, 9),
         'description': 'Kamu Kurumları Yazılı Sınavı',
         'color': 'amber',
         'type': 'exam',
@@ -174,9 +190,31 @@ class ExamDatesService {
       {
         'id': 'kpss_2026',
         'name': 'KPSS 2026',
-        'date': futureDate.add(Duration(days: 200)), // 225 gün sonra
+        'date': DateTime(2026, 5, 17),
         'description': 'Kamu Personeli Seçme Sınavı 2026',
         'color': 'orange',
+        'type': 'exam',
+        'source': 'OSYM',
+        'importance': 'high',
+      },
+      
+      // ✅ Geçmiş Sınavlar (Demo için)
+      {
+        'id': 'kpss_2024',
+        'name': 'KPSS 2024',
+        'date': DateTime(2024, 5, 19),
+        'description': 'Kamu Personeli Seçme Sınavı',
+        'color': 'orange',
+        'type': 'exam',
+        'source': 'OSYM',
+        'importance': 'high',
+      },
+      {
+        'id': 'yks_2024',
+        'name': 'YKS 2024',
+        'date': DateTime(2024, 6, 16),
+        'description': 'Yükseköğretim Kurumları Sınavı',
+        'color': 'blue',
         'type': 'exam',
         'source': 'OSYM',
         'importance': 'high',

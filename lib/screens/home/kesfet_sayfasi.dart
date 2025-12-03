@@ -1387,7 +1387,22 @@ void _showCalendarPanel(BuildContext context) {
                     final daysDiff = examDate.difference(now).inDays;
                     final formattedDate = _formatExamDate(examDate);
                     final colorStr = exam['color'] as String? ?? 'orange';
-                    final examColor = _getColorByName(colorStr);
+                    var examColor = _getColorByName(colorStr);
+                    
+                    // Geçmiş sınavları kırmızı göster
+                    bool isPast = daysDiff < 0;
+                    if (isPast) {
+                      examColor = Colors.red;
+                    }
+                    
+                    // "X gün kaldı" veya "X gün geçti" metni
+                    String countdownText;
+                    if (isPast) {
+                      final daysPassed = exam['daysPassed'] as int? ?? 0;
+                      countdownText = '$daysPassed gün geçti';
+                    } else {
+                      countdownText = '$daysDiff gün kaldı';
+                    }
                     
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 16.0),
@@ -1438,12 +1453,32 @@ void _showCalendarPanel(BuildContext context) {
                               ],
                             ),
                             const SizedBox(height: 12),
-                            Text(
-                              formattedDate,
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 13,
-                              ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  formattedDate,
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: examColor.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    countdownText,
+                                    style: TextStyle(
+                                      color: examColor,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                             if (exam['description'] != null &&
                                 (exam['description'] as String).isNotEmpty)
