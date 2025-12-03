@@ -389,6 +389,16 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                 padding: EdgeInsets.only(left: 6), 
                 child: Icon(Icons.verified, color: AppColors.primary, size: 24)
               ),
+            // YENİ: Seviye Göstergesi
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.primaryAccent.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text("Lv. ${data['seviye'] ?? 1}", style: const TextStyle(color: AppColors.primaryAccent, fontWeight: FontWeight.bold, fontSize: 13)),
+            ),
           ],
         ),
         if (realName.isNotEmpty) 
@@ -428,7 +438,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
         if (badges.isNotEmpty)
           SizedBox(
             key: _badgesKey,
-            height: 60, 
+            height: 50,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 20), 
@@ -436,19 +446,18 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
               itemBuilder: (context, index) {
                 final badgeId = badges[index];
                 final badge = allBadges.firstWhere((b) => b.id == badgeId, orElse: () => allBadges[0]);
-                
                 return Padding(
                   padding: const EdgeInsets.only(right: 12),
                   child: Tooltip(
                     message: badge.name,
                     child: Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         color: badge.color.withOpacity(0.1),
                         shape: BoxShape.circle,
                         border: Border.all(color: badge.color.withOpacity(0.3)),
                       ),
-                      child: FaIcon(badge.icon, size: 20, color: badge.color),
+                      child: FaIcon(badge.icon, size: 18, color: badge.color),
                     ),
                   ),
                 );
