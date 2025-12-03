@@ -20,36 +20,49 @@ class PushNotificationService {
   Stream<RemoteMessage> get onMessage => _messageStreamController.stream; 
 
   Future<void> initialize() async {
-    await _requestPermission();
-    _handleForegroundMessages();
+    try {
+      await _requestPermission();
+      _setupLocalNotifications();
+      _handleForegroundMessages();
 
-    // 1. Başlangıçta token'ı alıyoruz
-    String? token = await _firebaseMessaging.getToken();
-    
-    if (token != null && kDebugMode) {
-      print("Cihaz FCM Token: $token");
-    }
-
-    // 2. Kullanıcı oturum durumunu dinliyoruz
-    FirebaseAuth.instance.authStateChanges().listen((User? user) async {
-      if (user != null && token != null) {
-        // KRİTİK DÜZELTME: Hemen yazmaya çalışma. Profilin oluşmasını bekle.
-        // Yeni kayıt sırasında AuthService profil oluştururken çakışma olmaması için
-        // veritabanında dokümanın varlığını kontrol ediyoruz.
-        await _safeSaveToken(user.uid, token!);
+      // 1. Başlangıçta token'ı alıyoruz
+      String? token;
+      try {
+        token = await _firebaseMessaging.getToken(vapidKey: null);
+      } catch (e) {
+        if (kDebugMode) {
+          print("⚠️  FCM Token alınamadı (Google Play Services olmayabilir): $e");
+        }
+        // Token alınamazsa devam et, sadece bildir
+        return;
       }
-    });
-
-    // 3. Token yenilenirse
-    _firebaseMessaging.onTokenRefresh.listen((newToken) async {
-      token = newToken;
-      if (kDebugMode) print("FCM Token Yenilendi: $newToken");
       
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser != null) {
-        await _safeSaveToken(currentUser.uid, newToken);
+      if (token != null && kDebugMode) {
+        print("✅ Cihaz FCM Token: $token");
       }
-    });
+
+      // 2. Kullanıcı oturum durumunu dinliyoruz
+      FirebaseAuth.instance.authStateChanges().listen((User? user) async {
+        if (user != null && token != null) {
+          await _safeSaveToken(user.uid, token!);
+        }
+      });
+
+      // 3. Token yenilenirse
+      _firebaseMessaging.onTokenRefresh.listen((newToken) async {
+        token = newToken;
+        if (kDebugMode) print("✅ FCM Token Yenilendi: $newToken");
+        
+        final currentUser = FirebaseAuth.instance.currentUser;
+        if (currentUser != null) {
+          await _safeSaveToken(currentUser.uid, newToken);
+        }
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        print("❌ Push notification servisi başlatma hatası: $e");
+      }
+    }
   }
   
   // GÜVENLİ TOKEN KAYDETME
@@ -85,13 +98,19 @@ class PushNotificationService {
   }
 
   Future<void> _requestPermission() async {
-    final settings = await _firebaseMessaging.requestPermission(
-      alert: true, 
-      badge: true, 
-      sound: true,
-    );
-    if (kDebugMode) {
-      print('Bildirim izni durumu: ${settings.authorizationStatus}');
+    try {
+      final settings = await _firebaseMessaging.requestPermission(
+        alert: true, 
+        badge: true, 
+        sound: true,
+      );
+      if (kDebugMode) {
+        print('✅ Bildirim izni durumu: ${settings.authorizationStatus}');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️  Bildirim izni istenirken hata: $e');
+      }
     }
   }
 

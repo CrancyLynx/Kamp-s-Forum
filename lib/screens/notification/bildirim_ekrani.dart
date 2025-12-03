@@ -208,8 +208,9 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          // ✅ DÜZELTME: Stream error kontrolü eklendi
+          // ✅ DÜZELTME: Stream error kontrolü - daha detaylı hata gösterimi
           if (snapshot.hasError) {
+            final error = snapshot.error.toString();
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -221,9 +222,13 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
                     style: TextStyle(color: Colors.grey[600], fontSize: 16),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    "Lütfen internet bağlantınızı kontrol edin.",
-                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Text(
+                      error.length > 200 ? error.substring(0, 200) + '...' : error,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                    ),
                   ),
                   const SizedBox(height: 15),
                   ElevatedButton.icon(
