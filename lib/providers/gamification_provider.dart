@@ -23,7 +23,7 @@ class GamificationProvider extends ChangeNotifier {
   }
 
   // XP Ekleme (UI'dan tetiklemek için)
-  Future<void> earnXP(String userId, String type, int amount, String relatedId) async {
-    await _service.addXP(userId, type, amount, relatedId);
+  Future<void> earnXP(String userId, String type, String relatedId) async {
+    await _service.addXP(userId, type, relatedId);
   }
 }

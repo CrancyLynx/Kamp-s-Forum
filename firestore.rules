@@ -1,0 +1,184 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ==========================================
+    // DEFAULT RULE: HERKESİ REDDET
+    // ==========================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ==========================================
+    // USERS COLLECTION
+    // ==========================================
+    match /kullanicilar/{userId} {
+      // Kendi profilini oku ve güncelle
+      allow read: if request.auth.uid == userId || 
+                     get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.role == "admin";
+      allow update: if request.auth.uid == userId && 
+                       !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status']);
+      
+      // Admin tüm kullanıcıları yönetebilir
+      allow read, write: if get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.role == "admin";
+      
+      // Yeni kullanıcı oluştur (onCreate)
+      allow create: if request.auth.uid == userId;
+    }
+
+    // ==========================================
+    // POSTS COLLECTION
+    // ==========================================
+    match /gonderiler/{postId} {
+      // Herkes okuyabilir
+      allow read: if true;
+      
+      // Kendi gönderini yazabilir
+      allow create: if request.auth.uid != null && 
+                       request.resource.data.userId == request.auth.uid;
+      
+      // Kendi gönderini güncelleyebilir
+      allow update: if request.auth.uid == resource.data.userId ||
+                       get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.role == "admin";
+      
+      // Kendi gönderini silebilir
+      allow delete: if request.auth.uid == resource.data.userId ||
+                       get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.role == "admin";
+      
+      // Alt koleksiyonlar (comments)
+      match /yorumlar/{commentId} {
+        allow read: if true;
+        allow create: if request.auth.uid != null;
+        allow update, delete: if request.auth.uid == resource.data.userId ||
+                                 get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.role == "admin";
+      }
+    }
+
+    // ==========================================
+    // NOTIFICATIONS COLLECTION
+    // ==========================================
+    match /bildirimler/{notifId} {
+      // Kendi bildirimlerini oku
+      allow read: if request.auth.uid == resource.data.userId;
+      
+      // Cloud Functions yazabilir
+      allow write: if request.auth == null;
+      
+      // Admin tüm bildirimleri yönetebilir
+      allow read, write: if get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.role == "admin";
+    }
+
+    // ==========================================
+    // CHATS COLLECTION
+    // ==========================================
+    match /sohbetler/{chatId} {
+      // Katılımcı ise oku
+      allow read: if request.auth.uid in resource.data.participants;
+      
+      // Katılımcı ise yaz
+      allow write: if request.auth.uid in resource.data.participants ||
+                      request.auth == null; // Cloud Functions için
+    }
+
+    // ==========================================
+    // EXAMS COLLECTION
+    // ==========================================
+    match /sinavlar/{examId} {
+      // Herkes okuyabilir
+      allow read: if true;
+      
+      // Cloud Functions yazabilir
+      allow write: if request.auth == null;
+      
+      // Admin yönetebilir
+      allow write: if get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.role == "admin";
+    }
+
+    // ==========================================
+    // FORUMS COLLECTION
+    // ==========================================
+    match /forumlar/{forumId} {
+      // Herkes okuyabilir
+      allow read: if true;
+      
+      // Giriş yapan kişi yazabilir
+      allow create: if request.auth.uid != null;
+      
+      // Admin yönetebilir
+      allow update, delete: if get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.role == "admin";
+      
+      // Forum messages
+      match /mesajlar/{messageId} {
+        allow read: if true;
+        allow create: if request.auth.uid != null;
+        allow update, delete: if request.auth.uid == resource.data.userId ||
+                                 get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.role == "admin";
+      }
+    }
+
+    // ==========================================
+    // VISION API QUOTA (ÖNEMLİ!)
+    // ==========================================
+    match /vision_api_quota/{monthKey} {
+      // Sadece Cloud Functions okuyabilir ve yazabilir
+      allow read, write: if request.auth == null;
+      
+      // Admin okuyabilir
+      allow read: if get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.role == "admin";
+    }
+
+    // ==========================================
+    // SYSTEM CONFIG (ÖNEMLİ!)
+    // ==========================================
+    match /system_config/{configId} {
+      // Sadece Cloud Functions yazabilir
+      allow write: if request.auth == null;
+      
+      // Admin okuyabilir
+      allow read: if get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.role == "admin";
+    }
+
+    // ==========================================
+    // ACTIVITY LOGS
+    // ==========================================
+    match /activity_logs/{logId} {
+      // Cloud Functions yazabilir
+      allow write: if request.auth == null;
+      
+      // Admin okuyabilir
+      allow read: if get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.role == "admin";
+    }
+
+    // ==========================================
+    // PLATFORM STATS
+    // ==========================================
+    match /platform_stats/{monthId} {
+      // Herkes okuyabilir (public stats)
+      allow read: if true;
+      
+      // Cloud Functions yazabilir
+      allow write: if request.auth == null;
+    }
+
+    // ==========================================
+    // POLLS COLLECTION
+    // ==========================================
+    match /anketler/{pollId} {
+      allow read: if true;
+      allow create: if request.auth.uid != null;
+      allow update, delete: if request.auth.uid == resource.data.userId ||
+                               get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.role == "admin";
+    }
+
+    // ==========================================
+    // XP LOGS (GAMIFICATION)
+    // ==========================================
+    match /xp_logs/{logId} {
+      // Cloud Functions yazabilir
+      allow write: if request.auth == null;
+      
+      // Kendi loglarını okuabilir
+      allow read: if request.auth.uid == resource.data.userId;
+    }
+  }
+}

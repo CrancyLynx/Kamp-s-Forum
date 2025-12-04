@@ -166,7 +166,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
           await GamificationService().addXP(
             _currentUserId,
             'comment_like',
-            1, // 1 XP per like
             'like-${DateTime.now().millisecondsSinceEpoch}',
           );
         } catch (e) {
@@ -316,7 +315,6 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
         await GamificationService().addXP(
           _currentUserId,
           'comment_created',
-          5, // 5 XP per comment
           'comment-${DateTime.now().millisecondsSinceEpoch}',
         );
       } catch (e) {

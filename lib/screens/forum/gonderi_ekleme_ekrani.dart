@@ -309,7 +309,6 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
         await GamificationService().addXP(
           userId,
           'post_created',
-          10,
           'post-${DateTime.now().millisecondsSinceEpoch}',
         );
       } catch (e) {

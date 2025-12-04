@@ -11,7 +11,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../utils/app_colors.dart';
-import '../../utils/phone_formatter.dart';
+// import '../../utils/phone_formatter.dart'; // Unused import
 import '../../utils/guest_security_helper.dart';
 import '../../widgets/app_header.dart';
 import '../auth/giris_ekrani.dart';
