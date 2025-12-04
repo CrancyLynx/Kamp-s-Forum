@@ -271,7 +271,6 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -318,37 +317,9 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
               ),
             ),
 
-            // Kategori filtreleri - Kompakt tasarım
-            SizedBox(
-              height: 50,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: kFilterCategories.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
-                itemBuilder: (context, index) {
-                  final category = kFilterCategories[index];
-                  final isSelected = _selectedFilter == category;
-                  return ChoiceChip(
-                    label: Text(category),
-                    selected: isSelected,
-                    onSelected: (bool selected) {
-                      if (selected) {
-                        setState(() => _selectedFilter = category);
-                        _resetAndFetch();
-                      }
-                    },
-                    selectedColor: AppColors.primary,
-                    backgroundColor: isDark ? Colors.grey[800] : Colors.grey[100],
-                    labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : Colors.grey,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  );
-                },
-              ),
-            ),
-          Expanded(
+            _buildCategoryFilters(),
+
+            Expanded(
             child: StreamBuilder<DocumentSnapshot>(
               stream: widget.isGuest ? null : FirebaseFirestore.instance.collection('kullanicilar').doc(FirebaseAuth.instance.currentUser!.uid).snapshots(),
               builder: (context, userSnapshot) {
@@ -422,6 +393,39 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
         backgroundColor: AppColors.primary,
         child: const Icon(Icons.add, color: Colors.white),
       ) : null,
+    );
+  }
+
+  Widget _buildCategoryFilters() {
+    return SizedBox(
+      height: 50,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: kFilterCategories.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final category = kFilterCategories[index];
+          final isSelected = _selectedFilter == category;
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          return ChoiceChip(
+            label: Text(category),
+            selected: isSelected,
+            onSelected: (bool selected) {
+              if (selected) {
+                setState(() => _selectedFilter = category);
+                _resetAndFetch();
+              }
+            },
+            selectedColor: AppColors.primary,
+            backgroundColor: isDark ? Colors.grey[800] : Colors.grey[100],
+            labelStyle: TextStyle(
+              color: isSelected ? Colors.white : Colors.grey,
+              fontWeight: FontWeight.bold,
+            ),
+          );
+        },
+      ),
     );
   }
 }
