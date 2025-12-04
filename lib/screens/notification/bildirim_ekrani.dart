@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:intl/intl.dart'; 
+import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../utils/app_colors.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../utils/maskot_helper.dart';
@@ -414,7 +414,7 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildNotificationIcon(data['type']),
+                _buildNotificationIcon(doc),
                 const SizedBox(width: 15),
                 Expanded(
                   child: Column(
@@ -458,7 +458,34 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
     );
   }
 
-  Widget _buildNotificationIcon(String? type) {
+  Widget _buildNotificationIcon(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>?;
+    if (data == null) return _buildDefaultIcon(data?['type']);
+
+    // Like bildirimi - sender avatar'ı göster
+    if (data['type'] == 'like' && data['senderAvatarUrl'] != null && (data['senderAvatarUrl'] as String).isNotEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.redAccent, width: 2),
+        ),
+        child: ClipOval(
+          child: CachedNetworkImage(
+            imageUrl: data['senderAvatarUrl'],
+            width: 42,
+            height: 42,
+            fit: BoxFit.cover,
+            errorWidget: (context, url, error) => _buildDefaultIcon(data['type']),
+          ),
+        ),
+      );
+    }
+
+    return _buildDefaultIcon(data['type']);
+  }
+
+  Widget _buildDefaultIcon(String? type) {
     IconData icon;
     Color color;
 

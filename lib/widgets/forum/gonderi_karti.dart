@@ -90,6 +90,11 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
   Future<void> _sendLikeNotification(String senderId, String senderName, String receiverId, String postId, String postTitle) async {
     if (senderId == receiverId || !mounted) return;
 
+    final senderDoc = await FirebaseFirestore.instance.collection('kullanicilar').doc(senderId).get();
+    final senderData = senderDoc.data() ?? {};
+    final senderAvatarUrl = senderData['profilFotografi'] ?? '';
+    final senderUniversity = senderData['universite'] ?? '';
+
     final notificationQuery = await FirebaseFirestore.instance
         .collection('bildirimler')
         .where('postId', isEqualTo: postId)
@@ -103,6 +108,8 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
       await FirebaseFirestore.instance.collection('bildirimler').doc(docId).update({
         'senderId': senderId,
         'senderName': senderName,
+        'senderAvatarUrl': senderAvatarUrl,
+        'senderUniversity': senderUniversity,
         'message': '$senderName ve diğerleri gönderini beğendi.',
         'isRead': false,
         'timestamp': FieldValue.serverTimestamp(),
@@ -115,6 +122,8 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
         'type': 'like',
         'senderId': senderId,
         'senderName': senderName,
+        'senderAvatarUrl': senderAvatarUrl,
+        'senderUniversity': senderUniversity,
         'message': '$senderName gönderini beğendi.',
         'isRead': false,
         'timestamp': FieldValue.serverTimestamp(),

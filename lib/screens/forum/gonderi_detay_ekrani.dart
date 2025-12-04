@@ -199,11 +199,12 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
   Future<void> _sendLikeNotification() async {
     if (_currentUserId == widget.authorUserId) return;
 
-    // DÜZELTME: Bildirim göndermeden önce mevcut kullanıcının adını al.
     final myDoc = await FirebaseFirestore.instance.collection('kullanicilar').doc(_currentUserId).get();
-    final myName = myDoc.data()?['takmaAd'] ?? 'Bir kullanıcı';
+    final myData = myDoc.data() ?? {};
+    final myName = myData['takmaAd'] ?? 'Bir kullanıcı';
+    final myAvatarUrl = myData['profilFotografi'] ?? '';
+    final myUniversity = myData['universite'] ?? '';
 
-    // Bildirimleri birleştirmek için gönderi ID'si ve beğenen kullanıcı ID'si ile eşleşen bir bildirim arayalım.
     final notificationQuery = await FirebaseFirestore.instance
         .collection('bildirimler')
         .where('postId', isEqualTo: widget.postId)
@@ -213,25 +214,27 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
         .get();
 
     if (notificationQuery.docs.isNotEmpty) {
-      // Var olan bildirimi güncelle
       final docId = notificationQuery.docs.first.id;
       await FirebaseFirestore.instance.collection('bildirimler').doc(docId).update({
         'senderId': _currentUserId,
-        'senderName': myName, // Düzeltilmiş kullanıcı adı
-        'message': 've diğerleri gönderini beğendi.',
+        'senderName': myName,
+        'senderAvatarUrl': myAvatarUrl,
+        'senderUniversity': myUniversity,
+        'message': '$myName ve diğerleri gönderini beğendi.',
         'isRead': false,
         'timestamp': FieldValue.serverTimestamp(),
       });
     } else {
-      // Yeni bildirim oluştur
-       await FirebaseFirestore.instance.collection('bildirimler').add({
+      await FirebaseFirestore.instance.collection('bildirimler').add({
         'userId': widget.authorUserId,
         'postId': widget.postId,
         'postTitle': widget.baslik,
         'type': 'like',
         'senderId': _currentUserId,
-        'senderName': myName, // Düzeltilmiş kullanıcı adı
-        'message': 'gönderini beğendi.',
+        'senderName': myName,
+        'senderAvatarUrl': myAvatarUrl,
+        'senderUniversity': myUniversity,
+        'message': '$myName gönderini beğendi.',
         'isRead': false,
         'timestamp': FieldValue.serverTimestamp(),
       });
