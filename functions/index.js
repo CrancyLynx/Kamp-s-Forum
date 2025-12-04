@@ -2,12 +2,34 @@ const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const axios = require("axios");
 const cheerio = require("cheerio");
+const vision = require("@google-cloud/vision");
 
 admin.initializeApp();
 const db = admin.firestore();
+const visionClient = new vision.ImageAnnotatorClient();
 
 // --- AYARLAR ---
 const REGION = "europe-west1";
+
+/**
+ * =================================================================================
+ * İMAJ MODERASYON AYARLARI
+ * =================================================================================
+ */
+const IMAGE_MODERATION_CONFIG = {
+  // Safe Search Detection eşikleri (0.0 - 1.0)
+  // 1.0 = kesinlikle uygunsuz, 0.0 = hiç uygunsuz değil
+  ADULT_THRESHOLD: 0.6,      // 60% üzeri → adult content
+  RACY_THRESHOLD: 0.7,       // 70% üzeri → racy content
+  VIOLENCE_THRESHOLD: 0.7,   // 70% üzeri → şiddet içeriği
+  MEDICAL_THRESHOLD: 0.8,    // 80% üzeri → tıbbi görüntü
+  
+  // Kontrol edilecek dosya tipleri
+  ALLOWED_TYPES: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+  
+  // Max dosya boyutu (10MB)
+  MAX_SIZE: 10 * 1024 * 1024,
+};
 
 const checkAuth = (context) => {
   if (!context.auth) {
@@ -915,6 +937,103 @@ const checkContentForBadWords = (text) => {
 
 /**
  * =================================================================================
+ * İMAJ KONTROL UTILITY FONKSIYONLARI
+ * =================================================================================
+ */
+
+/**
+ * Vision API ile resim analiz et
+ */
+const analyzeImageWithVision = async (imagePath) => {
+  try {
+    // Google Cloud Storage PATH: gs://bucket/path/to/image.jpg
+    const request = {
+      image: { source: { imageUri: imagePath } },
+      features: [
+        { type: 'SAFE_SEARCH_DETECTION' },
+      ],
+    };
+
+    const results = await visionClient.annotateImage(request);
+    const detection = results[0].safeSearchAnnotation;
+
+    return {
+      adult: detection.adult || 'UNKNOWN',
+      racy: detection.racy || 'UNKNOWN',
+      violence: detection.violence || 'UNKNOWN',
+      medical: detection.medical || 'UNKNOWN',
+      spoof: detection.spoof || 'UNKNOWN',
+      raw: detection
+    };
+  } catch (error) {
+    console.error("Vision API analiz hatası:", error);
+    throw error;
+  }
+};
+
+/**
+ * Likelihood string'ini sayıya çevir (karşılaştırma için)
+ */
+const likelihoodToScore = (likelihood) => {
+  const scores = {
+    'VERY_LIKELY': 0.95,
+    'LIKELY': 0.75,
+    'POSSIBLE': 0.50,
+    'UNLIKELY': 0.25,
+    'VERY_UNLIKELY': 0.05,
+    'UNKNOWN': 0.50
+  };
+  return scores[likelihood] || 0.50;
+};
+
+/**
+ * Resim güvenliği kontrolü
+ */
+const checkImageSafety = async (imagePath) => {
+  try {
+    const analysis = await analyzeImageWithVision(imagePath);
+    
+    const adultScore = likelihoodToScore(analysis.adult);
+    const racyScore = likelihoodToScore(analysis.racy);
+    const violenceScore = likelihoodToScore(analysis.violence);
+
+    const isUnsafe = 
+      adultScore >= IMAGE_MODERATION_CONFIG.ADULT_THRESHOLD ||
+      racyScore >= IMAGE_MODERATION_CONFIG.RACY_THRESHOLD ||
+      violenceScore >= IMAGE_MODERATION_CONFIG.VIOLENCE_THRESHOLD;
+
+    const blockedReasons = [];
+    if (adultScore >= IMAGE_MODERATION_CONFIG.ADULT_THRESHOLD) {
+      blockedReasons.push(`Adult content (${(adultScore * 100).toFixed(0)}%)`);
+    }
+    if (racyScore >= IMAGE_MODERATION_CONFIG.RACY_THRESHOLD) {
+      blockedReasons.push(`Racy content (${(racyScore * 100).toFixed(0)}%)`);
+    }
+    if (violenceScore >= IMAGE_MODERATION_CONFIG.VIOLENCE_THRESHOLD) {
+      blockedReasons.push(`Violence (${(violenceScore * 100).toFixed(0)}%)`);
+    }
+
+    return {
+      isUnsafe,
+      adultScore,
+      racyScore,
+      violenceScore,
+      blockedReasons,
+      raw: analysis
+    };
+  } catch (error) {
+    console.error("Image safety check hatası:", error);
+    // Hata durumunda güvenli olmayan kabul et
+    return {
+      isUnsafe: true,
+      error: error.message,
+      blockedReasons: ['API hatası - sistem tarafından reddedildi']
+    };
+  }
+};
+
+/**
+ * =================================================================================
  * 13. CONTENT MODERATION OTOMASYONU (GENİŞLETİLMİŞ)
  * =================================================================================
  */
@@ -1544,6 +1663,230 @@ exports.checkAndFixContent = functions.region(REGION).https.onCall(async (data, 
 
   } catch (error) {
     console.error("İçerik kontrol hatası:", error);
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * =================================================================================
+ * 26. GÖNDERI/PROFIL RESİMİ MODERASYONU TRIGGER
+ * =================================================================================
+ * Storage'a yüklenen resimleri Vision API ile kontrol eder
+ * Uygunsuzsa siler + admin'e bildirim gönderir
+ */
+exports.moderateUploadedImage = functions.region(REGION).storage
+  .object()
+  .onFinalize(async (object) => {
+    const filePath = object.name; // Örn: "profil_resimleri/userId/image.jpg"
+    const bucket = admin.storage().bucket(object.bucket);
+    const contentType = object.contentType;
+
+    // Sadece görüntüleri kontrol et
+    if (!contentType || !contentType.startsWith('image/')) {
+      console.log(`[SKIP] Görüntü değil: ${contentType}`);
+      return null;
+    }
+
+    // İzin verilen türler
+    if (!IMAGE_MODERATION_CONFIG.ALLOWED_TYPES.includes(contentType)) {
+      console.log(`[REJECTED] İzin verilmeyen tip: ${contentType}`);
+      await bucket.file(filePath).delete();
+      return null;
+    }
+
+    // Dosya boyutu kontrolü
+    if (object.size > IMAGE_MODERATION_CONFIG.MAX_SIZE) {
+      console.log(`[SIZE_EXCEEDED] Dosya çok büyük: ${object.size} bytes`);
+      await bucket.file(filePath).delete();
+      return null;
+    }
+
+    try {
+      console.log(`[ANALYZING] Resim analiz ediliyor: ${filePath}`);
+      
+      // GCS Path: gs://bucket/path
+      const gcsPath = `gs://${object.bucket}/${filePath}`;
+      
+      // Güvenlik kontrolü yap
+      const safetyResult = await checkImageSafety(gcsPath);
+
+      if (safetyResult.isUnsafe) {
+        console.log(`[UNSAFE_IMAGE] Uygunsuz resim bulundu: ${filePath}`);
+        console.log(`Sebepleri: ${safetyResult.blockedReasons.join(", ")}`);
+        
+        // Resmi sil
+        await bucket.file(filePath).delete();
+        
+        // Dosya yolundan userId'yi çıkar (örn: "profil_resimleri/userId/..." → userId)
+        const pathParts = filePath.split('/');
+        let userId = null;
+        
+        if (filePath.includes('profil_resimleri') && pathParts.length >= 2) {
+          userId = pathParts[1];
+        } else if (filePath.includes('gonderiler') && pathParts.length >= 2) {
+          userId = pathParts[1];
+        }
+
+        // Admin'e bildirim gönder
+        if (userId) {
+          await db.collection("bildirimler").add({
+            userId: "admin",
+            senderId: userId,
+            type: "unsafe_image_alert",
+            message: `⚠️ Uygunsuz resim yükleme denemesi: ${safetyResult.blockedReasons.join(", ")}`,
+            filePath: filePath,
+            scores: {
+              adult: (safetyResult.adultScore * 100).toFixed(0),
+              racy: (safetyResult.racyScore * 100).toFixed(0),
+              violence: (safetyResult.violenceScore * 100).toFixed(0)
+            },
+            isRead: false,
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+          });
+
+          // Kullanıcıyı uyar
+          await db.collection("kullanicilar").doc(userId).update({
+            lastRejectedImageAt: admin.firestore.FieldValue.serverTimestamp(),
+            rejectedImageCount: admin.firestore.FieldValue.increment(1)
+          });
+        }
+
+        return {
+          success: false,
+          deleted: true,
+          reason: safetyResult.blockedReasons.join(", ")
+        };
+      } else {
+        console.log(`[SAFE_IMAGE] Resim güvenli: ${filePath}`);
+        return {
+          success: true,
+          message: "Resim başarıyla analiz edildi - güvenli"
+        };
+      }
+
+    } catch (error) {
+      console.error(`[ERROR] Resim analizi sırasında hata: ${error.message}`);
+      // Hata durumunda resmi sil (güvenlik için)
+      try {
+        await bucket.file(filePath).delete();
+      } catch (deleteError) {
+        console.error(`Dosya silme hatası: ${deleteError.message}`);
+      }
+      return null;
+    }
+  });
+
+/**
+ * =================================================================================
+ * 27. UPLOAD ÖNCESI İMAJ KONTROLÜ (CLIENT-SIDE)
+ * =================================================================================
+ * Kullanıcı resim yüklemeden önce güvenlik kontrolü yapar
+ */
+exports.analyzeImageBeforeUpload = functions.region(REGION).https.onCall(async (data, context) => {
+  checkAuth(context);
+  
+  const { imageUrl } = data;
+  
+  if (!imageUrl) {
+    throw new functions.https.HttpsError("invalid-argument", "Resim URL'si eksik.");
+  }
+
+  try {
+    console.log(`[ANALYZING_BEFORE_UPLOAD] Resim analiz ediliyor: ${imageUrl}`);
+    
+    const safetyResult = await checkImageSafety(imageUrl);
+
+    if (safetyResult.isUnsafe) {
+      console.log(`[UNSAFE] Uygunsuz resim: ${safetyResult.blockedReasons.join(", ")}`);
+      
+      return {
+        success: false,
+        isUnsafe: true,
+        message: `⚠️ Resminiz uygunsuz içerik içeriyor:\n${safetyResult.blockedReasons.join("\n")}\n\nLütfen başka bir resim seçin.`,
+        blockedReasons: safetyResult.blockedReasons,
+        scores: {
+          adult: (safetyResult.adultScore * 100).toFixed(0),
+          racy: (safetyResult.racyScore * 100).toFixed(0),
+          violence: (safetyResult.violenceScore * 100).toFixed(0)
+        }
+      };
+    } else {
+      console.log(`[SAFE] Resim güvenli - yüklenmesine izin ver`);
+      
+      return {
+        success: true,
+        isUnsafe: false,
+        message: "✅ Resim güvenlik kontrolünü geçti! Yükleyebilirsiniz.",
+        scores: {
+          adult: (safetyResult.adultScore * 100).toFixed(0),
+          racy: (safetyResult.racyScore * 100).toFixed(0),
+          violence: (safetyResult.violenceScore * 100).toFixed(0)
+        }
+      };
+    }
+  } catch (error) {
+    console.error("Resim analiz hatası:", error);
+    throw new functions.https.HttpsError("internal", `Resim analizi başarısız: ${error.message}`);
+  }
+});
+
+/**
+ * =================================================================================
+ * 28. BAYRAKLANMIŞ RESİMLERİ AÇIKLAMA YAPARAK YENİDEN GÖNDERİM
+ * =================================================================================
+ */
+exports.reuploadAfterRejection = functions.region(REGION).https.onCall(async (data, context) => {
+  checkAuth(context);
+  
+  const { newImageUrl, explanation } = data;
+  const userId = context.auth.uid;
+  
+  if (!newImageUrl) {
+    throw new functions.https.HttpsError("invalid-argument", "Yeni resim URL'si eksik.");
+  }
+
+  try {
+    // Yeni resmi analiz et
+    const safetyResult = await checkImageSafety(newImageUrl);
+
+    if (safetyResult.isUnsafe) {
+      return {
+        success: false,
+        message: `⚠️ Yeni resminiz de uygunsuz içerik içeriyor:\n${safetyResult.blockedReasons.join("\n")}`,
+        blockedReasons: safetyResult.blockedReasons
+      };
+    }
+
+    // Admin'e inceleme isteği gönder
+    await db.collection("image_reupload_requests").add({
+      userId: userId,
+      newImageUrl: newImageUrl,
+      userExplanation: explanation || "Açıklama yok",
+      status: "pending_review",
+      submittedAt: admin.firestore.FieldValue.serverTimestamp(),
+      scores: {
+        adult: (safetyResult.adultScore * 100).toFixed(0),
+        racy: (safetyResult.racyScore * 100).toFixed(0),
+        violence: (safetyResult.violenceScore * 100).toFixed(0)
+      }
+    });
+
+    // Admin'e bildirim
+    await db.collection("bildirimler").add({
+      userId: "admin",
+      senderId: userId,
+      type: "image_reupload_request",
+      message: `Resim yeniden yükleme isteği: ${explanation || "Açıklama yok"}`,
+      isRead: false,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return {
+      success: true,
+      message: "✅ Resminiz inceleme için admin'e gönderildi. Sonuç için lütfen bekleyin."
+    };
+  } catch (error) {
+    console.error("Resim yeniden yükleme hatası:", error);
     throw new functions.https.HttpsError("internal", error.message);
   }
 });
