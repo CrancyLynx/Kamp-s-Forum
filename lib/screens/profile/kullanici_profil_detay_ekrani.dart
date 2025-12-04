@@ -335,284 +335,323 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
   }
 
   Widget _buildProfileHeader(Map<String, dynamic> data, bool amIAdmin) {
+    return Column(
+      children: [
+        const SizedBox(height: 20),
+        _buildAvatarSection(data),
+        const SizedBox(height: 12),
+        _buildNameSection(data),
+        const SizedBox(height: 16),
+        _buildBioSection(data),
+        const SizedBox(height: 16),
+        _buildUniversitySection(data),
+        const SizedBox(height: 24),
+        _buildStatsSection(data),
+        _buildSocialMediaSection(data),
+        _buildBadgesSection(data),
+        const SizedBox(height: 24),
+        _buildActionButtons(data, amIAdmin),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget _buildAvatarSection(Map<String, dynamic> data) {
     final String avatarUrl = data['avatarUrl'] ?? '';
     final String name = data['takmaAd'] ?? 'Anonim';
+    final theme = Theme.of(context);
+
+    return CircleAvatar(
+      radius: 55,
+      backgroundColor: theme.scaffoldBackgroundColor.withOpacity(0.5),
+      child: CircleAvatar(
+        radius: 50,
+        backgroundColor: Colors.white,
+        backgroundImage: avatarUrl.isNotEmpty ? CachedNetworkImageProvider(avatarUrl) : null,
+        child: avatarUrl.isEmpty && name.isNotEmpty
+            ? Text(name[0].toUpperCase(), style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: AppColors.primary))
+            : null,
+      ),
+    );
+  }
+
+  Widget _buildNameSection(Map<String, dynamic> data) {
+    final String name = data['takmaAd'] ?? 'Anonim';
+    final bool isUserAdmin = (data['role'] == 'admin');
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          name,
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: textColor),
+        ),
+        if (isUserAdmin)
+          const Padding(
+            padding: EdgeInsets.only(left: 6),
+            child: Icon(Icons.verified, color: AppColors.primary, size: 22),
+          ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppColors.primaryAccent.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text("Lv. ${data['seviye'] ?? 1}",
+              style: const TextStyle(color: AppColors.primaryAccent, fontWeight: FontWeight.bold, fontSize: 13)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBioSection(Map<String, dynamic> data) {
     final String realName = data['ad'] ?? '';
     final String bio = data['biyografi'] ?? '';
+    final theme = Theme.of(context);
+
+    return Column(
+      children: [
+        if (realName.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Text(realName, style: TextStyle(fontSize: 15, color: Colors.grey[600], fontWeight: FontWeight.w400)),
+          ),
+        if (bio.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40.0),
+            child: Text(
+              bio,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.8), fontSize: 14, height: 1.4),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildUniversitySection(Map<String, dynamic> data) {
     final Map<String, dynamic> submission = (data['submissionData'] as Map<String, dynamic>?) ?? {};
     final String university = data['universite'] ?? submission['university'] ?? '';
     final String department = data['bolum'] ?? submission['department'] ?? '';
-    final bool isUserAdmin = (data['role'] == 'admin');
-    final List<String> badges = List<String>.from(data['earnedBadges'] ?? []);
-    final List<String> followers = List<String>.from(data['followers'] ?? []);
-    final bool isFollowing = followers.contains(_currentUserId);
 
+    if (university.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 40),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(FontAwesomeIcons.graduationCap, color: AppColors.primary, size: 13),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              "$university ${department.isNotEmpty ? '• $department' : ''}",
+              style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsSection(Map<String, dynamic> data) {
+    final String name = data['takmaAd'] ?? 'Anonim';
+    final cardColor = Theme.of(context).cardColor;
+
+    return Container(
+      key: _statsKey,
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: cardColor.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildStatItem("Takipçi", data['followerCount'] ?? 0,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => KullaniciListesiEkrani(title: "$name Takipçileri", userIds: List<String>.from(data['followers'] ?? []))))),
+          Container(height: 30, width: 1, color: Colors.grey.withOpacity(0.2)),
+          _buildStatItem("Takip", data['followingCount'] ?? 0,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => KullaniciListesiEkrani(title: "$name Takip Ettikleri", userIds: List<String>.from(data['following'] ?? []))))),
+          Container(height: 30, width: 1, color: Colors.grey.withOpacity(0.2)),
+          _buildStatItem("Gönderi", data['postCount'] ?? 0),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSocialMediaSection(Map<String, dynamic> data) {
     final String? github = data['github'];
     final String? linkedin = data['linkedin'];
     final String? instagram = data['instagram'];
     final String? xPlatform = data['x_platform'];
     final bool hasSocial = (github?.isNotEmpty ?? false) || (linkedin?.isNotEmpty ?? false) || (instagram?.isNotEmpty ?? false) || (xPlatform?.isNotEmpty ?? false);
 
-    final theme = Theme.of(context);
-    final cardColor = theme.cardColor;
-    final textColor = theme.textTheme.bodyLarge?.color;
+    if (!hasSocial) return const SizedBox.shrink();
 
-    return Column(
+    return Padding(
+      padding: const EdgeInsets.only(top: 20.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (github?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.github, "https://github.com/$github"),
+          if (linkedin?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.linkedin, "https://linkedin.com/in/$linkedin"),
+          if (instagram?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.instagram, "https://instagram.com/$instagram"),
+          if (xPlatform?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.xTwitter, "https://x.com/$xPlatform"),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBadgesSection(Map<String, dynamic> data) {
+    final List<String> badges = List<String>.from(data['earnedBadges'] ?? []);
+
+    if (badges.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 24.0, left: 24, right: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("Kazanılan Rozetler", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 12),
+          SizedBox(
+            key: _badgesKey,
+            height: 40,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: badges.length,
+              itemBuilder: (context, index) {
+                final badgeId = badges[index];
+                final badge = allBadges.firstWhere((b) => b.id == badgeId, orElse: () => allBadges[0]);
+                return Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: Tooltip(
+                    message: badge.name,
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: badge.color.withOpacity(0.15),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: badge.color.withOpacity(0.4), width: 1.5),
+                      ),
+                      child: Center(
+                        child: FaIcon(badge.icon, size: 16, color: badge.color),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(Map<String, dynamic> data, bool amIAdmin) {
+    final String name = data['takmaAd'] ?? 'Anonim';
+    final String avatarUrl = data['avatarUrl'] ?? '';
+    final List<String> followers = List<String>.from(data['followers'] ?? []);
+    final bool isFollowing = followers.contains(_currentUserId);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        children: [
+          _isOwnProfile ? _buildEditButton() : _buildFollowAndMessageButtons(name, avatarUrl, isFollowing),
+          if (amIAdmin && !_isOwnProfile)
+            Padding(
+              padding: const EdgeInsets.only(top: 12.0),
+              child: TextButton(
+                onPressed: () => _toggleAdminRole(data['role'] == 'admin'),
+                child: Text(
+                  data['role'] == 'admin' ? "Yönetici Yetkisini Al" : "Yönetici Yap",
+                  style: TextStyle(color: data['role'] == 'admin' ? Colors.red : Colors.green, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEditButton() {
+    return SizedBox(
+      key: _actionButtonsKey,
+      width: double.infinity,
+      height: 48,
+      child: ElevatedButton.icon(
+        icon: const Icon(Icons.edit, size: 18),
+        label: const Text("Profili Düzenle"),
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilDuzenlemeEkrani())),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          elevation: 2,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFollowAndMessageButtons(String name, String avatarUrl, bool isFollowing) {
+    return Row(
+      key: _actionButtonsKey,
       children: [
-        const SizedBox(height: 20),
-        
-        CircleAvatar(
-          radius: 55,
-          backgroundColor: theme.scaffoldBackgroundColor.withOpacity(0.5),
-          child: CircleAvatar(
-            radius: 50,
-            backgroundColor: Colors.white,
-            backgroundImage: avatarUrl.isNotEmpty ? CachedNetworkImageProvider(avatarUrl) : null,
-            child: avatarUrl.isEmpty && name.isNotEmpty
-                ? Text(name[0].toUpperCase(), style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: AppColors.primary))
-                : null,
+        Expanded(
+          flex: 2,
+          child: SizedBox(
+            height: 48,
+            child: ElevatedButton(
+              onPressed: () => _toggleFollow(isFollowing),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isFollowing ? Colors.grey.shade300 : AppColors.primary,
+                foregroundColor: isFollowing ? Colors.black87 : Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: isFollowing ? 0 : 2,
+              ),
+              child: Text(isFollowing ? "Takibi Bırak" : "Takip Et", style: const TextStyle(fontWeight: FontWeight.bold)),
+            ),
           ),
         ),
-        
-        const SizedBox(height: 12),
-
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              name, 
-              style: TextStyle(
-                fontSize: 24, 
-                fontWeight: FontWeight.bold,
-                color: textColor
-              )
-            ),
-            if (isUserAdmin) 
-              const Padding(
-                padding: EdgeInsets.only(left: 6), 
-                child: Icon(Icons.verified, color: AppColors.primary, size: 22)
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 2,
+          child: SizedBox(
+            height: 48,
+            child: OutlinedButton(
+              onPressed: () {
+                final chatId = _getChatId(_currentUserId, _targetUserId);
+                Navigator.push(context, MaterialPageRoute(builder: (context) => SohbetDetayEkrani(
+                  chatId: chatId,
+                  receiverId: _targetUserId,
+                  receiverName: name,
+                  receiverAvatarUrl: avatarUrl,
+                )));
+              },
+              style: OutlinedButton.styleFrom(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                side: BorderSide(color: AppColors.primary.withOpacity(0.7), width: 1.5),
               ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.primaryAccent.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text("Lv. ${data['seviye'] ?? 1}", style: const TextStyle(color: AppColors.primaryAccent, fontWeight: FontWeight.bold, fontSize: 13)),
+              child: const Text("Mesaj", style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-          ],
-        ),
-
-        if (realName.isNotEmpty) 
-          Padding(
-            padding: const EdgeInsets.only(top: 2.0),
-            child: Text(realName, style: TextStyle(fontSize: 15, color: Colors.grey[600], fontWeight: FontWeight.w400)),
-          ),
-
-        const SizedBox(height: 16),
-
-        if (bio.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 40.0),
-            child: Text(
-              bio, 
-              textAlign: TextAlign.center, 
-              style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.8), fontSize: 14, height: 1.4)
-            ),
-          ),
-
-        const SizedBox(height: 16),
-        
-        if (university.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 40),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(FontAwesomeIcons.graduationCap, color: AppColors.primary, size: 13),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    "$university ${department.isNotEmpty ? '• $department' : ''}",
-                    style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12),
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-        const SizedBox(height: 24),
-
-        Container(
-          key: _statsKey,
-          margin: const EdgeInsets.symmetric(horizontal: 24),
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: cardColor.withOpacity(0.5),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildStatItem("Takipçi", data['followerCount'] ?? 0,
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => KullaniciListesiEkrani(title: "$name Takipçileri", userIds: List<String>.from(data['followers'] ?? []))))
-              ),
-              Container(height: 30, width: 1, color: Colors.grey.withOpacity(0.2)),
-              _buildStatItem("Takip", data['followingCount'] ?? 0,
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => KullaniciListesiEkrani(title: "$name Takip Ettikleri", userIds: List<String>.from(data['following'] ?? []))))
-              ),
-              Container(height: 30, width: 1, color: Colors.grey.withOpacity(0.2)),
-              _buildStatItem("Gönderi", data['postCount'] ?? 0),
-            ],
           ),
         ),
-        
-        if (hasSocial)
-          Padding(
-            padding: const EdgeInsets.only(top: 20.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (github?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.github, "https://github.com/$github"),
-                if (linkedin?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.linkedin, "https://linkedin.com/in/$linkedin"),
-                if (instagram?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.instagram, "https://instagram.com/$instagram"),
-                if (xPlatform?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.xTwitter, "https://x.com/$xPlatform"),
-              ],
-            ),
-          ),
-
-        if (badges.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 24.0, left: 24, right: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text("Kazanılan Rozetler", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 12),
-                SizedBox(
-                  key: _badgesKey,
-                  height: 40,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: badges.length,
-                    itemBuilder: (context, index) {
-                      final badgeId = badges[index];
-                      final badge = allBadges.firstWhere((b) => b.id == badgeId, orElse: () => allBadges[0]);
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 10),
-                        child: Tooltip(
-                          message: badge.name,
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: badge.color.withOpacity(0.15),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: badge.color.withOpacity(0.4), width: 1.5),
-                            ),
-                            child: Center(
-                              child: FaIcon(badge.icon, size: 16, color: badge.color),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-        const SizedBox(height: 24),
-        
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: _isOwnProfile
-            ? SizedBox(
-                key: _actionButtonsKey,
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.edit, size: 18),
-                  label: const Text("Profili Düzenle"),
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilDuzenlemeEkrani())),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary, 
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    elevation: 2,
-                  ),
-                ),
-              )
-            : Row(
-                key: _actionButtonsKey,
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: SizedBox(
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed: () => _toggleFollow(isFollowing),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isFollowing ? Colors.grey.shade300 : AppColors.primary,
-                          foregroundColor: isFollowing ? Colors.black87 : Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          elevation: isFollowing ? 0 : 2,
-                        ),
-                        child: Text(isFollowing ? "Takibi Bırak" : "Takip Et", style: const TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: SizedBox(
-                      height: 48,
-                      child: OutlinedButton(
-                        onPressed: () {
-                          final chatId = _getChatId(_currentUserId, _targetUserId);
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => SohbetDetayEkrani(
-                            chatId: chatId,
-                            receiverId: _targetUserId, 
-                            receiverName: name, 
-                            receiverAvatarUrl: avatarUrl)));
-                        },
-                        style: OutlinedButton.styleFrom(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          side: BorderSide(color: AppColors.primary.withOpacity(0.7), width: 1.5),
-                        ),
-                        child: const Text("Mesaj", style: TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-        ),
-        
-        if (amIAdmin && !_isOwnProfile)
-          Padding(
-            padding: const EdgeInsets.only(top: 12.0),
-            child: TextButton(
-              onPressed: () => _toggleAdminRole(isUserAdmin),
-              child: Text(
-                isUserAdmin ? "Yönetici Yetkisini Al" : "Yönetici Yap",
-                style: TextStyle(color: isUserAdmin ? Colors.red : Colors.green, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-
-        const SizedBox(height: 24),
       ],
     );
   }

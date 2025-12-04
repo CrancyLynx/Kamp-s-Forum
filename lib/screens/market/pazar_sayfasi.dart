@@ -235,31 +235,12 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
                     return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.sell_outlined, size: 60, color: Colors.grey[300]), const SizedBox(height: 10), const Text("Bu kategoride ilan yok.", style: TextStyle(color: Colors.grey))]));
                   }
 
-                  var docs = snapshot.data!.docs.where((doc) {
-                    final data = doc.data() as Map<String, dynamic>;
-                    final title = (data['title'] ?? '').toString().toLowerCase();
-                    final matchesSearch = title.contains(_searchQuery);
-                    
-                    final matchesCategory = _selectedCategory == 'Tümü' || (_selectedCategory == 'Favorilerim' && _favoriteProductIds.contains(doc.id)) || (data['category'] == _selectedCategory);
-                    final isNotFavoriteFilter = _selectedCategory != 'Favorilerim';
-
-                    return matchesSearch && (isNotFavoriteFilter ? matchesCategory : _favoriteProductIds.contains(doc.id));
-                  }).toList();
+                  var docs = _filterAndSortProducts(snapshot.data!.docs.cast<DocumentSnapshot>());
 
                   if (docs.isEmpty && _searchQuery.isNotEmpty) {
-                     return const Center(child: Text("Arama sonucu bulunamadı."));
+                    return const Center(child: Text("Arama sonucu bulunamadı."));
                   }
 
-                  // Sıralama mantığı
-                  if (_sortOrder == 'price_asc') {
-                    docs.sort((a, b) {
-                      return ((a.data() as Map<String, dynamic>)['price'] ?? 0).compareTo((b.data() as Map<String, dynamic>)['price'] ?? 0);
-                    });
-                  } else if (_sortOrder == 'price_desc') {
-                    docs.sort((a, b) {
-                      return ((b.data() as Map<String, dynamic>)['price'] ?? 0).compareTo((a.data() as Map<String, dynamic>)['price'] ?? 0);
-                    });
-                  }
                   return MasonryGridView.count(
                     padding: const EdgeInsets.all(12),
                     crossAxisCount: 2,
@@ -417,5 +398,38 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
         ),
       ),
     );
+  }
+
+  List<DocumentSnapshot> _filterAndSortProducts(List<DocumentSnapshot> docs) {
+    // Filtreleme
+    docs = docs.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      final title = (data['title'] ?? '').toString().toLowerCase();
+      final matchesSearch = title.contains(_searchQuery);
+
+      final matchesCategory = _selectedCategory == 'Tümü' ||
+          (_selectedCategory == 'Favorilerim' && _favoriteProductIds.contains(doc.id)) ||
+          (data['category'] == _selectedCategory);
+      final isNotFavoriteFilter = _selectedCategory != 'Favorilerim';
+
+      return matchesSearch && (isNotFavoriteFilter ? matchesCategory : _favoriteProductIds.contains(doc.id));
+    }).toList();
+
+    // Sıralama
+    if (_sortOrder == 'price_asc') {
+      docs.sort((a, b) {
+        final priceA = ((a.data() as Map<String, dynamic>)['price'] ?? 0) as num;
+        final priceB = ((b.data() as Map<String, dynamic>)['price'] ?? 0) as num;
+        return priceA.compareTo(priceB);
+      });
+    } else if (_sortOrder == 'price_desc') {
+      docs.sort((a, b) {
+        final priceA = ((a.data() as Map<String, dynamic>)['price'] ?? 0) as num;
+        final priceB = ((b.data() as Map<String, dynamic>)['price'] ?? 0) as num;
+        return priceB.compareTo(priceA);
+      });
+    }
+
+    return docs;
   }
 }
