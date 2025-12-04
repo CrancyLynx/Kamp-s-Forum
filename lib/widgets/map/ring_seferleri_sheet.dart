@@ -215,17 +215,29 @@ class _RingSeferleriSheetState extends State<RingSeferleriSheet> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.add_photo_alternate_outlined, size: 64, color: Colors.grey[300]),
+            // Uzgun_bay mascot with asset fallback
+            Image.asset(
+              'assets/images/uzgun_bay.png',
+              width: 100,
+              height: 100,
+              errorBuilder: (context, error, stackTrace) {
+                return Icon(Icons.add_photo_alternate_outlined, size: 64, color: Colors.grey[300]);
+              },
+            ),
             const SizedBox(height: 16),
             Text(
-              "Henüz tarife eklenmemiş.",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[600]),
+              "Henüz tarife eklenmemiş 😢",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[600],
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               "${widget.universityName} için güncel ring/servis saatlerinin fotoğrafını ilk sen yükle, kahraman ol! 🦸‍♂️",
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[500]),
+              style: TextStyle(color: Colors.grey[500], fontSize: 14),
             ),
           ],
         ),

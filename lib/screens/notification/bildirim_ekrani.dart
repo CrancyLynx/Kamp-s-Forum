@@ -468,15 +468,33 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
 
   Widget _buildEmptyState() {
     return Center(
-      key: _emptyStateKey, 
+      key: _emptyStateKey,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.notifications_off_outlined, size: 80, color: Colors.grey[300]),
+          // Uzgun_bay mascot with asset fallback
+          Image.asset(
+            'assets/images/uzgun_bay.png',
+            width: 120,
+            height: 120,
+            errorBuilder: (context, error, stackTrace) {
+              return Icon(Icons.notifications_off_outlined, size: 80, color: Colors.grey[300]);
+            },
+          ),
           const SizedBox(height: 16),
           Text(
-            "Hiç bildiriminiz yok.",
-            style: TextStyle(color: Colors.grey[500], fontSize: 16),
+            "Hiç bildiriminiz yok 😢",
+            style: TextStyle(
+              color: Colors.grey[500],
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Yeni bildirimler geldiğinde buraya çıkacak.",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey[400], fontSize: 13),
           ),
         ],
       ),

@@ -100,7 +100,38 @@ class _LevelUpAnimationState extends State<LevelUpAnimation> with TickerProvider
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Level ikonu - büyüleyici
+                  // 🎭 Seviye atlama - Mutlu Mascot
+                  Image.asset(
+                    'assets/images/mutlu_bay.png',
+                    height: 100,
+                    fit: BoxFit.contain,
+                    errorBuilder: (c, e, s) => Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [AppColors.primary, AppColors.primaryDark],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${widget.newLevel}',
+                          style: const TextStyle(
+                            fontSize: 60,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Level ikonu - büyüleyici (Fallback version)
                   Container(
                     width: 120,
                     height: 120,
@@ -135,7 +166,7 @@ class _LevelUpAnimationState extends State<LevelUpAnimation> with TickerProvider
 
                   // Mesaj
                   Text(
-                    'Seviye Atladın!',
+                    'Seviye Atladın! 🎉',
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.w900,
                           color: Colors.white,

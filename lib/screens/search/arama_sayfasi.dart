@@ -321,10 +321,30 @@ class _AramaSayfasiState extends State<AramaSayfasi> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.search_rounded, size: 80, color: isDark ? Colors.grey[800] : Colors.grey[300]),
+          // Uzgun_bay mascot with asset fallback
+          Image.asset(
+            'assets/images/uzgun_bay.png',
+            width: 120,
+            height: 120,
+            errorBuilder: (context, error, stackTrace) {
+              return Icon(Icons.search_rounded, size: 80, color: isDark ? Colors.grey[800] : Colors.grey[300]);
+            },
+          ),
           const SizedBox(height: 20),
-          Text("Tüm uygulamada arama yapın", style: TextStyle(color: Colors.grey[600], fontSize: 16)),
-          Text("Kullanıcılar, konular ve mekanlar tek listede.", style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+          Text(
+            "Henüz arama yapmadınız 🔍",
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Kullanıcılar, konular ve mekanlar tek listede.",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey[500], fontSize: 14),
+          ),
         ],
       ),
     );
@@ -335,9 +355,31 @@ class _AramaSayfasiState extends State<AramaSayfasi> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.sentiment_dissatisfied_rounded, size: 60, color: Colors.grey),
+          // Uzgun_bay mascot with asset fallback
+          Image.asset(
+            'assets/images/uzgun_bay.png',
+            width: 100,
+            height: 100,
+            errorBuilder: (context, error, stackTrace) {
+              return Icon(Icons.sentiment_dissatisfied_rounded, size: 60, color: Colors.grey);
+            },
+          ),
           const SizedBox(height: 16),
-          Text(message, style: const TextStyle(color: Colors.grey)),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.grey,
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Farklı arama terimleri deneyin 🤔",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey[500], fontSize: 13),
+          ),
         ],
       ),
     );
