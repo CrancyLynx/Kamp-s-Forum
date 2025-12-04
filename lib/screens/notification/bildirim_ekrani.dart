@@ -166,9 +166,15 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
         }
         await batch.commit();
     }
+
+    // unreadNotifications counter'ını 0'a ayarla
+    await FirebaseFirestore.instance
+        .collection('kullanicilar')
+        .doc(_currentUserId)
+        .update({'unreadNotifications': 0});
   }
 
-  void _handleNotificationTap(DocumentSnapshot doc) {
+  Future<void> _handleNotificationTap(DocumentSnapshot doc) async {
     final data = doc.data() as Map<String, dynamic>?;
     if (data == null || data.isEmpty) return;
 
@@ -192,6 +198,12 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
     // Önce okundu olarak işaretle
     if (data['isRead'] == false) {
       doc.reference.update({'isRead': true});
+      
+      // unreadNotifications counter'ını azalt
+      await FirebaseFirestore.instance
+          .collection('kullanicilar')
+          .doc(_currentUserId)
+          .update({'unreadNotifications': FieldValue.increment(-1)});
     }
 
     // Yönlendirme yap
@@ -390,7 +402,7 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
           side: isRead ? BorderSide.none : BorderSide(color: AppColors.primary.withAlpha(77), width: 1),
         ),
         child: InkWell(
-          onTap: () => _handleNotificationTap(doc),
+          onTap: () async => await _handleNotificationTap(doc),
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.all(16.0),
