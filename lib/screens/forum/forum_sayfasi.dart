@@ -398,14 +398,14 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
 
   Widget _buildCategoryFilters() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Theme.of(context).scaffoldBackgroundColor.withOpacity(0.6),
-            Theme.of(context).scaffoldBackgroundColor.withOpacity(0.3),
+            Colors.transparent,
+            Colors.transparent,
           ],
         ),
       ),
@@ -413,7 +413,7 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
         height: 50,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: EdgeInsets.zero,
           itemCount: kFilterCategories.length,
           separatorBuilder: (_, __) => const SizedBox(width: 8),
           itemBuilder: (context, index) {

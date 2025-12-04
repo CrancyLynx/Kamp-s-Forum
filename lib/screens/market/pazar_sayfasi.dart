@@ -175,8 +175,8 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Theme.of(context).scaffoldBackgroundColor.withOpacity(0.6),
-                    Theme.of(context).scaffoldBackgroundColor.withOpacity(0.3),
+                    Colors.transparent,
+                    Colors.transparent,
                   ],
                 ),
               ),
