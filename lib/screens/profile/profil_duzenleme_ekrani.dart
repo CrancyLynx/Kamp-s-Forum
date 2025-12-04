@@ -157,6 +157,71 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
     super.dispose();
   }
 
+  // 🎭 Başarı Dialog'u - Mutlu Mascot ile
+  void _showSuccessDialog(String message, {VoidCallback? onDismiss}) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 🎭 Mutlu Mascot
+            Image.asset(
+              'assets/images/mutlu_bay.png',
+              height: 120,
+              fit: BoxFit.contain,
+              errorBuilder: (c, e, s) => const Icon(Icons.check_circle, size: 100, color: Colors.green),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+              onPressed: () {
+                Navigator.pop(ctx);
+                onDismiss?.call();
+              },
+              child: const Text("Harika!", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ⚙️ Yükleme Dialog'u - Çalışkan Mascot ile
+  void _showLoadingDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 🎭 Çalışkan Mascot
+            Image.asset(
+              'assets/images/calıskan_bay.png',
+              height: 120,
+              fit: BoxFit.contain,
+              errorBuilder: (c, e, s) => const CircularProgressIndicator(),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _loadUserData() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -469,14 +534,10 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
       await FirebaseFirestore.instance.collection('kullanicilar').doc(_userId).update(updateData);
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Profil başarıyla güncellendi!"),
-            backgroundColor: AppColors.success,
-            duration: Duration(seconds: 2),
-          ),
+        _showSuccessDialog(
+          "Profil başarıyla güncellendi! 🎉",
+          onDismiss: () => Navigator.pop(context),
         );
-        Navigator.pop(context);
       }
     } on FirebaseException catch (e) {
       if (kDebugMode) print('Firebase Firestore Hatası: ${e.message}');
@@ -785,12 +846,26 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // 🎭 Üzgün Maskot - Uyarı durumu
+            Image.asset(
+              'assets/images/uzgun_bay.png',
+              height: 100,
+              fit: BoxFit.contain,
+              errorBuilder: (c, e, s) => const Icon(Icons.sentiment_very_dissatisfied, size: 80, color: Colors.red),
+            ),
+            const SizedBox(height: 16),
             const Text(
-              "Bu işlem geri alınamaz. Hesabınıza ve tüm verilerinize erişim kaybedeceksiniz.",
-              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+              "Bu işlem geri alınamaz!",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              "Hesabınıza ve tüm verilerinize erişim kaybedeceksiniz. Emin misin?",
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 15),
-            const Text("Lütfen onaylamak için şifrenizi girin:"),
+            const Text("Onaylamak için şifrenizi girin:", style: TextStyle(fontSize: 12)),
             const SizedBox(height: 10),
             TextField(
               controller: passwordController,
@@ -806,12 +881,12 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text("İptal"),
+            child: const Text("Vazgeç", style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text("Hesabı Sil", style: TextStyle(color: Colors.white)),
+            child: const Text("Evet, Sil", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           )
         ],
       ),
@@ -844,17 +919,14 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
       ).httpsCallable('deleteUserAccount').call();
 
       if (result.data['success'] == true && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Hesap başarıyla silindi."),
-            backgroundColor: Colors.green,
-          ),
-        );
-        
-        // Giriş ekranına yönlendir ve tüm önceki ekranları kaldır
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const GirisEkrani()),
-          (route) => false,
+        _showSuccessDialog(
+          "Hesabınız silinmiştir! 👋\n\nBizi seçtiğin için teşekkür ederiz.",
+          onDismiss: () {
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const GirisEkrani()),
+              (route) => false,
+            );
+          },
         );
       } else {
         if (mounted) {

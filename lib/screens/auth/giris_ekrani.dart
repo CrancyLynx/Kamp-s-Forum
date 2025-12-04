@@ -97,7 +97,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                 contents: [
                   TargetContent( 
                       align: ContentAlign.top,
-                      builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Haberdar Ol!', description: 'Duyurulardan, etkinliklerden ve kampüsteki önemli gelişmelerden anında haberdar olmak için bildirimlere izin vermeyi unutma!', mascotAssetPath: 'assets/images/mutlu_bay.png'))
+                      builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Hoş Geldin! 🎉', description: 'Duyurulardan, etkinliklerden ve kampüsteki önemli gelişmelerden anında haberdar olmak için bildirimlere izin vermeyi unutma!', mascotAssetPath: 'assets/images/hosgeldin_bay.png'))
                 ]),
             TargetFocus(
                 identify: "login-form", 

@@ -92,7 +92,7 @@ class _UrunEklemeEkraniState extends State<UrunEklemeEkrani> {
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("İlan başarıyla oluşturuldu!"), backgroundColor: AppColors.success));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("İlan başarıyla oluşturuldu! 🎉"), backgroundColor: AppColors.success));
         Navigator.pop(context);
       }
     } catch (e) {

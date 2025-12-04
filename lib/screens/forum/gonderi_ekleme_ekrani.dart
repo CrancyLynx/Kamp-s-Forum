@@ -32,6 +32,34 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
   final ImagePicker _picker = ImagePicker();
   final List<File> _selectedImages = [];
 
+  // 🎭 Loading Dialog - Çalışkan Mascot ile
+  void _showLoadingDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 🎭 Çalışkan Mascot
+            Image.asset(
+              'assets/images/calıskan_bay.png',
+              height: 120,
+              fit: BoxFit.contain,
+              errorBuilder: (c, e, s) => const CircularProgressIndicator(),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _pickImages() async {
     if (_isPickingImage) return;
     
@@ -192,6 +220,9 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
 
     FocusScope.of(context).unfocus();
     setState(() => _isLoading = true);
+    
+    // 🎭 Loading dialog'u göster
+    _showLoadingDialog("Gönderi yayınlanıyor...");
 
     try {
       final userId = FirebaseAuth.instance.currentUser?.uid;
@@ -286,9 +317,11 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
       }
 
       if (mounted) {
+        Navigator.of(context).pop(); // Loading dialog'u kapat
+        
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Gönderi yayınlandı!"),
+            content: Text("Gönderi yayınlandı! 🎉"),
             backgroundColor: AppColors.success,
           ),
         );
@@ -299,6 +332,7 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
     } on FirebaseException catch (e) {
       debugPrint("Firebase hatası: ${e.code} - ${e.message}");
       if (mounted) {
+        Navigator.of(context).pop(); // Loading dialog'u kapat
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Hata: ${e.message}"),
@@ -309,6 +343,7 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
     } catch (e) {
       debugPrint("Gönderi ekleme hatası: $e");
       if (mounted) {
+        Navigator.of(context).pop(); // Loading dialog'u kapat
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Hata oluştu: $e"),
