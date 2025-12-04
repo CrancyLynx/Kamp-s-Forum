@@ -1729,7 +1729,12 @@ class KampusSearchDelegate extends SearchDelegate {
                   onTap: () async {
                     final placeId = item['place_id'];
                     showDialog(context: context, barrierDismissible: false, builder: (c) => const Center(child: CircularProgressIndicator()));
-                    final location = await _mapService.getPlaceDetails(placeId);
+                    final fallbackType = _predictionType(item);
+                    final location = await _mapService.getPlaceDetails(
+                      placeId,
+                      fallbackType: fallbackType,
+                      fallbackIcon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+                    );
                     Navigator.pop(context); 
                     if (location != null) {
                       Navigator.push(context, MaterialPageRoute(builder: (context) => KampusHaritasiSayfasi(initialFocus: location.position)));
@@ -1775,6 +1780,18 @@ class KampusSearchDelegate extends SearchDelegate {
         );
       },
     );
+  }
+
+  String _predictionType(Map<String, dynamic> prediction) {
+    final types = (prediction['types'] as List?)?.cast<String>() ?? const [];
+    bool matches(List<String> needles) =>
+        types.any((t) => needles.any((needle) => t.toLowerCase().contains(needle)));
+
+    if (matches(['university', 'school'])) return 'universite';
+    if (matches(['restaurant', 'cafe', 'food', 'meal_takeaway', 'meal_delivery'])) return 'yemek';
+    if (matches(['bus_station', 'transit_station', 'subway', 'train', 'light_rail'])) return 'durak';
+    if (matches(['library', 'book_store'])) return 'kutuphane';
+    return 'diger';
   }
 
   Widget _buildSectionHeader(String title) {

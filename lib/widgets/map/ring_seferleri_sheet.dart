@@ -7,6 +7,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import '../../utils/app_colors.dart';
+import '../../services/ring_moderation_service.dart';
+import '../../services/ring_notification_service.dart';
 
 class RingSeferleriSheet extends StatefulWidget {
   final String universityName; // Kullanıcının üniversitesi buraya gelecek
@@ -21,7 +23,7 @@ class _RingSeferleriSheetState extends State<RingSeferleriSheet> {
   bool _isUploading = false;
   final ImagePicker _picker = ImagePicker();
 
-  // Fotoğraf Yükleme Fonksiyonu
+  // Fotoğraf Yükleme Fonksiyonu (GÜNCELLEME: Pending status'unda yükle)
   Future<void> _uploadScheduleImage() async {
     final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
     
@@ -31,33 +33,63 @@ class _RingSeferleriSheetState extends State<RingSeferleriSheet> {
 
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
+      if (user == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Lütfen giriş yap"), backgroundColor: AppColors.error),
+          );
+        }
+        return;
+      }
 
-      // 1. Storage'a Yükle
+      // 1. Storage'a Yükle (Pending klasöründe)
       final File file = File(pickedFile.path);
-      // Dosya ismini üniversite adına göre yapıyoruz ki hep üzerine yazsın (tek güncel tarife olsun)
-      // veya tarih ekleyerek arşivleyebilirsiniz. Şimdilik 'current' mantığıyla gidiyoruz.
-      final String path = 'ulasim_tarifeleri/${widget.universityName}_tarife.jpg';
-      final ref = FirebaseStorage.instance.ref().child(path);
+      final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+      final String fileName = '${widget.universityName}_${user.uid}_$timestamp.jpg';
+      final String storagePath = 'pending_ring_photos/${widget.universityName}/$fileName';
       
+      final ref = FirebaseStorage.instance.ref().child(storagePath);
       await ref.putFile(file);
-      final String downloadUrl = await ref.getDownloadURL();
+      // downloadUrl sadece onay sonrası kullanılacak, şimdilik hemen oluşturma gereği yok
+      // final String downloadUrl = await ref.getDownloadURL();
 
-      // 2. Firestore'a Kaydet (Kimin ne zaman güncellediği bilgisiyle)
-      await FirebaseFirestore.instance.collection('ulasim_bilgileri').doc(widget.universityName).set({
-        'university': widget.universityName,
-        'imageUrl': downloadUrl,
-        'lastUpdated': FieldValue.serverTimestamp(),
-        'updatedBy': user.uid,
-        'updaterName': user.displayName ?? 'Bir Öğrenci',
-      });
+      // 2. Pending koleksiyonuna kaydet (admin onayı bekleniyor)
+      final success = await RingModerationService.uploadRingPhotoForApproval(
+        universityName: widget.universityName,
+        photoStoragePath: storagePath,
+        uploadedByUserId: user.uid,
+        uploaderName: user.displayName ?? 'Bir Öğrenci',
+      );
+
+      if (!success) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Fotoğraf kaydedilemedi"), backgroundColor: AppColors.error),
+          );
+        }
+        return;
+      }
+
+      // 3. Admini bildir
+      await RingNotificationService.notifyAdminPendingPhoto(
+        universityName: widget.universityName,
+        uploaderName: user.displayName ?? 'Bir Öğrenci',
+      );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Tarife güncellendi! Teşekkürler."), backgroundColor: AppColors.success));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Fotoğraf yüklendi! Admin incelemesinden sonra herkese görünür olacak. Teşekkürler! 🎉"),
+            backgroundColor: AppColors.success,
+            duration: Duration(seconds: 3),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Hata oluştu: $e"), backgroundColor: AppColors.error));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Hata oluştu: $e"), backgroundColor: AppColors.error),
+        );
       }
     } finally {
       if (mounted) setState(() => _isUploading = false);

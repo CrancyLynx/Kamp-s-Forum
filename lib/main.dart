@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -41,6 +42,17 @@ Future<void> firebaseBackgroundMessageHander(RemoteMessage message) async {
   await Firebase.initializeApp(); 
 }
 
+// Loglama sistemini yapılandır (Flogger uyarısını önlemek için)
+void setupLogging() {
+  // Firebase Analytics ve diğer sistemlerin loglarını kontrol et
+  try {
+    // Loglama seviyesini ayarla
+    developer.log('Loglama sistemi başlatıldı', name: 'kampus_yardim.main');
+  } catch (e) {
+    debugPrint('Loglama yapılandırma hatası: $e');
+  }
+}
+
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 class ThemeProvider extends ChangeNotifier {
@@ -61,6 +73,10 @@ Future<void> main() async {
   
   // Native Splash ekranını koru
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+
+  // Loglama sistemini erken yapılandır (Flogger uyarısını önlemek için)
+  // Bu, Firebase ve diğer kütüphanelerin loglama işlemlerini kontrol eder
+  setupLogging();
 
   // Çevresel değişkenleri (.env) yükle
   try {

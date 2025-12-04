@@ -65,4 +65,12 @@ flutter {
 dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    
+    // Google Play Services (Maps ve Location)
+    implementation("com.google.android.gms:play-services-maps:18.1.0")
+    implementation("com.google.android.gms:play-services-location:21.0.1")
+    
+    // Flogger logging framework - loglama sistemini stabil hale getir
+    implementation("com.google.flogger:flogger:0.8")
+    implementation("com.google.flogger:flogger-system-backend:0.8")
 }

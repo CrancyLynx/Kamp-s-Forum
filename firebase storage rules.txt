@@ -67,6 +67,13 @@ service firebase.storage {
       allow write: if isSignedIn() && isOwnerOfFile(fileName) && isValidImage();
       allow delete: if isSignedIn() && isOwnerOfFile(fileName);
     }
+    
+    // Ürün Yorumu Resimleri
+    match /urun_yorum_resimleri/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && isOwnerOfFile(fileName) && isValidImage();
+      allow delete: if isSignedIn() && isOwnerOfFile(fileName);
+    }
 
     // 4. Ürün Resimleri
     match /urun_resimleri/{fileName} {
@@ -115,8 +122,49 @@ service firebase.storage {
     // 11. Ring Seferleri / Ulaşım Tarifeleri
     match /ulasim_tarifeleri/{fileName} {
       allow read: if true;
-      allow write: if isSignedIn() && isValidImage(); // Herkes yükleyebilir
+      allow write: if isSignedIn() && isValidImage();
+      allow delete: if isSignedIn() && isOwnerOfFile(fileName);
+    }
+    
+    // 12. Etkinlik Afişleri
+    match /etkinlik_afisleri/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && isOwnerOfFile(fileName) && isValidImage();
+      allow delete: if isSignedIn() && isOwnerOfFile(fileName);
+    }
+    
+    // 13. Moderasyon İçeriği (İçerik incelemeleri, şüpheli dosyalar)
+    match /moderasyon_resimleri/{fileName} {
+      allow read: if false; // Sadece backend
+      allow write: if false; // Sadece backend
+    }
+    
+    // 14. Ring Sistemi - Grup/Kapak Fotoğrafı
+    match /ring_resimleri/{ringId}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && isValidImage(); // Ring üyeleri yükleyebilir
       allow delete: if isSignedIn(); // Kendi yüklediklerini silebilir
+    }
+    
+    // 15. Ring Sistemi - Sefer Zamanı Fotoğrafı (Gerçek zamanlı ring seferleri)
+    match /ring_sefer_resimleri/{ringId}/{sefarId}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && isValidImage();
+      allow delete: if isSignedIn();
+    }
+    
+    // 16. Ring Sistemi - İlan/Duyuru Fotoğrafı
+    match /ring_duyuru_resimleri/{ringId}/{duyuruId}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && isValidImage();
+      allow delete: if isSignedIn();
+    }
+    
+    // 17. Beklemede Ring Sefer Fotoğrafları (Admin onayı bekleniyor)
+    match /pending_ring_photos/{universityName}/{fileName} {
+      allow read: if false; // Sadece backend (admin panel direct firestore okur)
+      allow write: if isSignedIn() && isValidImage(); // Kullanıcı yükleme yapabilir
+      allow delete: if false; // Sadece admin silebilir
     }
   }
 }

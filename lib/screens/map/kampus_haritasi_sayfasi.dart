@@ -57,7 +57,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
 
   // RADIUS KONTROLLERİ
   double _searchRadiusKm = 5.0; 
-  bool _showRadiusCircle = false; 
+  bool _showRadiusCircle = true; 
   
   // YENİ: Error state tracking
   String? _locationError;
@@ -367,30 +367,52 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     );
   }
 
-  Future<void> _loadPlaces() async {
+  Future<void> _loadPlaces({bool refreshFirestore = true}) async {
     if (!mounted) return;
-    await _firestoreSubscription?.cancel();
     final center = _userLocation ?? widget.initialFocus ?? const LatLng(41.0082, 28.9784);
 
-    _firestoreSubscription = _mapDataService.getLocationsStream(_currentFilter).listen((firestorePlaces) {
-      if (mounted) {
-        _firestoreLocations = firestorePlaces;
-        _updateMarkers(); 
-      }
-    });
+    if (refreshFirestore) {
+      await _firestoreSubscription?.cancel();
+      _firestoreSubscription = _mapDataService.getLocationsStream(_currentFilter).listen((firestorePlaces) {
+        if (mounted) {
+          _firestoreLocations = firestorePlaces;
+          _updateMarkers(); 
+        }
+      });
+    }
 
     try {
       List<LocationModel> googlePlaces = [];
       
       // "Tümü" ise tüm kategorileri yükle
       if (_currentFilter == 'all') {
-        final uniPlaces = await _mapDataService.searchNearbyPlaces(center: center, typeFilter: 'universite');
-        final restPlaces = await _mapDataService.searchNearbyPlaces(center: center, typeFilter: 'yemek');
-        final transitPlaces = await _mapDataService.searchNearbyPlaces(center: center, typeFilter: 'durak');
-        final libPlaces = await _mapDataService.searchNearbyPlaces(center: center, typeFilter: 'kutuphane');
+        final uniPlaces = await _mapDataService.searchNearbyPlaces(
+          center: center,
+          typeFilter: 'universite',
+          radiusKm: _searchRadiusKm,
+        );
+        final restPlaces = await _mapDataService.searchNearbyPlaces(
+          center: center,
+          typeFilter: 'yemek',
+          radiusKm: _searchRadiusKm,
+        );
+        final transitPlaces = await _mapDataService.searchNearbyPlaces(
+          center: center,
+          typeFilter: 'durak',
+          radiusKm: _searchRadiusKm,
+        );
+        final libPlaces = await _mapDataService.searchNearbyPlaces(
+          center: center,
+          typeFilter: 'kutuphane',
+          radiusKm: _searchRadiusKm,
+        );
         googlePlaces = [...uniPlaces, ...restPlaces, ...transitPlaces, ...libPlaces];
       } else {
-        googlePlaces = await _mapDataService.searchNearbyPlaces(center: center, typeFilter: _currentFilter);
+        googlePlaces = await _mapDataService.searchNearbyPlaces(
+          center: center,
+          typeFilter: _currentFilter,
+          radiusKm: _searchRadiusKm,
+        );
       }
       
       if (mounted) {
@@ -432,7 +454,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
         )
       );
 
-      if (_currentFilter != 'all' && _showRadiusCircle) {
+      if (_showRadiusCircle) {
         newCircles.add(
           Circle(
             circleId: const CircleId('search_radius'),
@@ -449,7 +471,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
 
     for (var loc in _firestoreLocations) {
       bool isInRadius = true;
-      if (_userLocation != null && _currentFilter != 'all' && _showRadiusCircle) {
+      if (_userLocation != null && _showRadiusCircle) {
         double distKm = _calculateDistance(_userLocation!, loc.position);
         isInRadius = distKm <= _searchRadiusKm;
       }
@@ -472,7 +494,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       });
 
       bool isInRadius = true;
-      if (_userLocation != null && _currentFilter != 'all' && _showRadiusCircle) {
+      if (_userLocation != null && _showRadiusCircle) {
         double distKm = _calculateDistance(_userLocation!, loc.position);
         isInRadius = distKm <= _searchRadiusKm;
       }
@@ -581,11 +603,13 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       
       try {
         final loc = _userLocation ?? const LatLng(39.9334, 32.8597);
-        final results = await _mapDataService.getPlacePredictions(query, loc);
+        final results = await _mapDataService.getPlacePredictions(
+          query,
+          loc,
+          radiusKm: _searchRadiusKm,
+        );
         if (mounted) {
-          setState(() => _searchResults = results
-              .map((name) => {'title': name, 'snippet': '', 'type': 'diger'} as Map<String, dynamic>)
-              .toList());
+          setState(() => _searchResults = List<Map<String, dynamic>>.from(results));
         }
       } catch (e) {
         debugPrint("Arama hatası: $e");
@@ -602,22 +626,31 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     FocusScope.of(context).unfocus();
     setState(() { 
       _searchResults = []; 
-      _isLoading = false;
       _isRouteActive = false; 
+      _isLoading = true;
     });
     _searchController.clear();
 
     try {
-      final location = LocationModel(
-        id: item['title'] ?? 'unknown',
-        title: item['title'] ?? 'Bilinmeyen Yer',
-        snippet: item['snippet'] ?? '',
-        position: LatLng(item['lat'] ?? 0.0, item['lng'] ?? 0.0),
-        type: item['type'] ?? 'diger',
+      final placeId = item['place_id'] as String?;
+      if (placeId == null) {
+        throw Exception('Mekan detayı alınamadı');
+      }
+
+      final fallbackType = _predictionType(item);
+      final location = await _mapDataService.getPlaceDetails(
+        placeId,
+        fallbackType: fallbackType,
+        fallbackIcon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueMagenta),
       );
+
+      if (location == null) {
+        throw Exception('Mekan bulunamadı');
+      }
 
       if (mounted) {
         setState(() {
+          _isLoading = false;
           _markers.removeWhere((m) => m.markerId.value.startsWith("s_"));
           _markers.add(Marker(
             markerId: MarkerId("s_${location.id}"),
@@ -639,6 +672,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     } catch (e) {
       debugPrint("Mekan detayı hatası: $e");
       if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Hata: $e")),
         );
@@ -660,6 +694,20 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       default:
         return Icons.location_on_outlined;
     }
+  }
+
+  String _predictionType(Map<String, dynamic> prediction) {
+    final types = (prediction['types'] as List?)?.cast<String>() ?? const [];
+
+    bool matches(List<String> needles) {
+      return types.any((t) => needles.any((needle) => t.toLowerCase().contains(needle)));
+    }
+
+    if (matches(['university', 'school'])) return 'universite';
+    if (matches(['restaurant', 'cafe', 'food', 'meal_takeaway', 'meal_delivery'])) return 'yemek';
+    if (matches(['bus_station', 'transit_station', 'subway', 'train', 'light_rail'])) return 'durak';
+    if (matches(['library', 'book_store'])) return 'kutuphane';
+    return 'diger';
   }
 
   Future<void> _drawRoute(LatLng destination) async {
@@ -1122,7 +1170,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       onTap: () {
         setState(() {
           _currentFilter = key.toLowerCase();
-          _showRadiusCircle = (key != 'all');
+          _showRadiusCircle = true;
           _searchRadiusKm = 5.0;
         });
         _loadPlaces();
@@ -1164,7 +1212,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
             mapToolbarEnabled: false,
           ),
 
-          // YENİ: Gradient Overlay Katmanı
+              // YENİ: Gradient Overlay Katmanı
           Positioned(
             top: 0,
             left: 0,
@@ -1301,9 +1349,10 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                         separatorBuilder: (c, i) => const Divider(height: 1),
                         itemBuilder: (context, index) {
                           final item = _searchResults[index];
-                          final title = item['title'] ?? item['structured_formatting']?['main_text'] ?? '';
-                          final subtitle = item['snippet'] ?? item['structured_formatting']?['secondary_text'] ?? '';
-                          final type = item['type'] ?? 'diger';
+                          final structured = item['structured_formatting'] as Map<String, dynamic>?;
+                          final title = structured?['main_text'] ?? item['description'] ?? '';
+                          final subtitle = structured?['secondary_text'] ?? item['description'] ?? '';
+                          final type = _predictionType(item);
                           
                           return ListTile(
                             leading: Icon(
@@ -1376,6 +1425,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                           onPressed: () {
                             if (_searchRadiusKm > 1.0) {
                               setState(() => _searchRadiusKm -= 1.0);
+                              _loadPlaces(refreshFirestore: false);
                               _updateMarkers();
                               _animateZoomForRadius();
                             }
@@ -1389,19 +1439,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                           onPressed: () {
                             if (_searchRadiusKm < 25.0) {
                               setState(() => _searchRadiusKm += 1.0);
-                              _updateMarkers();
-                              _animateZoomForRadius();
-                            }
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        FloatingActionButton.small(
-                          heroTag: 'radiusUp',
-                          backgroundColor: Colors.green.withOpacity(0.8),
-                          child: const Icon(Icons.add, color: Colors.white, size: 18),
-                          onPressed: () {
-                            if (_searchRadiusKm < 25.0) {
-                              setState(() => _searchRadiusKm += 1.0);
+                              _loadPlaces(refreshFirestore: false);
                               _updateMarkers();
                               _animateZoomForRadius();
                             }

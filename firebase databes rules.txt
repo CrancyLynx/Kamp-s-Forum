@@ -49,6 +49,11 @@ service cloud.firestore {
       return isSignedIn() && 
              get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.get('isSystem', false) == true;
     }
+    
+    function isModerator() {
+      return isSignedIn() && 
+             get(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.get('role', '') == 'moderator';
+    }
 
     // -----------------------------------------------------------
     // 1. KULLANICILAR KOLEKSİYONU
@@ -73,23 +78,24 @@ service cloud.firestore {
     // -----------------------------------------------------------
     match /gonderiler/{postId} {
       allow read: if true;
-      allow create: if isSignedIn(); // userId kontrolünü kodda yapıyoruz, burada esnetildi
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       
       allow update: if 
         isAdmin() ||
+        isModerator() ||
         isOwner(resource.data.userId) || 
-        // Beğeni, yorum sayısı ve sabitlenme durumları
         (isSignedIn() && (
-           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'commentCount', 'lastCommentTimestamp', 'recentCommenterAvatars', 'isPinned', 'voters', 'totalVotes', 'options'])
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'commentCount', 'lastCommentTimestamp', 'recentCommenterAvatars', 'isPinned', 'voters', 'totalVotes', 'options', 'isDeleted', 'isSpam'])
         ));
         
-      allow delete: if isOwner(resource.data.userId) || isAdmin();
+      allow delete: if isOwner(resource.data.userId) || isAdmin() || isModerator();
       
       // Yorumlar Alt Koleksiyonu
       match /yorumlar/{commentId} {
         allow read: if true;
-        allow create: if isSignedIn();
-        allow update, delete: if isOwner(resource.data.userId) || isAdmin();
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+        allow update: if isOwner(resource.data.userId) || isAdmin() || isModerator() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'isDeleted', 'isSpam']));
+        allow delete: if isOwner(resource.data.userId) || isAdmin() || isModerator();
       }
     }
     
@@ -99,13 +105,14 @@ service cloud.firestore {
     match /sohbetler/{chatId} {
       allow read: if resource == null || request.auth.uid in resource.data.participants;
       allow create: if isSignedIn();
-      allow update: if isSignedIn(); // Yazıyor... durumu için genel izin
-      allow delete: if isAdmin();
+      allow update: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow delete: if request.auth.uid == resource.data.createdBy || isAdmin();
       
       match /mesajlar/{messageId} {
-         allow read: if isSignedIn(); // Basitleştirildi, üst koleksiyon zaten yetkiyi kontrol eder genelde
-         allow create: if isSignedIn();
-         allow update, delete: if isAdmin();
+         allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/sohbetler/$(chatId)).data.participants;
+         allow create: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/sohbetler/$(chatId)).data.participants && request.resource.data.senderId == request.auth.uid;
+         allow update: if isOwner(resource.data.senderId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isEdited', 'editedAt', 'content']);
+         allow delete: if isOwner(resource.data.senderId) || isAdmin();
       }
     }
 
@@ -115,9 +122,17 @@ service cloud.firestore {
     
     match /urunler/{productId} { 
       allow read: if true;
-      allow create: if isSignedIn(); 
-      allow update: if isOwner(resource.data.sellerId) || isAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isSold']));
+      allow create: if isSignedIn() && request.resource.data.sellerId == request.auth.uid; 
+      allow update: if isOwner(resource.data.sellerId) || isAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isSold', 'images']));
       allow delete: if isOwner(resource.data.sellerId) || isAdmin();
+      
+      // Ürün Yorumları
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid && request.resource.data.productId == productId;
+        allow update: if isOwner(resource.data.userId) || isAdmin();
+        allow delete: if isOwner(resource.data.userId) || isAdmin();
+      }
     }
     
 match /{document=**} {
@@ -126,7 +141,7 @@ match /{document=**} {
     match /locations/{locationId} {
       allow read: if true;
       allow create, delete: if isAdmin();
-      allow update: if isAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastUpdate', 'photos', 'votes', 'reviewCount', 'rating'])); // reviewCount eklendi
+      allow update: if isAdmin() || isModerator() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastUpdate', 'photos', 'votes', 'reviewCount', 'rating', 'isClosed', 'isVerified']));
       
       // Mekan Yorumları
       match /reviews/{reviewId} {
@@ -137,8 +152,9 @@ match /{document=**} {
     
     match /etkinlikler/{eventId} { 
       allow read: if true;
-      allow update: if isAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['attendees']));
-      allow create, delete: if isAdmin();
+      allow create: if isSignedIn() && request.resource.data.organizerId == request.auth.uid;
+      allow update: if isAdmin() || isOwner(resource.data.organizerId) || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['attendees', 'attendeeCount']));
+      allow delete: if isAdmin() || isOwner(resource.data.organizerId);
     }
     
     match /bildirimler/{notificationId} { 
@@ -155,13 +171,16 @@ match /{document=**} {
     }
     
     match /sikayetler/{reportId} { 
-      allow read, delete: if isAdmin();
-      allow create: if isSignedIn(); 
+      allow read: if isAdmin() || isModerator() || isOwner(resource.data.reportedBy);
+      allow create: if isSignedIn() && request.resource.data.reportedBy == request.auth.uid; 
+      allow update: if isAdmin() || isModerator();
+      allow delete: if isAdmin();
     }
     
     match /degisiklik_istekleri/{requestId} { 
-      allow read, update, delete: if isAdmin();
-      allow create: if isSignedIn(); 
+      allow read: if isAdmin() || isModerator() || isOwner(resource.data.requestedBy);
+      allow create: if isSignedIn() && request.resource.data.requestedBy == request.auth.uid; 
+      allow update, delete: if isAdmin() || isModerator();
     }
     
     // Mesaj Ayarları (Sohbet stüdyosu özellikleri, notifikasyon tercihler vs)
@@ -180,6 +199,54 @@ match /{document=**} {
     match /bloke_edilenler/{blockingUserId}/{blockedUserId} {
       allow read: if isOwner(blockingUserId) || isAdmin();
       allow write: if isOwner(blockingUserId);
+    }
+    
+    // Kayıtlı Öğeler (Saved Posts)
+    match /kaydedilen_gonderiler/{userId}/{postId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId);
+    }
+    
+    // Kullanıcı Aktivite Günlüğü
+    match /kullanici_aktiviteleri/{userId}/{activityId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId);
+      allow update, delete: if isAdmin();
+    }
+    
+    // Moderasyon Günlüğü
+    match /moderasyon_gunlugu/{logId} {
+      allow read: if isAdmin() || isModerator();
+      allow create, write: if isAdmin();
+    }
+    
+    // Reklam ve Tanıtım
+    match /promotionlar/{promotionId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // Ring Sefer Bilgileri (Onaylanmış, herkese açık)
+    match /ulasim_bilgileri/{universityName} {
+      allow read: if true;
+      allow create, update: if isAdmin() || isModerator();
+      allow delete: if isAdmin();
+    }
+    
+    // Ring Sefer Fotoğraf Moderasyon Günlüğü (Admin review geçmişi)
+    match /ring_photo_moderation/{recordId} {
+      allow read: if isAdmin() || isModerator();
+      allow create: if isAdmin() || isModerator();
+      allow update: if isAdmin() || isModerator();
+      allow delete: if isAdmin();
+    }
+    
+    // Ring Sefer Beklemede Fotoğraflar (Mod uyarı: admin onayı bekleniyor)
+    match /pending_ring_photos/{photoId} {
+      allow read: if isAdmin() || isModerator() || isOwner(resource.data.uploadedBy);
+      allow create: if isSignedIn() && request.resource.data.uploadedBy == request.auth.uid;
+      allow update: if (isAdmin() || isModerator()) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'approvedBy', 'approvedAt', 'rejectionReason']);
+      allow delete: if isAdmin() || isOwner(resource.data.uploadedBy);
     }
     
     // İstatistikler

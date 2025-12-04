@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -176,9 +177,10 @@ class MapDataService {
   Future<List<LocationModel>> searchNearbyPlaces({
     required LatLng center,
     required String typeFilter,
+    double radiusKm = 5,
   }) async {
-    // Cache kontrol
-    final cacheKey = "${center.latitude}_${center.longitude}_${typeFilter.toLowerCase()}";
+    final safeRadiusKm = radiusKm.isFinite && radiusKm > 0 ? radiusKm.clamp(0.5, 50.0) : 5.0;
+    final cacheKey = "${center.latitude.toStringAsFixed(4)}_${center.longitude.toStringAsFixed(4)}_${safeRadiusKm.toStringAsFixed(2)}_${typeFilter.toLowerCase()}";
     if (_nearbyCache.containsKey(cacheKey)) {
       return _nearbyCache[cacheKey]!;
     }
@@ -188,23 +190,24 @@ class MapDataService {
 
       switch (typeFilter.toLowerCase()) {
         case 'universite':
-          places = await _searchUniversities(center);
+          places = await _searchUniversities(center, safeRadiusKm);
           break;
         case 'yemek':
-          places = await _searchRestaurants(center);
+          places = await _searchRestaurants(center, safeRadiusKm);
           break;
         case 'durak':
-          places = await _searchTransitStations(center);
+          places = await _searchTransitStations(center, safeRadiusKm);
           break;
         case 'kutuphane':
-          places = await _searchLibraries(center);
+          places = await _searchLibraries(center, safeRadiusKm);
           break;
         default:
           places = [];
       }
 
-      _nearbyCache[cacheKey] = places;
-      return places;
+      final filtered = _filterByRadius(places, center, safeRadiusKm);
+      _nearbyCache[cacheKey] = filtered;
+      return filtered;
     } catch (e) {
       if (kDebugMode) print("Arama hatası ($typeFilter): $e");
       return [];
@@ -212,14 +215,15 @@ class MapDataService {
   }
 
   // === ÜNİVERSİTE ARAMASI ===
-  Future<List<LocationModel>> _searchUniversities(LatLng center) async {
+  Future<List<LocationModel>> _searchUniversities(LatLng center, double radiusKm) async {
     final universities = <LocationModel>[];
+    final radiusMeters = _radiusMeters(radiusKm, min: 1500, max: 45000);
 
     try {
       final url = Uri.parse(
         'https://maps.googleapis.com/maps/api/place/nearbysearch/json'
         '?location=${center.latitude},${center.longitude}'
-        '&radius=20000&type=university&language=tr&key=$_apiKey',
+        '&radius=$radiusMeters&type=university&language=tr&key=$_apiKey',
       );
 
       final response = await http.get(url).timeout(const Duration(seconds: 15));
@@ -251,73 +255,58 @@ class MapDataService {
       if (kDebugMode) print("Üniversite arama hatası: $e");
     }
 
-    return universities;
+    return _filterByRadius(universities, center, radiusKm + 0.5);
   }
 
   // === RESTORAN ARAMASI ===
-  Future<List<LocationModel>> _searchRestaurants(LatLng center) async {
-    final restaurants = <LocationModel>[];
-    final seenIds = <String>{};
+  Future<List<LocationModel>> _searchRestaurants(LatLng center, double radiusKm) async {
+    final restaurants = <String, LocationModel>{};
+    final baseRadius = _radiusMeters(radiusKm, min: 800, max: 20000);
 
     try {
-      // Restoran
-      final restaurantResults = await _fetchByType(center, 'restaurant', 5000);
-      for (var place in restaurantResults) {
-        if (!seenIds.contains(place.id)) {
-          seenIds.add(place.id);
-          restaurants.add(place);
-        }
-      }
+      final configs = [
+        {'type': 'restaurant', 'radius': baseRadius},
+        {'type': 'cafe', 'radius': (baseRadius * 0.8).round()},
+        {'type': 'bakery', 'radius': (baseRadius * 0.6).round()},
+      ];
 
-      // Kafe
-      final cafeResults = await _fetchByType(center, 'cafe', 5000);
-      for (var place in cafeResults) {
-        if (!seenIds.contains(place.id)) {
-          seenIds.add(place.id);
-          restaurants.add(place);
-        }
-      }
-
-      // Fırın
-      final bakeryResults = await _fetchByType(center, 'bakery', 3000);
-      for (var place in bakeryResults) {
-        if (!seenIds.contains(place.id)) {
-          seenIds.add(place.id);
-          restaurants.add(place);
+      for (final config in configs) {
+        final results = await _fetchByType(center, config['type'] as String, config['radius'] as int);
+        for (var place in results) {
+          restaurants[place.id] = place;
         }
       }
     } catch (e) {
       if (kDebugMode) print("Restoran arama hatası: $e");
     }
 
-    return restaurants;
+    return _filterByRadius(restaurants.values.toList(), center, radiusKm + 0.2);
   }
 
   // === DURAK ARAMASI ===
-  Future<List<LocationModel>> _searchTransitStations(LatLng center) async {
-    final stations = <LocationModel>[];
-    final seenIds = <String>{};
+  Future<List<LocationModel>> _searchTransitStations(LatLng center, double radiusKm) async {
+    final stations = <String, LocationModel>{};
+    final radiusMeters = _radiusMeters(radiusKm, min: 1000, max: 15000);
 
     try {
       for (var type in ['bus_station', 'transit_station', 'subway_station']) {
-        final results = await _fetchByType(center, type, 5000);
+        final results = await _fetchByType(center, type, radiusMeters);
         for (var place in results) {
-          if (!seenIds.contains(place.id)) {
-            seenIds.add(place.id);
-            stations.add(place);
-          }
+          stations[place.id] = place;
         }
       }
     } catch (e) {
       if (kDebugMode) print("Durak arama hatası: $e");
     }
 
-    return stations;
+    return _filterByRadius(stations.values.toList(), center, radiusKm + 0.1);
   }
 
   // === KÜTÜPHANE ARAMASI ===
-  Future<List<LocationModel>> _searchLibraries(LatLng center) async {
-    return await _fetchByType(center, 'library', 10000);
+  Future<List<LocationModel>> _searchLibraries(LatLng center, double radiusKm) async {
+    final radiusMeters = _radiusMeters(radiusKm, min: 800, max: 20000);
+    final results = await _fetchByType(center, 'library', radiusMeters);
+    return _filterByRadius(results, center, radiusKm + 0.2);
   }
 
   // === GENEL API ARAMASI ===
@@ -383,7 +372,11 @@ class MapDataService {
   }
 
   // === MEKANDETAYLARıNı AL ===
-  Future<LocationModel?> getPlaceDetails(String placeId) async {
+  Future<LocationModel?> getPlaceDetails(
+    String placeId, {
+    String fallbackType = 'diger',
+    BitmapDescriptor fallbackIcon = BitmapDescriptor.defaultMarker,
+  }) async {
     if (placeId.isEmpty) return null;
 
     if (_placeDetailsCache.containsKey(placeId)) {
@@ -418,9 +411,9 @@ class MapDataService {
               title: result['name'] ?? 'Bilinmeyen',
               snippet: result['formatted_address'] ?? '',
               position: LatLng(lat, lng),
-              type: 'diger',
+              type: fallbackType,
               rating: (result['rating'] as num?)?.toDouble() ?? 0.0,
-              icon: BitmapDescriptor.defaultMarker,
+              icon: fallbackIcon,
               photoUrls: _extractPhotoUrls(result['photos']),
             );
 
@@ -578,6 +571,29 @@ class MapDataService {
         .toList();
   }
 
+  int _radiusMeters(double radiusKm, {int min = 500, int max = 50000}) {
+    final safeKm = radiusKm.isFinite && radiusKm > 0 ? radiusKm : 5.0;
+    final meters = (safeKm * 1000).round();
+    return meters.clamp(min, max);
+  }
+
+  List<LocationModel> _filterByRadius(List<LocationModel> locations, LatLng center, double radiusKm) {
+    final safeRadius = radiusKm.isFinite && radiusKm > 0 ? radiusKm : 5.0;
+    return locations.where((loc) => _distanceKm(center, loc.position) <= safeRadius + 0.2).toList();
+  }
+
+  double _distanceKm(LatLng a, LatLng b) {
+    const earthRadius = 6371.0;
+    double degToRad(double deg) => deg * (math.pi / 180.0);
+    final dLat = degToRad(b.latitude - a.latitude);
+    final dLon = degToRad(b.longitude - a.longitude);
+    final lat1 = degToRad(a.latitude);
+    final lat2 = degToRad(b.latitude);
+    final h = math.sin(dLat / 2) * math.sin(dLat / 2) + math.cos(lat1) * math.cos(lat2) * math.sin(dLon / 2) * math.sin(dLon / 2);
+    final c = 2 * math.atan2(math.sqrt(h), math.sqrt(1 - h));
+    return earthRadius * c;
+  }
+
   String _mapGoogleTypeToOurType(String googleType) {
     switch (googleType.toLowerCase()) {
       case 'restaurant':
@@ -646,23 +662,32 @@ class MapDataService {
   }
 
   // Yer önerileri getir (autocomplete)
-  Future<List<String>> getPlacePredictions(String input, LatLng bounds) async {
+  Future<List<Map<String, dynamic>>> getPlacePredictions(
+    String input,
+    LatLng center, {
+    double radiusKm = 5,
+  }) async {
     try {
-      final url = 'https://maps.googleapis.com/maps/api/place/autocomplete/json'
-          '?input=$input'
-          '&location=${bounds.latitude},${bounds.longitude}'
-          '&radius=50000'
-          '&key=${ApiKeys.googleMapsApiKey}';
+      final radiusMeters = _radiusMeters(radiusKm, min: 1000, max: 50000);
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/place/autocomplete/json'
+        '?input=$input'
+        '&location=${center.latitude},${center.longitude}'
+        '&radius=$radiusMeters'
+        '&language=tr'
+        '&types=establishment'
+        '&key=${ApiKeys.googleMapsApiKey}',
+      );
 
-      final response = await http.get(Uri.parse(url));
+      final response = await http.get(url);
 
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        final predictions = json['predictions'] as List?;
+        final jsonBody = jsonDecode(response.body) as Map<String, dynamic>;
+        final predictions = jsonBody['predictions'] as List?;
         if (predictions != null) {
           return predictions
-              .map((p) => (p['description'] as String?) ?? '')
-              .where((desc) => desc.isNotEmpty)
+              .whereType<Map<String, dynamic>>()
+              .map((p) => Map<String, dynamic>.from(p))
               .toList();
         }
       }

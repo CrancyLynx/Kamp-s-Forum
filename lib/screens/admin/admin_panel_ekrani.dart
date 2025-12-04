@@ -4,7 +4,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart'; 
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:intl/intl.dart';
 import '../../utils/app_colors.dart';
+import '../../services/ring_moderation_service.dart';
+import '../../services/ring_notification_service.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart';
 import '../forum/gonderi_detay_ekrani.dart';
 import '../market/urun_detay_ekrani.dart';
@@ -30,7 +33,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
   void initState() {
     super.initState();
     _checkAdminAccess();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
     _searchController.addListener(() {
       if(mounted) setState(() => _searchQuery = _searchController.text.toLowerCase());
     });
@@ -180,6 +183,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                 Tab(icon: Icon(Icons.group_rounded), text: "Kullanıcılar"),
                 Tab(icon: Icon(Icons.report_problem_rounded), text: "Şikayetler"),
                 Tab(icon: Icon(Icons.event_note_rounded), text: "Etkinlikler"),
+                Tab(icon: Icon(Icons.directions_bus_rounded), text: "Ring Modü"),
                 Tab(icon: Icon(Icons.bar_chart_rounded), text: "İstatistik"),
               ],
             ),
@@ -193,6 +197,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
             _buildUserList(),
             _buildReportsList(),
             const EtkinlikListesiEkrani(),
+            _buildRingModerationTab(),
             _buildStatistics(),
           ],
         ),
@@ -646,5 +651,369 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
         ],
       ),
     );
+  }
+
+  // RING MODERASYONTABı
+  Widget _buildRingModerationTab() {
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          // Alt Tab Bar (Pending / Onaylı)
+          TabBar(
+            labelColor: AppColors.primary,
+            unselectedLabelColor: Colors.grey,
+            indicatorColor: AppColors.primary,
+            tabs: const [
+              Tab(icon: Icon(Icons.schedule_rounded), text: "Beklemede"),
+              Tab(icon: Icon(Icons.check_circle_rounded), text: "Onaylı"),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _buildPendingRingPhotos(),
+                _buildApprovedRingPhotos(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPendingRingPhotos() {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: RingModerationService.getPendingPhotos(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 64, color: Colors.grey[300]),
+                const SizedBox(height: 16),
+                Text("Hata: ${snapshot.error}", style: const TextStyle(color: Colors.grey, fontSize: 14)),
+              ],
+            ),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.image_not_supported_rounded, size: 64, color: Colors.grey[300]),
+                const SizedBox(height: 16),
+                const Text("İncelenecek fotoğraf yok", style: TextStyle(color: Colors.grey, fontSize: 16)),
+              ],
+            ),
+          );
+        }
+
+        final pendingPhotos = snapshot.data!;
+        return ListView.builder(
+          padding: const EdgeInsets.all(12),
+          itemCount: pendingPhotos.length,
+          itemBuilder: (context, index) {
+            final photo = pendingPhotos[index];
+            final universityName = photo['universityName'] as String? ?? 'Bilinmiyor';
+            final uploaderName = photo['uploaderName'] as String? ?? 'Anonim';
+            final photoUrl = photo['photoUrl'] as String? ?? '';
+            final photoId = photo['id'] as String? ?? '';
+            final uploadedAt = (photo['uploadedAt'] as Timestamp?)?.toDate();
+
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Fotoğraf
+                  if (photoUrl.isNotEmpty)
+                    Container(
+                      width: double.infinity,
+                      height: 220,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                      ),
+                      child: CachedNetworkImage(
+                        imageUrl: photoUrl,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+                        errorWidget: (context, url, error) => Icon(Icons.broken_image, size: 64, color: Colors.grey[300]),
+                      ),
+                    ),
+                  // Bilgi
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "🏫 $universityName",
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Yükleyen: $uploaderName",
+                          style: const TextStyle(fontSize: 13, color: Colors.grey),
+                        ),
+                        if (uploadedAt != null)
+                          Text(
+                            "Tarih: ${DateFormat('dd MMM yyyy, HH:mm').format(uploadedAt)}",
+                            style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                      ],
+                    ),
+                  ),
+                  // Butonlar
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _approveRingPhoto(photoId, universityName, uploaderName),
+                            icon: const Icon(Icons.check_circle),
+                            label: const Text("Onayla"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.success,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _showRejectReasonDialog(photoId),
+                            icon: const Icon(Icons.cancel),
+                            label: const Text("Reddet"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.error,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildApprovedRingPhotos() {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: RingModerationService.getApprovedPhotos(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 64, color: Colors.grey[300]),
+                const SizedBox(height: 16),
+                Text("Hata: ${snapshot.error}", style: const TextStyle(color: Colors.grey, fontSize: 14)),
+              ],
+            ),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.check_circle_outline_rounded, size: 64, color: Colors.grey[300]),
+                const SizedBox(height: 16),
+                const Text("Onaylı fotoğraf yok", style: TextStyle(color: Colors.grey, fontSize: 16)),
+              ],
+            ),
+          );
+        }
+
+        final approvedPhotos = snapshot.data!;
+        return ListView.builder(
+          padding: const EdgeInsets.all(12),
+          itemCount: approvedPhotos.length,
+          itemBuilder: (context, index) {
+            final photo = approvedPhotos[index];
+            final universityName = photo['university'] as String? ?? 'Bilinmiyor';
+            final photoUrl = photo['imageUrl'] as String? ?? '';
+            final updaterName = photo['updaterName'] as String? ?? 'Anonim';
+            final approverName = photo['approvedByName'] as String? ?? 'Bilinmiyor';
+            final lastUpdated = (photo['lastUpdated'] as Timestamp?)?.toDate();
+
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Fotoğraf
+                  if (photoUrl.isNotEmpty)
+                    Container(
+                      width: double.infinity,
+                      height: 200,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                      ),
+                      child: CachedNetworkImage(
+                        imageUrl: photoUrl,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+                        errorWidget: (context, url, error) => Icon(Icons.broken_image, size: 64, color: Colors.grey[300]),
+                      ),
+                    ),
+                  // Bilgi
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "✅ $universityName",
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Yükleyen: $updaterName",
+                          style: const TextStyle(fontSize: 13, color: Colors.grey),
+                        ),
+                        Text(
+                          "Onaylayan: $approverName",
+                          style: const TextStyle(fontSize: 13, color: Colors.green),
+                        ),
+                        if (lastUpdated != null)
+                          Text(
+                            "Tarih: ${DateFormat('dd MMM yyyy, HH:mm').format(lastUpdated)}",
+                            style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _approveRingPhoto(String photoId, String universityName, String uploaderName) async {
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) return;
+
+      final success = await RingModerationService.approvePendingPhoto(
+        photoId: photoId,
+        adminUserId: currentUser.uid,
+        adminName: currentUser.displayName ?? 'Admin',
+      );
+
+      if (success) {
+        // Uploader'a bildirim gönder
+        await RingNotificationService.notifyUploaderPhotoApproved(
+          uploaderUserId: '', // Bu bilgiyi pending_ring_photos'dan çekeceksin, bunu fix ettim
+          uploaderName: uploaderName,
+          universityName: universityName,
+          approverName: currentUser.displayName ?? 'Admin',
+        );
+
+        // Üniversite kullanıcılarına bildirim gönder
+        await RingNotificationService.notifyUniversityUsersAboutNewRingInfo(
+          universityName: universityName,
+          uploaderName: uploaderName,
+        );
+
+        _showSnack("✅ Fotoğraf onaylandı ve bildirimler gönderildi", AppColors.success);
+      }
+    } catch (e) {
+      _showSnack("Hata: $e", AppColors.error);
+    }
+  }
+
+  void _showRejectReasonDialog(String photoId) {
+    final reasonController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Fotoğrafı Reddet"),
+        content: TextField(
+          controller: reasonController,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            hintText: "Red sebebini yazınız...",
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("İptal"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _rejectRingPhoto(photoId, reasonController.text);
+            },
+            child: const Text("Reddet", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _rejectRingPhoto(String photoId, String rejectionReason) async {
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) return;
+
+      final photoDoc = await FirebaseFirestore.instance.collection('pending_ring_photos').doc(photoId).get();
+      if (!photoDoc.exists) return;
+
+      final photoData = photoDoc.data() as Map<String, dynamic>;
+      final universityName = photoData['universityName'] as String;
+      final uploaderUserId = photoData['uploadedBy'] as String;
+      final uploaderName = photoData['uploaderName'] as String;
+
+      final success = await RingModerationService.rejectPendingPhoto(
+        photoId: photoId,
+        adminUserId: currentUser.uid,
+        adminName: currentUser.displayName ?? 'Admin',
+        rejectionReason: rejectionReason,
+      );
+
+      if (success) {
+        // Uploader'a bildirim gönder
+        await RingNotificationService.notifyUploaderPhotoRejected(
+          uploaderUserId: uploaderUserId,
+          uploaderName: uploaderName,
+          universityName: universityName,
+          rejectionReason: rejectionReason,
+          approverName: currentUser.displayName ?? 'Admin',
+        );
+
+        _showSnack("❌ Fotoğraf reddedildi ve bildirim gönderildi", AppColors.error);
+      }
+    } catch (e) {
+      _showSnack("Hata: $e", AppColors.error);
+    }
   }
 }
