@@ -554,9 +554,12 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       setState(() => _lastApiCall = DateTime.now());
       
       try {
-        final results = await _mapDataService.getPlacePredictions(query, _userLocation);
+        final loc = _userLocation ?? const LatLng(39.9334, 32.8597);
+        final results = await _mapDataService.getPlacePredictions(query, loc);
         if (mounted) {
-          setState(() => _searchResults = results);
+          setState(() => _searchResults = results
+              .map((name) => {'title': name, 'snippet': '', 'type': 'diger'} as Map<String, dynamic>)
+              .toList());
         }
       } catch (e) {
         debugPrint("Arama hatası: $e");
@@ -1052,7 +1055,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     return Expanded(
       child: InkWell(
         onTap: () {
-          _mapDataService.voteForStatus(locId, text);
+          _mapDataService.voteForStatus(locId, 'review_default', text.toLowerCase());
           if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Oylandı: $text"), duration: const Duration(seconds: 1)));
         },
         child: Container(
@@ -1079,7 +1082,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     return GestureDetector(
       onTap: () {
         setState(() {
-          _currentFilter = key;
+          _currentFilter = key.toLowerCase();
           _showRadiusCircle = (key != 'all');
           _searchRadiusKm = 5.0;
         });

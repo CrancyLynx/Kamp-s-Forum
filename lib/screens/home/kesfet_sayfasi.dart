@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 // EKLENDİ: Harita ve Servis Importları
 import '../../services/map_data_service.dart';
@@ -1650,7 +1651,7 @@ class KampusSearchDelegate extends SearchDelegate {
 
     return FutureBuilder(
       future: Future.wait([
-        _mapService.getPlacePredictions(query, null), 
+        _mapService.getPlacePredictions(query, const LatLng(39.9334, 32.8597)), 
         FirebaseFirestore.instance
             .collection('kullanicilar')
             .where('takmaAd', isGreaterThanOrEqualTo: query)
