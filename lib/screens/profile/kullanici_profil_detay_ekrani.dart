@@ -236,13 +236,11 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        AppColors.primary.withOpacity(0.1),
-                        theme.scaffoldBackgroundColor,
+                        AppColors.primary.withOpacity(0.15),
                         theme.scaffoldBackgroundColor,
                       ],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      stops: const [0.0, 0.4, 1.0],
                     ),
                   ),
                   child: NestedScrollView(

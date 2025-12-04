@@ -107,13 +107,25 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ✅ YENİ: Modern senkronize header
-            PanelHeader(
+      backgroundColor: Colors.transparent,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppColors.primary.withOpacity(0.15),
+              theme.scaffoldBackgroundColor,
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // ✅ YENİ: Modern senkronize header
+              PanelHeader(
               title: 'Kampüs Pazarı',
               subtitle: 'Ürün al ve sat',
               icon: Icons.shopping_bag_rounded,
@@ -263,6 +275,7 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
               ),
             ),
           ],
+        ),
         ),
       ),
       floatingActionButton: !_isGuest

@@ -272,13 +272,25 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: SafeArea(
-        child: Column(
-          children: [
-            PanelHeader(
+      backgroundColor: Colors.transparent,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppColors.primary.withOpacity(0.15),
+              theme.scaffoldBackgroundColor,
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              PanelHeader(
               title: 'Kampüs Forum',
               subtitle: 'Soru, fikir ve tartışmaları paylaş',
               icon: Icons.forum_rounded,
@@ -401,6 +413,7 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
             ),
           ),
           ],
+        ),
         ),
       ),
       floatingActionButton: !widget.isGuest ? FloatingActionButton(
