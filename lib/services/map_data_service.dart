@@ -103,11 +103,15 @@ class MapDataService {
         final GeoPoint gp = data['position'];
         final String type = data['type'] ?? 'diger';
 
+        // DÜZELTME: Koordinatların ters mi olup olmadığını kontrol et
+        // Eğer latitude > 90 veya longitude > 180 ise, koordinatlar ters olabilir
+        final (latitude, longitude) = _validateCoordinates(gp.latitude, gp.longitude);
+
         return LocationModel(
           id: doc.id,
           title: data['title'] ?? 'Bilinmeyen Yer',
           snippet: data['snippet'] ?? '',
-          position: LatLng(gp.latitude, gp.longitude),
+          position: LatLng(latitude, longitude),
           type: type,
           photoUrls: List<String>.from(data['photos'] ?? []),
           openingHours: data['hours'],
@@ -127,6 +131,17 @@ class MapDataService {
       case 'kutuphane': return _iconKutuphane;
       default: return _iconDefault;
     }
+  }
+
+  // DÜZELTME: Koordinat doğrulama - Eğer lat/lng ters ise otomatik düzelt
+  (double, double) _validateCoordinates(double lat, double lng) {
+    // Geçerli aralıklar: latitude -90 to 90, longitude -180 to 180
+    if (lat > 90 || lat < -90 || lng > 180 || lng < -180) {
+      // Koordinatlar ters olabilir - değişdir
+      if (kDebugMode) print("⚠️ Ters koordinat tespit edildi: ($lat, $lng) → ($lng, $lat)");
+      return (lng, lat);
+    }
+    return (lat, lng);
   }
 
   // --- ✅ GOOGLE PLACES API (TAMAMEN YENİDEN YAZILDI - ÜST DÜZEY) ---
@@ -362,11 +377,15 @@ class MapDataService {
         
         // Geçerli üniversite
         final loc = item['geometry']['location'];
+        final rawLat = (loc['lat'] as num?)?.toDouble() ?? 0.0;
+        final rawLng = (loc['lng'] as num?)?.toDouble() ?? 0.0;
+        final (latitude, longitude) = _validateCoordinates(rawLat, rawLng);
+        
         universities.add(LocationModel(
           id: item['place_id'],
           title: item['name'],
           snippet: item['vicinity'] ?? '',
-          position: LatLng(loc['lat'], loc['lng']),
+          position: LatLng(latitude, longitude),
           type: 'universite',
           rating: (item['rating'] as num?)?.toDouble() ?? 0.0,
           icon: _iconUni,
@@ -386,11 +405,15 @@ class MapDataService {
       final loc = item['geometry']?['location'];
       if (loc == null) return null;
 
+      final rawLat = (loc['lat'] as num?)?.toDouble() ?? 0.0;
+      final rawLng = (loc['lng'] as num?)?.toDouble() ?? 0.0;
+      final (latitude, longitude) = _validateCoordinates(rawLat, rawLng);
+
       return LocationModel(
         id: item['place_id'],
         title: item['name'] ?? 'Bilinmeyen',
         snippet: item['vicinity'] ?? '',
-        position: LatLng(loc['lat'], loc['lng']),
+        position: LatLng(latitude, longitude),
         type: type,
         rating: (item['rating'] as num?)?.toDouble() ?? 0.0,
         icon: _getIconForType(type),
@@ -502,14 +525,15 @@ class MapDataService {
         }
       }
 
+      final rawLat = (loc['lat'] as num?)?.toDouble() ?? 0.0;
+      final rawLng = (loc['lng'] as num?)?.toDouble() ?? 0.0;
+      final (latitude, longitude) = _validateCoordinates(rawLat, rawLng);
+
       final model = LocationModel(
         id: placeId,
         title: name,
         snippet: address,
-        position: LatLng(
-          (loc['lat'] as num?)?.toDouble() ?? 0.0,
-          (loc['lng'] as num?)?.toDouble() ?? 0.0,
-        ),
+        position: LatLng(latitude, longitude),
         type: 'arama_sonucu',
         rating: (result['rating'] as num?)?.toDouble() ?? 0.0,
         photoUrls: _extractPhotoUrls(result['photos']),

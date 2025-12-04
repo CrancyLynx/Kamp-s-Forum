@@ -111,5 +111,12 @@ service firebase.storage {
       allow read: if true;
       allow write: if false; // Sadece admin
     }
+    
+    // 11. Ring Seferleri / Ulaşım Tarifeleri
+    match /ulasim_tarifeleri/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && isValidImage(); // Herkes yükleyebilir
+      allow delete: if isSignedIn(); // Kendi yüklediklerini silebilir
+    }
   }
 }
