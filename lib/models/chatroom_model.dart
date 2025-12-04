@@ -147,7 +147,7 @@ class ChatRoomMember {
   final String userId;
   final String userName;
   final String userProfilePhotoUrl;
-  final DateTime katılımZamani;
+  final DateTime katilimZamani;
   final bool aktif;
   final bool susturuldu; // Mute
   
@@ -155,7 +155,7 @@ class ChatRoomMember {
     required this.userId,
     required this.userName,
     required this.userProfilePhotoUrl,
-    required this.katılımZamani,
+    required this.katilimZamani,
     required this.aktif,
     required this.susturuldu,
   });
@@ -166,7 +166,7 @@ class ChatRoomMember {
       userId: doc.id,
       userName: data['userName'] ?? 'Kullanıcı',
       userProfilePhotoUrl: data['userProfilePhotoUrl'] ?? '',
-      katılımZamani: (data['katılımZamani'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      katilimZamani: (data['katilimZamani'] as Timestamp?)?.toDate() ?? DateTime.now(),
       aktif: data['aktif'] ?? false,
       susturuldu: data['susturuldu'] ?? false,
     );
@@ -176,7 +176,7 @@ class ChatRoomMember {
     return {
       'userName': userName,
       'userProfilePhotoUrl': userProfilePhotoUrl,
-      'katılımZamani': Timestamp.fromDate(katılımZamani),
+      'katilimZamani': Timestamp.fromDate(katilimZamani),
       'aktif': aktif,
       'susturuldu': susturuldu,
     };

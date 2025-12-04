@@ -195,24 +195,24 @@ class _ImageUploadScreenState extends State<ImageUploadScreen> {
     );
   }
   
-  void _showQuotaWarning() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('⚠️ Aylık Limit'),
-        content: Text(
-          'Görsel kontrol aylık limitine yaklaştı.\n\n'
-          'Sonraki ay yeniden deneyin.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Tamam'),
-          ),
-        ],
-      ),
-    );
-  }
+  // void _showQuotaWarning() {
+  //   showDialog(
+  //     context: context,
+  //     builder: (context) => AlertDialog(
+  //       title: Text('⚠️ Aylık Limit'),
+  //       content: Text(
+  //         'Görsel kontrol aylık limitine yaklaştı.\n\n'
+  //         'Sonraki ay yeniden deneyin.',
+  //       ),
+  //       actions: [
+  //         TextButton(
+  //           onPressed: () => Navigator.pop(context),
+  //           child: Text('Tamam'),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
   
   // ============================================================
   // UI Build

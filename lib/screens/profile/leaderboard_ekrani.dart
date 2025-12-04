@@ -231,8 +231,8 @@ class _LeaderboardEkraniState extends State<LeaderboardEkrani> with SingleTicker
         final xpByUser = <String, int>{};
         for (var doc in snapshot.data!.docs) {
           final userId = doc['userId'] ?? '';
-          final xpAmount = (doc['xpAmount'] ?? 0).toInt();
-          xpByUser[userId] = (xpByUser[userId] ?? 0) + xpAmount;
+          final xpAmount = (doc['xpAmount'] ?? 0) as num;
+          xpByUser[userId] = (xpByUser[userId] ?? 0) + xpAmount.toInt();
         }
 
         // Sırala

@@ -131,7 +131,7 @@ class RingUye {
   final String userId;
   final String userName;
   final String userProfilePhotoUrl;
-  final DateTime katılımTarihi;
+  final DateTime katilimTarihi;
   final bool aktivDir; // Hala Ring'de aktif mi
   final int ratingAveragesi; // Ortalama puan (1-5)
   
@@ -139,7 +139,7 @@ class RingUye {
     required this.userId,
     required this.userName,
     required this.userProfilePhotoUrl,
-    required this.katılımTarihi,
+    required this.katilimTarihi,
     required this.aktivDir,
     required this.ratingAveragesi,
   });
@@ -150,7 +150,7 @@ class RingUye {
       userId: doc.id,
       userName: data['ad_soyad'] ?? 'Bilinmeyen',
       userProfilePhotoUrl: data['profil_fotografi_url'] ?? '',
-      katılımTarihi: (data['katılımTarihi'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      katilimTarihi: (data['katilimTarihi'] as Timestamp?)?.toDate() ?? DateTime.now(),
       aktivDir: data['aktivDir'] ?? true,
       ratingAveragesi: (data['ratingAveragesi'] as num?)?.toInt() ?? 5,
     );

@@ -62,7 +62,7 @@ class RuleViolation {
   final int reportEdenCount; // Kaç kişi rapor etti
   final String? moderatorNotlari; // Moderator notları
   final String? ceza; // Uygulanacak ceza
-  final DateTime? cekaZamanı;
+  final DateTime? cekaZamani;
   final bool shadowBanned; // Gönderi gizlenmiş mi?
 
   RuleViolation({
@@ -77,7 +77,7 @@ class RuleViolation {
     required this.reportEdenCount,
     this.moderatorNotlari,
     this.ceza,
-    this.cekaZamanı,
+    this.cekaZamani,
     required this.shadowBanned,
   });
 
@@ -95,7 +95,7 @@ class RuleViolation {
       reportEdenCount: (data['reportEdenCount'] as num?)?.toInt() ?? 1,
       moderatorNotlari: data['moderatorNotlari'],
       ceza: data['ceza'],
-      cekaZamanı: (data['cekaZamanı'] as Timestamp?)?.toDate(),
+      cekaZamani: (data['cekaZamani'] as Timestamp?)?.toDate(),
       shadowBanned: data['shadowBanned'] ?? false,
     );
   }
@@ -112,7 +112,7 @@ class RuleViolation {
       'reportEdenCount': reportEdenCount,
       'moderatorNotlari': moderatorNotlari,
       'ceza': ceza,
-      'cekaZamanı': cekaZamanı != null ? Timestamp.fromDate(cekaZamanı!) : null,
+      'cekaZamani': cekaZamani != null ? Timestamp.fromDate(cekaZamani!) : null,
       'shadowBanned': shadowBanned,
     };
   }
