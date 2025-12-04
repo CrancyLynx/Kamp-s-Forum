@@ -102,15 +102,16 @@ exports.sendPushNotification = functions.region(REGION).firestore
       console.warn(`[WARN] Duplicate kontrol hatası: ${e.message}`);
     }
 
-    // 5. Rate limiting - her kullanıcı en fazla dakikada 5 bildirim
+    // 5. Rate limiting - her kullanıcı en fazla dakikada 3 bildirim (düşük quota)
     try {
       const oneMinuteAgo = new Date(Date.now() - 60000);
       const recentNotifs = await db.collection("bildirimler")
         .where("userId", "==", userId)
         .where("timestamp", ">=", oneMinuteAgo)
+        .limit(4)
         .get();
 
-      if (recentNotifs.size >= 5) {
+      if (recentNotifs.size >= 3) {
         console.log(`[SPAM] Rate limit aşıldı: ${userId} (${recentNotifs.size}/dakika)`);
         await db.collection("bildirimler").doc(docId).delete();
         return null;
@@ -884,31 +885,25 @@ exports.logUserActivity = functions.region(REGION).https.onCall(async (data, con
 
 /**
  * =================================================================================
- * PROFANITY VE KÖTÜ KELIME LİSTESİ
+ * PROFANITY VE KÖTÜ KELIME LİSTESİ (CİDDİ OLANLAR SADECE)
  * =================================================================================
+ * NOT: Hafif olan kelimeler (aptal, sarışın, kız vb) kaldırıldı
  */
 const PROFANITY_WORDS = [
-  // Türkçe kötü kelimeler (kapsamlı)
-  "orospu", "yıkık", "aptal", "idiot", "sersem", "budala", "salak", "saçma",
-  "piç", "bok", "sikeyim", "çüğü", "şerefsiz", "namussuz", "hain",
-  "encelade", "falan", "karı", "dişi", "erkek", "bacı", "kız",
-  "göt", "sıç", "tokat", "yarrağı", "klitoris", "penis", "vagina",
-  "am", "bok", "kusura", "değer", "sapık", "pedofil", "ensest",
-  "topniyetçi", "faşist", "komünist", "terörist", "cihatçı",
+  // Türkçe ciddi kötü kelimeler (cinsel ve nefret söylemi)
+  "orospu", "piç", "bok", "sikeyim", "çüğü", "şerefsiz", "namussuz",
+  "göt", "sıç", "sapık", "pedofil", "ensest",
   
-  // İngilizce kötü kelimeler
-  "fuck", "shit", "cunt", "bastard", "asshole", "damn", "hell",
-  "whore", "bitch", "pussy", "dick", "cock", "prick", "twat",
-  "motherfucker", "cocksucker", "dammit", "goddamn", "bullshit",
+  // İngilizce ciddi kötü kelimeler
+  "fuck", "shit", "cunt", "bastard", "asshole", "whore", "bitch",
+  "dick", "prick", "motherfucker",
   
   // Spam ve aldatmaca kelimeleri
   "viagra", "casino", "bet", "click here", "free money", "xxx",
-  "loto", "iddia", "at yarışı", "ödl", "pin", "wespa",
+  "loto", "iddia", "at yarışı",
   
-  // Nefret söylemi ve tehdit
-  "kızıllar", "sarışınlar", "züğürtler", "fakir", "zengin",
-  "müslüman", "hristiyan", "yahudi", "ateist", "diniz",
-  "ölüm", "öldür", "bomba", "silah", "intihar",
+  // Nefret söylemi ve terörizm/şiddet tehditleri
+  "terörist", "öldür", "bomba", "silah", "intihar",
 ];
 
 const SPAM_KEYWORDS = ["viagra", "casino", "bet", "click here", "free money", "xxx", "loto", "iddia"];
@@ -1067,7 +1062,7 @@ exports.autoModerateContent = functions.region(REGION).firestore
       updateData.foundBadWords = profanityCheck.foundWords;
       updateData.status = "pending_review";
       updateData.visible = false; // Yayınlanmasını engelle
-      updateData.moderationMessage = `Gönderi uygunsuz dil içeriyor: "${profanityCheck.foundWords.join(", ")}". Lütfen düzeltip yeniden gönderin.`;
+      updateData.moderationMessage = `⚠️ UYARI: Gönderi uygunsuz kelimeler içeriyor!\nBulunan kelimeler: ${profanityCheck.foundWords.map(w => `"${w}"`).join(", ")}\n\nLütfen bu kelimeleri kaldırıp yeniden gönderin.`;
     }
 
     if (Object.keys(updateData).length > 0) {
@@ -1478,7 +1473,7 @@ exports.moderateComment = functions.region(REGION).firestore
         flaggedForProfanity: true,
         foundBadWords: profanityCheck.foundWords,
         visible: false,
-        moderationMessage: `Yorumunuz uygunsuz dil içeriyor: "${profanityCheck.foundWords.join(", ")}". Lütfen düzeltip yeniden gönderin.`,
+        moderationMessage: `⚠️ UYARI: Yorumunuz uygunsuz kelimeler içeriyor!\nBulunan kelimeler: ${profanityCheck.foundWords.map(w => `"${w}"`).join(", ")}\n\nLütfen bu kelimeleri kaldırıp yeniden gönderin.`,
         flaggedAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
@@ -1539,7 +1534,7 @@ exports.moderatePoll = functions.region(REGION).firestore
       updateData.foundBadWords = [...new Set(foundWords)];
       updateData.status = "pending_review";
       updateData.visible = false;
-      updateData.moderationMessage = `Anket uygunsuz dil içeriyor: "${foundWords.join(", ")}". Lütfen düzeltip yeniden gönderin.`;
+      updateData.moderationMessage = `Anket uygunsuz kelimeler içeriyor: "${foundWords.join(", ")}". Lütfen bu kelimeleri kaldırıp yeniden gönderin.`;
       updateData.flaggedAt = admin.firestore.FieldValue.serverTimestamp();
 
       await snap.ref.update(updateData);
@@ -1579,7 +1574,7 @@ exports.moderateForumMessage = functions.region(REGION).firestore
         flaggedForProfanity: true,
         foundBadWords: profanityCheck.foundWords,
         visible: false,
-        moderationMessage: `Mesajınız uygunsuz dil içeriyor: "${profanityCheck.foundWords.join(", ")}". Lütfen düzeltip yeniden gönderin.`,
+        moderationMessage: `Mesajınız uygunsuz kelimeler içeriyor: "${profanityCheck.foundWords.join(", ")}". Lütfen bu kelimeleri kaldırıp yeniden gönderin.`,
         flaggedAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
@@ -1641,9 +1636,10 @@ exports.checkAndFixContent = functions.region(REGION).https.onCall(async (data, 
     if (profanityCheck.hasProfanity) {
       console.log(`[PROFANITY_CHECK_FAILED] ${contentType}: ${profanityCheck.foundWords.join(", ")}`);
       
+      const wordList = profanityCheck.foundWords.join(", ");
       return {
         success: false,
-        message: `⚠️ İçeriğinizde uygunsuz kelimeler bulundu: "${profanityCheck.foundWords.join(", ")}"\nLütfen düzeltip yeniden gönderin.`,
+        message: `⚠️ İçeriğinizde uygunsuz kelimeler bulundu:\n\n"${wordList}"\n\nLütfen bu kelimeleri kaldırıp yeniden gönderin.`,
         foundWords: profanityCheck.foundWords,
         requiresModeration: true,
         canPublish: false

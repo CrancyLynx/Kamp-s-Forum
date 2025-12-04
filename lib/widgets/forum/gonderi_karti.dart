@@ -11,6 +11,7 @@ import '../../models/badge_model.dart';
 import '../badge_widget.dart';
 import '../../screens/forum/gonderi_detay_ekrani.dart';
 import '../../screens/profile/kullanici_profil_detay_ekrani.dart';
+import '../../services/cloud_functions_service.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 class GonderiKarti extends StatefulWidget {
@@ -287,6 +288,40 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
       }
     });
   }
+
+  void _showDeleteConfirmationDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Gönderiyi Sil'),
+        content: const Text('Bu gönderiyi silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await CloudFunctionsService.deletePost(widget.postId);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Gönderi başarıyla silindi.'), backgroundColor: AppColors.success),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  _showErrorDialog('Gönderi silinirken bir hata oluştu.');
+                }
+              }
+            },
+            child: const Text('Sil', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
   
   @override
   Widget build(BuildContext context) {
@@ -424,7 +459,22 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                           ],
                         ),
                       ),
-                      if (widget.authorBadges.isNotEmpty) _buildAuthorBadges(widget.authorBadges),
+                                            if (widget.authorBadges.isNotEmpty) _buildAuthorBadges(widget.authorBadges),
+                      const Spacer(),
+                      if (!widget.isGuest && (FirebaseAuth.instance.currentUser?.uid == widget.authorUserId || widget.isAdmin))
+                        PopupMenuButton<String>(
+                          onSelected: (value) {
+                            if (value == 'delete') {
+                              _showDeleteConfirmationDialog();
+                            }
+                          },
+                          itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                            const PopupMenuItem<String>(
+                              value: 'delete',
+                              child: Text('Sil'),
+                            ),
+                          ],
+                        ),
                     ],
                   ),
                   const SizedBox(height: 12),

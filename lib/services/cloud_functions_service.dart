@@ -168,4 +168,26 @@ class CloudFunctionsService {
       rethrow;
     }
   }
+
+  /// 🗑️ Gönderiyi sil
+  static Future<bool> deletePost(String postId) async {
+    try {
+      final result = await _functions.httpsCallable('deletePost').call({'postId': postId});
+      return result.data['success'] ?? false;
+    } catch (e) {
+      print('❌ Gönderi silme hatası: $e');
+      rethrow;
+    }
+  }
+
+  /// 🗑️ Hesabı sil
+  static Future<bool> deleteUserAccount() async {
+    try {
+      final result = await _functions.httpsCallable('deleteUserAccount').call();
+      return result.data['success'] ?? false;
+    } catch (e) {
+      print('❌ Hesap silme hatası: $e');
+      rethrow;
+    }
+  }
 }

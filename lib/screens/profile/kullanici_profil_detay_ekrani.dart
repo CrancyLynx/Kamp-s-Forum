@@ -25,6 +25,7 @@ import '../auth/giris_ekrani.dart';
 import '../admin/kullanici_listesi_ekrani.dart';
 
 import '../../services/auth_service.dart';
+import '../../services/cloud_functions_service.dart';
 import '../../main.dart'; // ThemeProvider için
 
 class KullaniciProfilDetayEkrani extends StatefulWidget {
@@ -1117,11 +1118,60 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                   }
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.delete_forever, color: Colors.red),
+                title: const Text('Hesabı Sil', style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showDeleteAccountConfirmationDialog();
+                },
+              ),
               const SizedBox(height: 16),
             ],
           ),
         );
       },
+    );
+  }
+
+  void _showDeleteAccountConfirmationDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hesabı Sil'),
+        content: const Text('Hesabınızı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz. Gönderileriniz ve yorumlarınız anonimleştirilecektir.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await CloudFunctionsService.deleteUserAccount();
+                if (mounted) {
+                  await AuthService().signOut();
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (context) => const GirisEkrani()),
+                    (route) => false,
+                  );
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Hesabınız başarıyla silindi.'), backgroundColor: AppColors.success),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Hesap silinirken bir hata oluştu: $e'), backgroundColor: AppColors.error),
+                  );
+                }
+              }
+            },
+            child: const Text('Sil', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
     );
   }
 }
