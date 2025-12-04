@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../models/phase2_models.dart';
 import '../../services/phase2_services.dart';
@@ -19,7 +20,7 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
         backgroundColor: const Color(0xFF2C3E50),
       ),
       body: StreamBuilder<List<ActivityTimeline>>(
-        stream: ActivityTimelineService.getActivityTimeline().asStream(),
+        stream: ActivityTimelineService.getUserActivityTimeline(FirebaseAuth.instance.currentUser!.uid),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());

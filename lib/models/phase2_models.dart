@@ -65,6 +65,7 @@ class LocationMarker {
   final String category;
   final String description;
   final bool isActive;
+  final String? openingHours;
 
   LocationMarker({
     required this.id,
@@ -75,6 +76,7 @@ class LocationMarker {
     required this.category,
     required this.description,
     required this.isActive,
+    this.openingHours,
   });
 
   factory LocationMarker.fromFirestore(DocumentSnapshot doc) {
@@ -88,6 +90,7 @@ class LocationMarker {
       category: data['category'] ?? 'general',
       description: data['description'] ?? '',
       isActive: data['isActive'] ?? true,
+      openingHours: data['openingHours'],
     );
   }
 
@@ -100,6 +103,7 @@ class LocationMarker {
       'category': category,
       'description': description,
       'isActive': isActive,
+      'openingHours': openingHours,
     };
   }
 }

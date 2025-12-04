@@ -9,6 +9,12 @@ import 'admin_reports_tab.dart';
 import 'admin_ring_moderation_tab.dart';
 import 'admin_statistics_tab.dart';
 import 'etkinlik_listesi_ekrani.dart';
+import 'phase3_audit_log_tab.dart';
+import 'phase3_api_quota_tab.dart';
+import 'phase3_error_logs_tab.dart';
+import 'phase3_feedback_tab.dart';
+import 'phase3_photo_approval_tab.dart';
+import 'phase3_system_bots_tab.dart';
 
 class AdminPanelEkrani extends StatefulWidget {
   const AdminPanelEkrani({super.key});
@@ -27,7 +33,8 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
   void initState() {
     super.initState();
     _checkAdminAccess();
-    _tabController = TabController(length: 7, vsync: this);
+    // 7 existing + 8 Phase 3 + 7 Phase 4 = 22 tabs total
+    _tabController = TabController(length: 22, vsync: this);
   }
 
   Future<void> _checkAdminAccess() async {
@@ -142,6 +149,23 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                 Tab(icon: Icon(Icons.event_note_rounded, size: 20), text: "Etkinlikler"),
                 Tab(icon: Icon(Icons.directions_bus_rounded, size: 20), text: "Ring Modü"),
                 Tab(icon: Icon(Icons.bar_chart_rounded, size: 20), text: "İstatistik"),
+                // Phase 3 Tabs (8 total)
+                Tab(icon: Icon(Icons.history_rounded, size: 20), text: "Denetim Günü"),
+                Tab(icon: Icon(Icons.trending_up_rounded, size: 20), text: "API Kontenjanı"),
+                Tab(icon: Icon(Icons.bug_report_rounded, size: 20), text: "Hata Raporları"),
+                Tab(icon: Icon(Icons.feedback_rounded, size: 20), text: "Geri Bildirim"),
+                Tab(icon: Icon(Icons.check_circle_rounded, size: 20), text: "Fotoğraf Onayı"),
+                Tab(icon: Icon(Icons.smart_toy_rounded, size: 20), text: "Sistem Botları"),
+                Tab(icon: Icon(Icons.lock_rounded, size: 20), text: "Engellenenler"),
+                Tab(icon: Icon(Icons.warning_rounded, size: 20), text: "İleri Moderasyon"),
+                // Phase 4 Tabs (7 total)
+                Tab(icon: Icon(Icons.directions_run_rounded, size: 20), text: "Ride Şikayetleri"),
+                Tab(icon: Icon(Icons.grade_rounded, size: 20), text: "Puan Sistemi"),
+                Tab(icon: Icon(Icons.emoji_events_rounded, size: 20), text: "Başarılar"),
+                Tab(icon: Icon(Icons.card_giftcard_rounded, size: 20), text: "Ödüller"),
+                Tab(icon: Icon(Icons.search_rounded, size: 20), text: "Arama Analiz"),
+                Tab(icon: Icon(Icons.auto_awesome_rounded, size: 20), text: "AI İstatistik"),
+                Tab(icon: Icon(Icons.monetization_on_rounded, size: 20), text: "Finansal Rapor"),
               ],
             ),
           ),
@@ -156,8 +180,45 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
             const EtkinlikListesiEkrani(),
             const AdminRingModerationTab(),
             const AdminStatisticsTab(),
+            // Phase 3 Real Tabs
+            const Phase3AuditLogTab(),
+            const Phase3ApiQuotaTab(),
+            const Phase3ErrorLogsTab(),
+            const Phase3FeedbackTab(),
+            const Phase3PhotoApprovalTab(),
+            const Phase3SystemBotsTab(),
+            _buildPlaceholderTab("🔒 Engellenenler", "Engellenen kullanıcılar listesi"),
+            _buildPlaceholderTab("⚠️ İleri Moderasyon", "Uyarı, mute, ban, timeout"),
+            // Phase 4 Placeholder Tabs
+            _buildPlaceholderTab("🚗 Ride Şikayetleri", "Sürüş güvenliği şikayetleri"),
+            _buildPlaceholderTab("⭐ Puan Sistemi", "Kullanıcı puan ve seviye yönetimi"),
+            _buildPlaceholderTab("🏆 Başarılar", "Başarı rozeti ve ilerleme takibi"),
+            _buildPlaceholderTab("🎁 Ödüller", "Ödül dağıtımı ve riward sistemi"),
+            _buildPlaceholderTab("🔍 Arama Analiz", "Popüler aramalar ve trendler"),
+            _buildPlaceholderTab("🤖 AI İstatistik", "Yapay zeka model metrikleri"),
+            _buildPlaceholderTab("💰 Finansal Rapor", "Gelir ve masraf analizi"),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholderTab(String title, String description) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.construction_rounded, size: 100, color: Colors.grey),
+          const SizedBox(height: 16),
+          Text(title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text(description, style: const TextStyle(fontSize: 14, color: Colors.grey)),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: () {},
+            child: const Text("Yakında Kullanılabilir"),
+          ),
+        ],
       ),
     );
   }

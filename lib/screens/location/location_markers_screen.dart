@@ -31,7 +31,7 @@ class _LocationMarkersScreenState extends State<LocationMarkersScreen> {
           _buildCategoryFilter(),
           Expanded(
             child: StreamBuilder<List<LocationMarker>>(
-              stream: LocationMarkerService.getAllMarkers().asStream(),
+              stream: LocationMarkerService.getAllMarkers(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
