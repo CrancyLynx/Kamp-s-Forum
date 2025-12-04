@@ -52,6 +52,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
   final GlobalKey _statsKey = GlobalKey();
   final GlobalKey _actionButtonsKey = GlobalKey();
   final GlobalKey _badgesKey = GlobalKey();
+  bool _tutorialShown = false;
 
   @override
   void initState() {
@@ -62,72 +63,116 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     if (_currentUserId.isNotEmpty) {
       _myUserDataFuture = FirebaseFirestore.instance.collection('kullanicilar').doc(_currentUserId).get();
     }
+  }
 
-    // --- MASKOT TANITIMI ---
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      MaskotHelper.checkAndShow(
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Maskot tutorialını bir kez göster
+    if (!_tutorialShown) {
+      _tutorialShown = true;
+      Future.delayed(Duration(milliseconds: 700), () {
+        if (mounted) {
+          _initializeMaskot();
+        }
+      });
+    }
+  }
+
+  List<TargetFocus> _buildValidTargets() {
+    List<TargetFocus> targets = [];
+
+    // 1. Badges Target
+    if (_badgesKey.currentContext != null && _badgesKey.currentContext!.findRenderObject() != null) {
+      targets.add(
+        TargetFocus(
+          identify: "profil-badges",
+          keyTarget: _badgesKey, 
+          alignSkip: Alignment.bottomCenter,
+          shape: ShapeLightFocus.RRect,
+          radius: 12,
+          contents: [
+            TargetContent(
+              align: ContentAlign.bottom,
+              builder: (context, controller) => MaskotHelper.buildTutorialContent(
+                context,
+                title: 'Rozetlerin',
+                description: 'Kazandığın başarı rozetleri burada listelenir. Yukarıdaki madalya ikonuna tıklayarak tüm hedefleri görebilirsin!',
+                mascotAssetPath: 'assets/images/mutlu_bay.png',
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 2. Stats Target
+    if (_statsKey.currentContext != null && _statsKey.currentContext!.findRenderObject() != null) {
+      targets.add(
+        TargetFocus(
+          identify: "profil-stats",
+          keyTarget: _statsKey,
+          alignSkip: Alignment.bottomLeft,
+          shape: ShapeLightFocus.RRect,
+          radius: 16,
+          contents: [
+            TargetContent(
+              align: ContentAlign.bottom,
+              builder: (context, controller) => MaskotHelper.buildTutorialContent(
+                context,
+                title: 'İstatistikler',
+                description: 'Takipçi ve gönderi sayılarını buradan inceleyebilirsin.',
+                mascotAssetPath: 'assets/images/düsünceli_bay.png',
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 3. Action Buttons Target
+    if (_actionButtonsKey.currentContext != null && _actionButtonsKey.currentContext!.findRenderObject() != null) {
+      targets.add(
+        TargetFocus(
+          identify: "profil-actions",
+          keyTarget: _actionButtonsKey,
+          alignSkip: Alignment.topRight,
+          shape: ShapeLightFocus.RRect,
+          radius: 12,
+          contents: [
+            TargetContent(
+              align: ContentAlign.top,
+              builder: (context, controller) => MaskotHelper.buildTutorialContent(
+                context,
+                title: _isOwnProfile ? 'Profili Düzenle' : 'İletişime Geç',
+                description: _isOwnProfile 
+                    ? 'Profil bilgilerini ve ayarlarını buradan güncelleyebilirsin.' 
+                    : 'Bu kullanıcıyı takip edebilir veya mesaj atabilirsin.',
+                mascotAssetPath: 'assets/images/dedektif_bay.png',
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return targets;
+  }
+
+  void _initializeMaskot() {
+    List<TargetFocus> targets = _buildValidTargets();
+    
+    if (targets.isNotEmpty) {
+      MaskotHelper.checkAndShowSafe(
         context,
         featureKey: 'profil_detay_tutorial_gosterildi',
-        targets: [
-          TargetFocus(
-            identify: "profil-badges",
-            keyTarget: _badgesKey, 
-            alignSkip: Alignment.bottomCenter,
-            shape: ShapeLightFocus.RRect,
-            radius: 12,
-            contents: [
-              TargetContent(
-                align: ContentAlign.bottom,
-                builder: (context, controller) => MaskotHelper.buildTutorialContent(
-                  context,
-                  title: 'Rozetlerin',
-                  description: 'Kazandığın başarı rozetleri burada listelenir. Yukarıdaki madalya ikonuna tıklayarak tüm hedefleri görebilirsin!',
-                  mascotAssetPath: 'assets/images/mutlu_bay.png',
-                ),
-              ),
-            ],
-          ),
-          TargetFocus(
-            identify: "profil-stats",
-            keyTarget: _statsKey,
-            alignSkip: Alignment.bottomLeft,
-            shape: ShapeLightFocus.RRect,
-            radius: 16,
-            contents: [
-              TargetContent(
-                align: ContentAlign.bottom,
-                builder: (context, controller) => MaskotHelper.buildTutorialContent(
-                  context,
-                  title: 'İstatistikler',
-                  description: 'Takipçi ve gönderi sayılarını buradan inceleyebilirsin.',
-                  mascotAssetPath: 'assets/images/düsünceli_bay.png',
-                ),
-              ),
-            ],
-          ),
-          TargetFocus(
-            identify: "profil-actions",
-            keyTarget: _actionButtonsKey,
-            alignSkip: Alignment.topRight,
-            shape: ShapeLightFocus.RRect,
-            radius: 12,
-            contents: [
-              TargetContent(
-                align: ContentAlign.top,
-                builder: (context, controller) => MaskotHelper.buildTutorialContent(
-                  context,
-                  title: _isOwnProfile ? 'Profili Düzenle' : 'İletişime Geç',
-                  description: _isOwnProfile 
-                      ? 'Profil bilgilerini ve ayarlarını buradan güncelleyebilirsin.' 
-                      : 'Bu kullanıcıyı takip edebilir veya mesaj atabilirsin.',
-                  mascotAssetPath: 'assets/images/dedektif_bay.png',
-                ),
-              ),
-            ],
-          ),
-        ],
+        rawTargets: targets,
+        delay: Duration(milliseconds: 500),
+        maxRetries: 3,
       );
-    });
+    } else {
+      debugPrint('⚠️ Profil detay maskotu: Geçerli hedef bulunamadı (keys null veya RenderBox bulunamadı)');
+    }
   }
 
   Future<void> _launchURL(String? url) async {

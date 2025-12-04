@@ -49,6 +49,7 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   String? _university;
   String? _department;
   String? _originalTakmaAd;
+  bool _tutorialShown = false;
   
   // Avatar Yönetimi
   String? _currentAvatarUrl;
@@ -78,34 +79,76 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   void initState() {
     super.initState();
     _loadUserData();
+  }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      MaskotHelper.checkAndShow(context,
-          featureKey: 'profil_duzenle_tutorial_gosterildi',
-          targets: [
-            TargetFocus(
-                identify: "avatar-area",
-                keyTarget: _avatarAreaKey,
-                alignSkip: Alignment.bottomCenter,
-                contents: [
-                  TargetContent(
-                    align: ContentAlign.bottom, builder: (context, controller) =>
-                      MaskotHelper.buildTutorialContent(
-                          context,
-                          title: 'Yeni Tarzın',
-                          description: 'Profil fotoğrafını buradan değiştirebilir veya hazır avatarlardan birini seçebilirsin.'),
-                  )
-                ]),
-            TargetFocus(
-                identify: "save-button",
-                keyTarget: _saveButtonKey,
-                alignSkip: Alignment.topRight,
-                contents: [TargetContent(align: ContentAlign.top, builder: (context, controller) => MaskotHelper.buildTutorialContent(
-                  context,
-                  title: 'Değişiklikleri Kaydet',
-                  description: 'Yaptığın tüm değişiklikleri profilinde göstermek için bu butona basmayı unutma.'))])
-          ]);
-    });
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Maskot tutorialını bir kez göster, ama userData yüklendikten sonra
+    if (!_tutorialShown) {
+      _tutorialShown = true;
+      Future.delayed(Duration(milliseconds: 800), () {
+        if (mounted) {
+          _initializeMaskot();
+        }
+      });
+    }
+  }
+
+  void _initializeMaskot() {
+    List<TargetFocus> targets = [];
+
+    // Avatar Area - Async image loading tamamlandıktan sonra
+    if (_avatarAreaKey.currentContext != null && _avatarAreaKey.currentContext!.findRenderObject() != null) {
+      targets.add(TargetFocus(
+        identify: "avatar-area",
+        keyTarget: _avatarAreaKey,
+        alignSkip: Alignment.bottomCenter,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (context, controller) => MaskotHelper.buildTutorialContent(
+              context,
+              title: 'Yeni Tarzın',
+              description: 'Profil fotoğrafını buradan değiştirebilir veya hazır avatarlardan birini seçebilirsin.',
+              mascotAssetPath: 'assets/images/mutlu_bay.png',
+            ),
+          )
+        ],
+      ));
+    }
+
+    // Save Button
+    if (_saveButtonKey.currentContext != null && _saveButtonKey.currentContext!.findRenderObject() != null) {
+      targets.add(TargetFocus(
+        identify: "save-button",
+        keyTarget: _saveButtonKey,
+        alignSkip: Alignment.topRight,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (context, controller) => MaskotHelper.buildTutorialContent(
+              context,
+              title: 'Değişiklikleri Kaydet',
+              description: 'Yaptığın tüm değişiklikleri profilinde göstermek için bu butona basmayı unutma.',
+              mascotAssetPath: 'assets/images/dedektif_bay.png',
+            ),
+          )
+        ],
+      ));
+    }
+
+    if (targets.isNotEmpty) {
+      MaskotHelper.checkAndShowSafe(
+        context,
+        featureKey: 'profil_duzenle_tutorial_gosterildi',
+        rawTargets: targets,
+        delay: Duration(milliseconds: 400),
+        maxRetries: 3,
+      );
+    } else {
+      debugPrint('⚠️ Profil düzenleme maskotu: Geçerli hedef bulunamadı');
+    }
   }
 
   @override

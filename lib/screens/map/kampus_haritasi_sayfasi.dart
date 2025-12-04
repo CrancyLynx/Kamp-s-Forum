@@ -876,39 +876,96 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   }
 
   void _showTutorial() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      MaskotHelper.checkAndShow(context,
-          featureKey: 'harita_tutorial_gosterildi',
-          targets: [
-            TargetFocus(
-                identify: "search-bar",
-                keyTarget: _searchBarKey,
-                alignSkip: Alignment.bottomRight,
-                contents: [
-                  TargetContent(
-                      align: ContentAlign.bottom,
-                      builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Kampüsü Keşfet!', description: 'Fakülteler, kafeler, kütüphane... Aradığın her yeri buradan arayarak kolayca bulabilirsin.', mascotAssetPath: 'assets/images/düsünceli_bay.png'))
-                ]),
-            TargetFocus(
-                identify: "filter-chips",
-                keyTarget: _filterChipKey,
-                alignSkip: Alignment.bottomRight,
-                contents: [
-                  TargetContent(
-                      align: ContentAlign.bottom,
-                      builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Kategorilere Göz At', description: 'İstersen mekanları kategorilerine göre filtreleyerek de haritada görebilirsin.', mascotAssetPath: 'assets/images/mutlu_bay.png'))
-                ]),
-            TargetFocus(
-                identify: "my-location-button",
-                keyTarget: _myLocationButtonKey,
-                alignSkip: Alignment.topLeft,
-                contents: [
-                  TargetContent(
-                      align: ContentAlign.top,
-                      builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Konumunu Bul', description: 'Haritada kaybolursan bu butona basarak anında kendi konumuna dönebilirsin.'))
-                ])
-          ]);
+    // Google Maps hazır olana kadar ekstra bekleme süresini ekle
+    Future.delayed(Duration(milliseconds: 1000), () {
+      if (!mounted) return;
+      
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _initializeTutorialTargets();
+      });
     });
+  }
+
+  void _initializeTutorialTargets() {
+    List<TargetFocus> targets = [];
+
+    // Search Bar
+    if (_searchBarKey.currentContext != null && _searchBarKey.currentContext!.findRenderObject() != null) {
+      targets.add(
+        TargetFocus(
+          identify: "search-bar",
+          keyTarget: _searchBarKey,
+          alignSkip: Alignment.bottomRight,
+          contents: [
+            TargetContent(
+              align: ContentAlign.bottom,
+              builder: (context, controller) => MaskotHelper.buildTutorialContent(
+                context,
+                title: 'Kampüsü Keşfet!',
+                description: 'Fakülteler, kafeler, kütüphane... Aradığın her yeri buradan arayarak kolayca bulabilirsin.',
+                mascotAssetPath: 'assets/images/düsünceli_bay.png',
+              ),
+            )
+          ],
+        ),
+      );
+    }
+
+    // Filter Chips
+    if (_filterChipKey.currentContext != null && _filterChipKey.currentContext!.findRenderObject() != null) {
+      targets.add(
+        TargetFocus(
+          identify: "filter-chips",
+          keyTarget: _filterChipKey,
+          alignSkip: Alignment.bottomRight,
+          contents: [
+            TargetContent(
+              align: ContentAlign.bottom,
+              builder: (context, controller) => MaskotHelper.buildTutorialContent(
+                context,
+                title: 'Kategorilere Göz At',
+                description: 'İstersen mekanları kategorilerine göre filtreleyerek de haritada görebilirsin.',
+                mascotAssetPath: 'assets/images/mutlu_bay.png',
+              ),
+            )
+          ],
+        ),
+      );
+    }
+
+    // My Location Button
+    if (_myLocationButtonKey.currentContext != null && _myLocationButtonKey.currentContext!.findRenderObject() != null) {
+      targets.add(
+        TargetFocus(
+          identify: "my-location-button",
+          keyTarget: _myLocationButtonKey,
+          alignSkip: Alignment.topLeft,
+          contents: [
+            TargetContent(
+              align: ContentAlign.top,
+              builder: (context, controller) => MaskotHelper.buildTutorialContent(
+                context,
+                title: 'Konumunu Bul',
+                description: 'Haritada kaybolursan bu butona basarak anında kendi konumuna dönebilirsin.',
+                mascotAssetPath: 'assets/images/duyuru_bay.png',
+              ),
+            )
+          ],
+        ),
+      );
+    }
+
+    if (targets.isNotEmpty) {
+      MaskotHelper.checkAndShowSafe(
+        context,
+        featureKey: 'harita_tutorial_gosterildi',
+        rawTargets: targets,
+        delay: Duration(milliseconds: 300),
+        maxRetries: 2,
+      );
+    } else {
+      debugPrint('⚠️ Harita maskotu: Geçerli hedef bulunamadı (maps henüz hazır değil)');
+    }
   }
 
   Widget _buildInfoBadge(IconData icon, String text, Color color) {

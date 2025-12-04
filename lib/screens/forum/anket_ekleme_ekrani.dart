@@ -29,6 +29,7 @@ class _AnketEklemeEkraniState extends State<AnketEklemeEkrani> {
   final GlobalKey _questionKey = GlobalKey();
   final GlobalKey _firstOptionKey = GlobalKey();
   final GlobalKey _shareButtonKey = GlobalKey();
+  bool _tutorialShown = false;
 
   final ImagePicker _picker = ImagePicker();
   bool _isLoading = false;
@@ -47,38 +48,101 @@ class _AnketEklemeEkraniState extends State<AnketEklemeEkrani> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      MaskotHelper.checkAndShow( // DÜZELTME: checkAndShow metodu çağrıldı
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_tutorialShown) {
+      _tutorialShown = true;
+      Future.delayed(Duration(milliseconds: 600), () {
+        if (mounted) {
+          _initializeMaskot();
+        }
+      });
+    }
+  }
+
+  void _initializeMaskot() {
+    List<TargetFocus> targets = [];
+
+    // Question Field
+    if (_questionKey.currentContext != null && _questionKey.currentContext!.findRenderObject() != null) {
+      targets.add(
+        TargetFocus(
+          identify: "anket-sorusu",
+          keyTarget: _questionKey,
+          alignSkip: Alignment.bottomRight,
+          contents: [
+            TargetContent(
+              align: ContentAlign.bottom,
+              builder: (context, controller) => MaskotHelper.buildTutorialContent(
+                context,
+                title: 'Ne Merak Ediyorsun?',
+                description: 'Topluluğa sormak istediğin soruyu buraya yazarak anketini başlat.',
+                mascotAssetPath: 'assets/images/düsünceli_bay.png',
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // First Option Field
+    if (_firstOptionKey.currentContext != null && _firstOptionKey.currentContext!.findRenderObject() != null) {
+      targets.add(
+        TargetFocus(
+          identify: "anket-secenekleri",
+          keyTarget: _firstOptionKey,
+          alignSkip: Alignment.bottomRight,
+          contents: [
+            TargetContent(
+              align: ContentAlign.bottom,
+              builder: (context, controller) => MaskotHelper.buildTutorialContent(
+                context,
+                title: 'Seçenekleri Belirle',
+                description: 'Anketine en az iki seçenek eklemelisin. İstersen yandaki ikona tıklayarak seçeneklere resim de ekleyebilirsin!',
+                mascotAssetPath: 'assets/images/mutlu_bay.png',
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Share Button
+    if (_shareButtonKey.currentContext != null && _shareButtonKey.currentContext!.findRenderObject() != null) {
+      targets.add(
+        TargetFocus(
+          identify: "anket-paylas",
+          keyTarget: _shareButtonKey,
+          alignSkip: Alignment.bottomLeft,
+          contents: [
+            TargetContent(
+              align: ContentAlign.bottom,
+              builder: (context, controller) => MaskotHelper.buildTutorialContent(
+                context,
+                title: 'Fikirleri Topla!',
+                description: 'Hazır olduğunda anketini buradan paylaşarak topluluğun fikrini alabilirsin.',
+                mascotAssetPath: 'assets/images/duyuru_bay.png',
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (targets.isNotEmpty) {
+      MaskotHelper.checkAndShowSafe(
         context,
         featureKey: 'anket_ekleme_tutorial_gosterildi',
-        targets: [
-          TargetFocus(
-            identify: "anket-sorusu",
-            keyTarget: _questionKey,
-            alignSkip: Alignment.bottomRight,
-            contents: [
-              TargetContent( // DÜZELTME: buildTutorialContent metodu kullanıldı
-                  align: ContentAlign.bottom,
-                  builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Ne Merak Ediyorsun?', description: 'Topluluğa sormak istediğin soruyu buraya yazarak anketini başlat.', mascotAssetPath: 'assets/images/düsünceli_bay.png')),
-            ],
-          ),
-          TargetFocus(
-            identify: "anket-secenekleri",
-            keyTarget: _firstOptionKey,
-            alignSkip: Alignment.bottomRight,
-            contents: [ // DÜZELTME: buildTutorialContent metodu kullanıldı
-              TargetContent(align: ContentAlign.bottom, builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Seçenekleri Belirle', description: 'Anketine en az iki seçenek eklemelisin. İstersen yandaki ikona tıklayarak seçeneklere resim de ekleyebilirsin!', mascotAssetPath: 'assets/images/mutlu_bay.png'))
-            ],
-          ),
-          TargetFocus(
-            identify: "anket-paylas",
-            keyTarget: _shareButtonKey,
-            alignSkip: Alignment.bottomLeft,
-            contents: [TargetContent(align: ContentAlign.bottom, builder: (context, controller) => MaskotHelper.buildTutorialContent(context, title: 'Fikirleri Topla!', description: 'Hazır olduğunda anketini buradan paylaşarak topluluğun fikrini alabilirsin.', mascotAssetPath: 'assets/images/duyuru_bay.png'))], // DÜZELTME: buildTutorialContent metodu kullanıldı
-          ),
-        ],
+        rawTargets: targets,
+        delay: Duration(milliseconds: 400),
+        maxRetries: 2,
       );
-    });
+    } else {
+      debugPrint('⚠️ Anket ekleme maskotu: Geçerli hedef bulunamadı');
+    }
   }
 
   void _removeOption(int index) {

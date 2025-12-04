@@ -35,7 +35,73 @@ class MaskotHelper {
     }
   }
 
+  /// ✅ YENİ: Safe async initialize with retry logic ve validation
+  static Future<void> checkAndShowSafe(
+    BuildContext context, {
+    required String featureKey,
+    required List<TargetFocus> rawTargets,
+    Duration delay = const Duration(milliseconds: 500),
+    int maxRetries = 3,
+    String skipText = "ATLA",
+    String finishText = "ANLADIM",
+  }) async {
+    // Retry logic ile key validation
+    for (int attempt = 0; attempt < maxRetries; attempt++) {
+      // Geçerli targets'ları filter et
+      final validTargets = <TargetFocus>[];
+      
+      for (final target in rawTargets) {
+        try {
+          final renderBox = target.keyTarget?.currentContext
+              ?.findRenderObject() as RenderBox?;
+          
+          if (renderBox != null) {
+            validTargets.add(target);
+          }
+        } catch (e) {
+          debugPrint('❌ Target validation failed: ${target.identify} - ${e.toString()}');
+        }
+      }
+      
+      // Eğer yeterli target varsa göster
+      if (validTargets.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        final isShown = prefs.getBool(featureKey) ?? false;
+        
+        if (!isShown && context.mounted) {
+          _showTutorial(
+            context,
+            targets: validTargets,
+            onFinish: () {
+              prefs.setBool(featureKey, true);
+              return true;
+            },
+            onSkip: () {
+              prefs.setBool(featureKey, true);
+              return true;
+            },
+            skipText: skipText,
+            finishText: finishText,
+          );
+          return; // Success, exit retry loop
+        }
+      }
+      
+      // Retry'dan önce ekstra delay (log message de ekleyebiliriz)
+      if (attempt < maxRetries - 1) {
+        debugPrint('🔄 Maskot retry attempt ${attempt + 1}/$maxRetries for $featureKey');
+        await Future.delayed(delay);
+      }
+    }
+    
+    // Tüm retries başarısız
+    if (rawTargets.isNotEmpty) {
+      debugPrint('⚠️ Maskot tutorial başarısız oldu: $featureKey - Tüm targets geçersiz');
+    }
+  }
+
   /// `TutorialCoachMark`'ı oluşturan ve gösteren özel fonksiyon.
+  /// ✅ GELIŞTIRILMIŞ: Smart positioning + bounds checking
   static void _showTutorial(
     BuildContext context, {
     required List<TargetFocus> targets,
@@ -52,6 +118,7 @@ class MaskotHelper {
       try {
         renderBox = target.keyTarget?.currentContext?.findRenderObject() as RenderBox?;
       } catch (e) {
+        debugPrint('❌ RenderBox fetch error for ${target.identify}: $e');
         // Context/RenderObject anlık olarak mevcut olmayabilir, bu durumda null kalır ve orijinal hizalama kullanılır.
       }
 
@@ -60,17 +127,33 @@ class MaskotHelper {
       if (renderBox != null && target.contents != null) {
         final targetPosition = renderBox.localToGlobal(Offset.zero);
         final targetHeight = renderBox.size.height;
+        final targetWidth = renderBox.size.width;
 
         updatedContents = target.contents!.map((content) {
           var newAlign = content.align;
+          
+          // ✅ GELIŞTIRILMIŞ: Daha akıllı bounds checking
+          final topThreshold = screenSize.height * 0.35;
+          final bottomThreshold = screenSize.height * 0.65;
 
-          // Eğer içerik YUKARIDA gösterilecekse ama hedef ekranın üst %40'ındaysa, AŞAĞIYA al.
-          if (content.align == ContentAlign.top && targetPosition.dy < screenSize.height * 0.4) {
+          // Eğer içerik YUKARIDA gösterilecekse ama hedef ekranın üst %35'inde ise, AŞAĞIYA al
+          if (content.align == ContentAlign.top && targetPosition.dy < topThreshold) {
             newAlign = ContentAlign.bottom;
+            debugPrint('✅ ${target.identify}: Top → Bottom (target too high)');
           }
-          // Eğer içerik AŞAĞIDA gösterilecekse ama hedef ekranın alt %40'ındaysa, YUKARIYA al.
-          else if (content.align == ContentAlign.bottom && (targetPosition.dy + targetHeight) > screenSize.height * 0.6) {
+          // Eğer içerik AŞAĞIDA gösterilecekse ama hedef ekranın alt %35'inde ise, YUKARIYA al
+          else if (content.align == ContentAlign.bottom && (targetPosition.dy + targetHeight) > bottomThreshold) {
             newAlign = ContentAlign.top;
+            debugPrint('✅ ${target.identify}: Bottom → Top (target too low)');
+          }
+          // ✅ YENİ: Horizontal bounds check
+          else if (content.align == ContentAlign.right && targetPosition.dx + targetWidth > screenSize.width * 0.8) {
+            newAlign = ContentAlign.left;
+            debugPrint('✅ ${target.identify}: Right → Left (target too right)');
+          }
+          else if (content.align == ContentAlign.left && targetPosition.dx < screenSize.width * 0.2) {
+            newAlign = ContentAlign.right;
+            debugPrint('✅ ${target.identify}: Left → Right (target too left)');
           }
 
           // Sadece hizalama değiştiyse yeni bir TargetContent oluştur, aksi halde orijinali kullan.
@@ -115,6 +198,7 @@ class MaskotHelper {
       onSkip: onSkip,
       onClickTarget: (target) {
         // İsteğe bağlı tıklama işlemi
+        debugPrint('📍 Maskot target clicked: ${target.identify}');
       },
     ).show(context: context);
   }
@@ -135,17 +219,42 @@ class MaskotHelper {
           BoxShadow(color: Colors.black.withAlpha(128), blurRadius: 15, spreadRadius: 5),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Image.asset(mascotAssetPath, height: 120),
-          const SizedBox(height: 16),
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 20)),
-          const SizedBox(height: 10),
-          Text(description, style: const TextStyle(color: Colors.white70, fontSize: 16, height: 1.4)),
-        ],
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            // ✅ YENİ: Asset validation with fallback
+            _buildMascotImage(mascotAssetPath),
+            const SizedBox(height: 16),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
+            const SizedBox(height: 10),
+            Text(description, style: const TextStyle(color: Colors.white70, fontSize: 15, height: 1.4)),
+          ],
+        ),
       ),
+    );
+  }
+
+  /// ✅ YENİ: Mascot image builder with fallback
+  static Widget _buildMascotImage(String assetPath) {
+    return Image.asset(
+      assetPath,
+      height: 120,
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) {
+        debugPrint('❌ Maskot asset yükleme hatası: $assetPath - $error');
+        // Fallback: placeholder icon
+        return Container(
+          height: 120,
+          width: 120,
+          decoration: BoxDecoration(
+            color: Colors.grey[700],
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(Icons.image_not_supported, color: Colors.white, size: 50),
+        );
+      },
     );
   }
 }

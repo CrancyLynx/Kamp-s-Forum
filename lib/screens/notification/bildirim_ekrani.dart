@@ -28,52 +28,91 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
   void initState() {
     super.initState();
     _cleanupOldNotifications();
-    
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _initializeMaskot();
+  }
+
+  void _initializeMaskot() {
     FirebaseFirestore.instance
         .collection('bildirimler')
         .where('userId', isEqualTo: _currentUserId)
         .limit(1)
         .get()
         .then((snapshot) {
-      if (mounted) {
+      if (!mounted) return;
+      
+      // Firestore sorgusu tamamlandıktan sonra widget ağacının render edilmesini bekle
+      Future.delayed(Duration(milliseconds: 500), () {
+        if (!mounted) return;
+        
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          List<TargetFocus> targets = [];
-          targets.add(TargetFocus(
-              identify: "mark-all-read",
-              keyTarget: _markAllReadButtonKey,
-              alignSkip: Alignment.bottomRight,
-              contents: [
-                TargetContent(
-                  align: ContentAlign.top,
-                  builder: (context, controller) =>
-                      MaskotHelper.buildTutorialContent(context,
-                          title: 'Bildirimlerini Yönet',
-                          description:
-                              'Bu butonla tüm bildirimlerini tek seferde okundu olarak işaretleyebilirsin.',
-                          mascotAssetPath: 'assets/images/duyuru_bay.png'),
-                )
-              ]));
-
-          bool hasNotifications = snapshot.docs.isNotEmpty;
-          targets.add(TargetFocus(
-              identify: hasNotifications ? "first-notification" : "empty-state",
-              keyTarget: hasNotifications ? _firstNotificationKey : _emptyStateKey,
-              contents: [
-                TargetContent(
-                  align: ContentAlign.top,
-                  builder: (context, controller) =>
-                      MaskotHelper.buildTutorialContent(context,
-                          title: 'Gözün Burada Olsun',
-                          description:
-                              'Biri gönderini beğendiğinde, yorum yaptığında veya takip ettiğinde buradan haberin olacak.',
-                          mascotAssetPath: 'assets/images/duyuru_bay.png'),
-                )
-              ]));
-
-          MaskotHelper.checkAndShow(context, featureKey: 'bildirim_tutorial_gosterildi', targets: targets);
+          _showMaskotTutorial(snapshot);
         });
-      }
+      });
+    }).catchError((e) {
+      debugPrint('🔴 Bildirim maskotu hata: $e');
     });
+  }
+
+  void _showMaskotTutorial(QuerySnapshot snapshot) {
+    List<TargetFocus> targets = [];
+
+    // 1. Mark All Read Button - Her zaman göster (güvenli)
+    if (_markAllReadButtonKey.currentContext != null) {
+      targets.add(TargetFocus(
+          identify: "mark-all-read",
+          keyTarget: _markAllReadButtonKey,
+          alignSkip: Alignment.bottomRight,
+          contents: [
+            TargetContent(
+              align: ContentAlign.top,
+              builder: (context, controller) =>
+                  MaskotHelper.buildTutorialContent(context,
+                      title: 'Bildirimlerini Yönet',
+                      description:
+                          'Bu butonla tüm bildirimlerini tek seferde okundu olarak işaretleyebilirsin.',
+                      mascotAssetPath: 'assets/images/duyuru_bay.png'),
+            )
+          ]));
+    }
+
+    // 2. Conditional target - Notifications varsa göster, yoksa empty state göster
+    bool hasNotifications = snapshot.docs.isNotEmpty;
+    GlobalKey? targetKey = hasNotifications ? _firstNotificationKey : _emptyStateKey;
+    
+    if (targetKey.currentContext != null) {
+      targets.add(TargetFocus(
+          identify: hasNotifications ? "first-notification" : "empty-state",
+          keyTarget: targetKey,
+          contents: [
+            TargetContent(
+              align: ContentAlign.top,
+              builder: (context, controller) =>
+                  MaskotHelper.buildTutorialContent(context,
+                      title: 'Gözün Burada Olsun',
+                      description:
+                          'Biri gönderini beğendiğinde, yorum yaptığında veya takip ettiğinde buradan haberin olacak.',
+                      mascotAssetPath: 'assets/images/duyuru_bay.png'),
+            )
+          ]));
+    }
+
+    // Hedef varsa göster, yoksa debug log
+    if (targets.isNotEmpty) {
+      MaskotHelper.checkAndShowSafe(
+        context,
+        featureKey: 'bildirim_tutorial_gosterildi',
+        rawTargets: targets,
+        delay: Duration(milliseconds: 300),
+        maxRetries: 2,
+      );
+    } else {
+      debugPrint('⚠️ Bildirim maskotu: Geçerli hedef bulunamadı (keys null)');
+    }
   }
 
   // DÜZELTME: Batch Limit Kontrolü Eklendi
