@@ -397,4 +397,181 @@ class RingService {
             .map((doc) => Ring.fromFirestore(doc))
             .toList());
   }
+
+  // Rating & Review Operations
+
+  /// Sefer için rating ve yorum ekle
+  static Future<bool> ratSefer({
+    required String seferId,
+    required String driverId,
+    required String driverName,
+    required String raterUserId,
+    required double rating,
+    required String comment,
+    required Map<String, double> categoryRatings,
+  }) async {
+    try {
+      final ratingRef = _firestore
+          .collection('ringlar')
+          .doc('')
+          .collection('sefer_ratings')
+          .doc();
+
+      await ratingRef.set({
+        'seferId': seferId,
+        'driverId': driverId,
+        'driverName': driverName,
+        'raterUserId': raterUserId,
+        'rating': rating,
+        'comment': comment,
+        'categoryRatings': categoryRatings,
+        'createdAt': Timestamp.now(),
+      });
+
+      // Sürücünün ortalama rating'ini güncelle
+      await _updateDriverStats(driverId, rating, categoryRatings);
+
+      debugPrint('[RING] Sefer rating eklendi: ${ratingRef.id}');
+      return true;
+    } catch (e) {
+      debugPrint('[RING] Rating ekleme hatası: $e');
+      return false;
+    }
+  }
+
+  /// Sürücü istatistiklerini güncelle
+  static Future<void> _updateDriverStats(
+      String driverId, double newRating, Map<String, double> categories) async {
+    try {
+      final statsRef = _firestore.collection('driver_stats').doc(driverId);
+      final statsDoc = await statsRef.get();
+
+      if (statsDoc.exists) {
+        final currentData = statsDoc.data()!;
+        final totalRatings = (currentData['totalRatings'] ?? 0).toInt();
+        final currentAvg = (currentData['averageRating'] ?? 0.0).toDouble();
+
+        final newTotal = totalRatings + 1;
+        final newAvg = ((currentAvg * totalRatings) + newRating) / newTotal;
+
+        await statsRef.update({
+          'averageRating': newAvg,
+          'totalRatings': newTotal,
+          'lastRatedAt': Timestamp.now(),
+        });
+      } else {
+        await statsRef.set({
+          'driverId': driverId,
+          'averageRating': newRating,
+          'totalRatings': 1,
+          'totalCompletedSefers': 1,
+          'memberSince': Timestamp.now(),
+        });
+      }
+    } catch (e) {
+      debugPrint('[RING] Driver stats update hatası: $e');
+    }
+  }
+
+  /// Sürücü istatistiklerini getir
+  static Future<Map<String, dynamic>?> getDriverStats(String driverId) async {
+    try {
+      final doc = await _firestore.collection('driver_stats').doc(driverId).get();
+      if (doc.exists) {
+        return doc.data();
+      }
+      return null;
+    } catch (e) {
+      debugPrint('[RING] Driver stats getirme hatası: $e');
+      return null;
+    }
+  }
+
+  /// Sürücüyü şikayet et
+  static Future<String?> fileComplaint({
+    required String seferId,
+    required String complainantId,
+    required String complainantName,
+    required String defendantId,
+    required String defendantName,
+    required String complaintType,
+    required String description,
+  }) async {
+    try {
+      final complaintRef = _firestore.collection('sefer_complaints').doc();
+
+      await complaintRef.set({
+        'seferId': seferId,
+        'complainantId': complainantId,
+        'complainantName': complainantName,
+        'defendantId': defendantId,
+        'defendantName': defendantName,
+        'complaintType': complaintType,
+        'description': description,
+        'createdAt': Timestamp.now(),
+        'status': 'open',
+        'resolution': null,
+      });
+
+      debugPrint('[RING] Şikayet açıldı: ${complaintRef.id}');
+      return complaintRef.id;
+    } catch (e) {
+      debugPrint('[RING] Şikayet ekleme hatası: $e');
+      return null;
+    }
+  }
+
+  /// Sefer rating'lerini getir
+  static Stream<List<Map<String, dynamic>>> getSeferRatings(String seferId) {
+    return _firestore
+        .collection('sefer_ratings')
+        .where('seferId', isEqualTo: seferId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
+  }
+
+  /// Sürücünün rating'lerini getir
+  static Stream<List<Map<String, dynamic>>> getDriverRatings(String driverId) {
+    return _firestore
+        .collection('sefer_ratings')
+        .where('driverId', isEqualTo: driverId)
+        .orderBy('createdAt', descending: true)
+        .limit(50)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
+  }
+
+  /// Şikayetleri getir (Moderator)
+  static Future<List<Map<String, dynamic>>> getPendingComplaints() async {
+    try {
+      final snapshot = await _firestore
+          .collection('sefer_complaints')
+          .where('status', isEqualTo: 'open')
+          .get();
+      return snapshot.docs.map((doc) => doc.data()).toList();
+    } catch (e) {
+      debugPrint('[RING] Complaint getirme hatası: $e');
+      return [];
+    }
+  }
+
+  /// Şikayet çöz
+  static Future<bool> resolveComplaint({
+    required String complaintId,
+    required String resolution,
+    required String status,
+  }) async {
+    try {
+      await _firestore.collection('sefer_complaints').doc(complaintId).update({
+        'status': status,
+        'resolution': resolution,
+        'resolvedAt': Timestamp.now(),
+      });
+      return true;
+    } catch (e) {
+      debugPrint('[RING] Complaint çözme hatası: $e');
+      return false;
+    }
+  }
 }

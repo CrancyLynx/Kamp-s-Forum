@@ -368,4 +368,280 @@ class ChatRoomService {
       return false;
     }
   }
+
+  // Typing Indicator Operations
+
+  /// Kullanıcının yazma durumunu güncelle
+  static Future<bool> setUserTypingStatus({
+    required String roomId,
+    required String userId,
+    required String userName,
+    required bool isTyping,
+  }) async {
+    try {
+      await _firestore
+          .collection('chat_rooms')
+          .doc(roomId)
+          .collection('typing_indicators')
+          .doc(userId)
+          .set({
+        'userId': userId,
+        'userName': userName,
+        'typingStartedAt': Timestamp.now(),
+        'isTyping': isTyping,
+      });
+      return true;
+    } catch (e) {
+      debugPrint('[CHATROOM] Typing status hatasi: $e');
+      return false;
+    }
+  }
+
+  /// Yazma durumunu temizle
+  static Future<bool> clearUserTypingStatus(String roomId, String userId) async {
+    try {
+      await _firestore
+          .collection('chat_rooms')
+          .doc(roomId)
+          .collection('typing_indicators')
+          .doc(userId)
+          .delete();
+      return true;
+    } catch (e) {
+      debugPrint('[CHATROOM] Typing status silme hatasi: $e');
+      return false;
+    }
+  }
+
+  /// Yazma durumlarını stream olarak getir
+  static Stream<List<Map<String, dynamic>>> getTypingIndicators(String roomId) {
+    return _firestore
+        .collection('chat_rooms')
+        .doc(roomId)
+        .collection('typing_indicators')
+        .where('isTyping', isEqualTo: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => doc.data() as Map<String, dynamic>)
+          .where((data) {
+        final typingStartedAt = data['typingStartedAt'] as Timestamp?;
+        if (typingStartedAt == null) return false;
+        // 30 saniye timeout
+        return DateTime.now().difference(typingStartedAt.toDate()).inSeconds <= 30;
+      }).toList();
+    });
+  }
+
+  // User Presence Operations
+
+  /// Kullanıcının çevrimiçi durumunu güncelle
+  static Future<bool> updateUserPresence({
+    required String userId,
+    required String userName,
+    required String userProfilePhotoUrl,
+    required bool isOnline,
+    required String? currentRoomId,
+    required String deviceType,
+  }) async {
+    try {
+      await _firestore
+          .collection('user_presence')
+          .doc(userId)
+          .set({
+        'userName': userName,
+        'userProfilePhotoUrl': userProfilePhotoUrl,
+        'isOnline': isOnline,
+        'lastSeenAt': Timestamp.now(),
+        'currentRoomId': currentRoomId,
+        'deviceType': deviceType,
+      });
+      return true;
+    } catch (e) {
+      debugPrint('[CHATROOM] Presence update hatasi: $e');
+      return false;
+    }
+  }
+
+  /// Kullanıcının çevrimiçi durumunu getir
+  static Future<Map<String, dynamic>?> getUserPresence(String userId) async {
+    try {
+      final doc =
+          await _firestore.collection('user_presence').doc(userId).get();
+      if (doc.exists) {
+        return doc.data() as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('[CHATROOM] Presence getirme hatasi: $e');
+      return null;
+    }
+  }
+
+  /// Belirtilen odadaki aktif kullanıcıları getir
+  static Stream<List<Map<String, dynamic>>> getActiveUsersInRoom(
+      String roomId) {
+    return _firestore
+        .collection('user_presence')
+        .where('currentRoomId', isEqualTo: roomId)
+        .where('isOnline', isEqualTo: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => {
+                'userId': doc.id,
+                ...doc.data() as Map<String, dynamic>,
+              })
+          .toList();
+    });
+  }
+
+  /// Odadan çık (presence güncelle)
+  static Future<bool> leaveRoom(String userId) async {
+    try {
+      await _firestore.collection('user_presence').doc(userId).update({
+        'currentRoomId': null,
+        'lastSeenAt': Timestamp.now(),
+      });
+      return true;
+    } catch (e) {
+      debugPrint('[CHATROOM] Oda çıkış hatasi: $e');
+      return false;
+    }
+  }
+
+  // Message Reaction Operations
+
+  /// Mesaja reaksiyon ekle
+  static Future<bool> addMessageReaction({
+    required String roomId,
+    required String messageId,
+    required String userId,
+    required String emoji,
+  }) async {
+    try {
+      final reactionsRef = _firestore
+          .collection('chat_rooms')
+          .doc(roomId)
+          .collection('mesajlar')
+          .doc(messageId)
+          .collection('reactions')
+          .doc(emoji);
+
+      final existingReaction = await reactionsRef.get();
+
+      if (existingReaction.exists) {
+        // Emoji zaten varsa, user ekle
+        final userIds = List<String>.from(
+            existingReaction.data()?['userIds'] ?? []);
+        if (!userIds.contains(userId)) {
+          userIds.add(userId);
+          await reactionsRef.update({
+            'userIds': userIds,
+            'count': userIds.length,
+          });
+        }
+      } else {
+        // Yeni emoji reaction
+        await reactionsRef.set({
+          'emoji': emoji,
+          'userIds': [userId],
+          'count': 1,
+          'createdAt': Timestamp.now(),
+        });
+      }
+
+      debugPrint('[CHATROOM] Reaksiyon eklendi: $emoji');
+      return true;
+    } catch (e) {
+      debugPrint('[CHATROOM] Reaksiyon ekleme hatasi: $e');
+      return false;
+    }
+  }
+
+  /// Mesajdan reaksiyon kaldır
+  static Future<bool> removeMessageReaction({
+    required String roomId,
+    required String messageId,
+    required String userId,
+    required String emoji,
+  }) async {
+    try {
+      final reactionsRef = _firestore
+          .collection('chat_rooms')
+          .doc(roomId)
+          .collection('mesajlar')
+          .doc(messageId)
+          .collection('reactions')
+          .doc(emoji);
+
+      final reaction = await reactionsRef.get();
+
+      if (reaction.exists) {
+        List<String> userIds =
+            List<String>.from(reaction.data()?['userIds'] ?? []);
+        userIds.remove(userId);
+
+        if (userIds.isEmpty) {
+          // Son reaction silinirse, emoji'yi sil
+          await reactionsRef.delete();
+        } else {
+          await reactionsRef.update({
+            'userIds': userIds,
+            'count': userIds.length,
+          });
+        }
+      }
+
+      debugPrint('[CHATROOM] Reaksiyon kaldirıldı: $emoji');
+      return true;
+    } catch (e) {
+      debugPrint('[CHATROOM] Reaksiyon kaldırma hatasi: $e');
+      return false;
+    }
+  }
+
+  /// Mesajın reaksiyonlarını getir
+  static Stream<List<Map<String, dynamic>>> getMessageReactions(
+      String roomId, String messageId) {
+    return _firestore
+        .collection('chat_rooms')
+        .doc(roomId)
+        .collection('mesajlar')
+        .doc(messageId)
+        .collection('reactions')
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => {
+                'emoji': doc.id,
+                ...doc.data() as Map<String, dynamic>,
+              })
+          .toList();
+    });
+  }
+
+  /// Reaction sayılarını getir (sadece count)
+  static Future<Map<String, int>> getReactionCounts(
+      String roomId, String messageId) async {
+    try {
+      final reactions = await _firestore
+          .collection('chat_rooms')
+          .doc(roomId)
+          .collection('mesajlar')
+          .doc(messageId)
+          .collection('reactions')
+          .get();
+
+      final counts = <String, int>{};
+      for (var doc in reactions.docs) {
+        counts[doc.id] = (doc.data()['count'] ?? 0).toInt();
+      }
+
+      return counts;
+    } catch (e) {
+      debugPrint('[CHATROOM] Reaction count hatasi: $e');
+      return {};
+    }
+  }
 }
