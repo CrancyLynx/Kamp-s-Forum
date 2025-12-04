@@ -8,6 +8,7 @@ import '../../models/gamification_model.dart';
 import '../../providers/gamification_provider.dart';
 import '../../utils/app_colors.dart';
 import '../../widgets/app_header.dart';
+import '../../widgets/level_up_animation.dart';
 
 class RozetlerSayfasi extends StatefulWidget {
   final Map<String, dynamic> userData; // İstatistikler için gerekli (yorum sayısı vb.)
@@ -28,11 +29,65 @@ class RozetlerSayfasi extends StatefulWidget {
 class _RozetlerSayfasiState extends State<RozetlerSayfasi> with SingleTickerProviderStateMixin {
   String _selectedCategory = 'Tümü';
   final List<String> _categories = ['Tümü', 'Sosyal', 'İçerik', 'Topluluk', 'Özel'];
+  int? _lastShownLevel;
 
   @override
   void initState() {
     super.initState();
-    // Sayfa açıldığında verileri tazeleyelim (opsiyonel, provider zaten dinliyor)
+    // Başlangıçta mevcut seviyeyi kaydet
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = Provider.of<GamificationProvider>(context, listen: false);
+      _lastShownLevel = provider.status?.currentLevel;
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    
+    // Provider'ı al ve seviye değişikliğini kontrol et
+    final provider = Provider.of<GamificationProvider>(context, listen: true);
+    
+    // Seviye atlama kontrol
+    _checkLevelUp(provider);
+  }
+
+  /// ✅ YENİ: Seviye atlama kontrolü ve animasyon göster
+  void _checkLevelUp(GamificationProvider provider) {
+    final currentLevel = provider.status?.currentLevel;
+    
+    if (currentLevel != null && _lastShownLevel != null) {
+      // Eğer yeni seviye daha yüksekse -> atlama tespit edildi
+      if (currentLevel > _lastShownLevel!) {
+        final oldLevel = _lastShownLevel!;
+        _lastShownLevel = currentLevel;
+        
+        // Animasyon göster
+        _showLevelUpAnimation(oldLevel, currentLevel);
+      }
+    }
+  }
+
+  /// ✅ YENİ: Seviye atlama animasyonunu göster
+  void _showLevelUpAnimation(int oldLevel, int newLevel) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => LevelUpAnimation(
+        oldLevel: oldLevel,
+        newLevel: newLevel,
+        onComplete: () {
+          // Animasyon tamamlandı
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Seviye $newLevel hedefine ulaştın! Tebrikler! 🎉'),
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -407,18 +462,30 @@ class _RozetlerSayfasiState extends State<RozetlerSayfasi> with SingleTickerProv
 
   // --- YARDIMCI FONKSİYONLAR ---
 
-  // Rozetleri kategorize etmek için basit bir eşleştirme (Badge modeline 'category' eklenene kadar)
   String _getBadgeCategory(String badgeId) {
     switch (badgeId) {
       case 'pioneer':
       case 'veteran':
+      case 'early_bird':
+      case 'night_owl':
+      case 'question_master':
+      case 'perfectionist':
         return 'İçerik';
       case 'commentator_rookie':
       case 'commentator_pro':
+      case 'helper':
+      case 'problem_solver':
+      case 'curious':
+      case 'social_butterfly':
         return 'Sosyal';
       case 'popular_author':
       case 'campus_phenomenon':
+      case 'trending_topic':
+      case 'influencer':
         return 'Topluluk';
+      case 'loyal_member':
+      case 'friendly':
+        return 'Bağlılık';
       case 'admin':
         return 'Özel';
       default:
@@ -451,6 +518,14 @@ class _RozetlerSayfasiState extends State<RozetlerSayfasi> with SingleTickerProv
       case 'problem_solver': target = 50; current = commentCount; break;
       case 'trending_topic': target = 100; current = likeCount; break;
       
+      // ✅ AKTIF: İnaktif Rozetler
+      case 'social_butterfly': target = 50; current = commentCount; break;
+      case 'curious': target = 100; current = commentCount; break;
+      case 'loyal_member': target = 75; current = commentCount; break;
+      case 'friendly': target = 60; current = likeCount; break;
+      case 'influencer': target = 150; current = likeCount; break;
+      case 'perfectionist': target = 30; current = postCount; break;
+      
       case 'admin': return 0.0; // Admin manueldir
       default: return 0.0;
     }
@@ -480,13 +555,13 @@ class _RozetlerSayfasiState extends State<RozetlerSayfasi> with SingleTickerProv
       case 'problem_solver': return '${50 - commentCount} cevap daha vermelisin.';
       case 'trending_topic': return '${100 - likeCount} beğeni daha kazanmalısın.';
       
-      // Diğerleri (henüz aktif değil)
-      case 'social_butterfly': return 'Bu özellik yakında aktif olacak!';
-      case 'curious': return 'Bu özellik yakında aktif olacak!';
-      case 'loyal_member': return 'Bu özellik yakında aktif olacak!';
-      case 'friendly': return 'Bu özellik yakında aktif olacak!';
-      case 'influencer': return 'Bu özellik yakında aktif olacak!';
-      case 'perfectionist': return 'Bu özellik yakında aktif olacak!';
+      // ✅ AKTIF: İnaktif Rozetler
+      case 'social_butterfly': return '${50 - commentCount} yorum daha yapmalısın.';
+      case 'curious': return '${100 - commentCount} yorum daha yapmalısın.';
+      case 'loyal_member': return '${75 - commentCount} yorum daha yapmalısın.';
+      case 'friendly': return '${60 - likeCount} beğeni daha kazanmalısın.';
+      case 'influencer': return '${150 - likeCount} beğeni daha kazanmalısın.';
+      case 'perfectionist': return '${30 - postCount} gönderi daha paylaşmalısın.';
       
       default: return 'Bu rozeti kazanmak için aktif olmaya devam et!';
     }

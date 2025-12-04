@@ -2,6 +2,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/gamification_model.dart';
 
+// ✅ YENİ: XP DAĞILIMI SABİTLERİ (Fair XP Sistemi)
+const Map<String, int> XP_DISTRIBUTION = {
+  'post_created': 10,       // Gönderi paylaşma
+  'comment_created': 5,     // Yorum yapma
+  'comment_like': 1,        // Yorum beğenilmesi
+  'post_like': 0,           // Gönderi beğenilmesi (spam önlemek)
+  'badge_unlock': 50,       // Rozet kazanma
+};
+
+// ✅ YENİ: SPAM KORUMA SABİTLERİ
+const Duration SPAM_TIME_WINDOW = Duration(minutes: 5);
+const int SPAM_ACTION_LIMIT = 10;
 
 class GamificationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -11,10 +23,107 @@ class GamificationService {
   factory GamificationService() => _instance;
   GamificationService._internal();
 
-  /// XP Ekleme İşlemi (Tüm gamifikasyonun kalbi)
+  /// ✅ YENİ: Rate limiting kontrolü (Spam koruması)
+  Future<bool> _checkRateLimit(String userId, String operationType) async {
+    try {
+      final now = DateTime.now();
+      final timeWindowStart = now.subtract(SPAM_TIME_WINDOW);
+
+      final recentLogs = await _firestore
+          .collection('xp_logs')
+          .where('userId', isEqualTo: userId)
+          .where('operationType', isEqualTo: operationType)
+          .where('timestamp', isGreaterThan: Timestamp.fromDate(timeWindowStart))
+          .count()
+          .get();
+
+      final actionCount = recentLogs.count ?? 0;
+      if (actionCount >= SPAM_ACTION_LIMIT) {
+        print('⚠️ SPAM KORUMASI: $userId - $operationType (${actionCount + 1} işlem)');
+        await _firestore.collection('kullanicilar').doc(userId).update({
+          'lastSpamFlag': FieldValue.serverTimestamp(),
+          'spamWarnings': FieldValue.increment(1),
+        }).catchError((_) {});
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Rate limit kontrolü hatası: $e');
+      return false;
+    }
+  }
+
+  /// ✅ YENİ: Fair XP multiplier'ı hesapla
+  Future<double> _calculateMultiplier(String userId, String operationType) async {
+    try {
+      if (operationType != 'comment_created' && operationType != 'post_created') {
+        return 1.0;
+      }
+
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+
+      final todayCount = await _firestore
+          .collection('xp_logs')
+          .where('userId', isEqualTo: userId)
+          .where('operationType', isEqualTo: operationType)
+          .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart))
+          .count()
+          .get();
+
+      final count = todayCount.count ?? 0;
+      if (count < 5) return 1.0;
+      if (count < 10) return 0.8;
+      return 0.5;
+    } catch (e) {
+      print('Multiplier hesaplama hatası: $e');
+      return 1.0;
+    }
+  }
+
+  /// ✅ YENİ: Seviye atlama event'i
+  Future<void> _onLevelUp(String userId, int oldLevel, int newLevel) async {
+    try {
+      await _firestore.collection('bildirimler').add({
+        'userId': userId,
+        'senderName': 'Sistem',
+        'type': 'level_up',
+        'oldLevel': oldLevel,
+        'newLevel': newLevel,
+        'message': 'Tebrikler! Seviye $newLevel\'e ulaştın!',
+        'isRead': false,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+
+      if (newLevel % 5 == 0) {
+        final bonusXP = 25;
+        print('🎁 MİLESTONE BONUS: $userId Seviye $newLevel → +$bonusXP XP');
+        await _firestore.collection('kullanicilar').doc(userId).update({
+          'xp': FieldValue.increment(bonusXP),
+        });
+      }
+    } catch (e) {
+      print('Seviye atlama event hatası: $e');
+    }
+  }
+
+  /// XP Ekleme İşlemi (Tüm gamifikasyonun kalbi) - GÜNCELLENMİŞ
   Future<void> addXP(String userId, String operationType, int xpAmount, String relatedId) async {
     try {
+      // ✅ YENİ: Spam kontrolü
+      final isSpamming = await _checkRateLimit(userId, operationType);
+      if (isSpamming) {
+        print('XP ekleme reddedildi: Spam algılandı');
+        return;
+      }
+
+      // ✅ YENİ: Fair multiplier hesapla
+      final multiplier = await _calculateMultiplier(userId, operationType);
+      final finalXP = (xpAmount * multiplier).toInt();
+      
       final userRef = _firestore.collection('kullanicilar').doc(userId);
+      int oldLevel = 0;
+      int newLevel = 0;
       
       // Transaction kullanarak güvenli güncelleme yapıyoruz
       await _firestore.runTransaction((transaction) async {
@@ -23,17 +132,16 @@ class GamificationService {
 
         final userData = userDoc.data() as Map<String, dynamic>;
         final currentXP = userData['xp'] ?? 0;
+        oldLevel = userData['seviye'] ?? 1;
 
-
-        // 1. Yeni XP'yi hesapla
-        final int newXP = currentXP + xpAmount;
+        // 1. Yeni XP'yi hesapla (Fair XP ile)
+        final int newXP = currentXP + finalXP;
 
         // 2. Seviye Kontrolü (Basit formül: Her 200 XP = 1 Seviye)
-        // İleri seviye bir formül için 'seviye_ayarlari' koleksiyonu kullanılabilir
         final int calculatedLevel = (newXP / 200).floor() + 1;
-        final int newLevel = calculatedLevel > 50 ? 50 : calculatedLevel; // Max seviye 50
+        newLevel = calculatedLevel > 50 ? 50 : calculatedLevel; // Max seviye 50
         
-        // Bu seviye için kazanılan XP (örn: 250 XP ise, seviye 2'dir ve o seviyede 50 XP kazanmıştır)
+        // Bu seviye için kazanılan XP
         final int xpInCurrentLevel = newXP % 200;
 
         // 3. Güncellemeleri hazırla
@@ -44,23 +152,30 @@ class GamificationService {
           'lastXPUpdate': FieldValue.serverTimestamp(),
         });
 
-        // 4. Log kaydı oluştur (xp_logs)
+        // 4. Log kaydı oluştur (xp_logs) - Fair XP ile
         final logRef = _firestore.collection('xp_logs').doc();
         transaction.set(logRef, {
           'userId': userId,
           'operationType': operationType,
-          'xpAmount': xpAmount,
+          'baseXPAmount': xpAmount,
+          'finalXPAmount': finalXP,
+          'multiplier': multiplier,
           'relatedId': relatedId,
           'timestamp': FieldValue.serverTimestamp(),
           'deleted': false,
         });
       });
 
-      // Transaction bittikten sonra Rozet kontrolü yap (Transaction dışında olması daha performanslı olabilir)
+      // ✅ YENİ: Seviye atlama kontrolü
+      if (newLevel > oldLevel && newLevel > 1) {
+        print('🎉 SEVIYE ATLAMA: $userId Seviye $oldLevel → $newLevel');
+        await _onLevelUp(userId, oldLevel, newLevel);
+      }
+
+      // Rozet kontrolü yap
       await _checkNewBadges(userId);
 
     } catch (e) {
-      // ✅ DÜZELTME: Hata loglama iyileştirildi
       print('XP Ekleme Hatası: $e');
       // Not: UI'da hata göstermek için bu servis bir callback veya stream kullanabilir
       // Şu an sessizce başarısız oluyor, bu gamification için kabul edilebilir
@@ -148,9 +263,37 @@ class GamificationService {
         newBadges.add('trending_topic');
       }
 
-      // Not: Diğer rozetler (social_butterfly, curious, loyal_member, friendly, influencer, perfectionist)
-      // daha karmaşık mantık gerektiriyor (takipçi sayısı, farklı kullanıcılara yorum vb.)
-      // Bu özellikler eklendiğinde burada da kontrol edilecek
+      // ✅ AKTIF: 6 İNAKTİF ROZET
+
+      // 13. Sosyal Kelebek (50+ yorum)
+      if (commentCount >= 50 && !currentBadges.contains('social_butterfly')) {
+        newBadges.add('social_butterfly');
+      }
+
+      // 14. Meraklı (100+ yorum)
+      if (commentCount >= 100 && !currentBadges.contains('curious')) {
+        newBadges.add('curious');
+      }
+
+      // 15. Sadık Üye (75+ yorum)
+      if (commentCount >= 75 && !currentBadges.contains('loyal_member')) {
+        newBadges.add('loyal_member');
+      }
+
+      // 16. Arkadaş Canlısı (60+ beğeni)
+      if (likeCount >= 60 && !currentBadges.contains('friendly')) {
+        newBadges.add('friendly');
+      }
+
+      // 17. Etkileyici (150+ beğeni)
+      if (likeCount >= 150 && !currentBadges.contains('influencer')) {
+        newBadges.add('influencer');
+      }
+
+      // 18. Mükemmeliyetçi (30+ gönderi)
+      if (postCount >= 30 && !currentBadges.contains('perfectionist')) {
+        newBadges.add('perfectionist');
+      }
 
       // Yeni rozet varsa veritabanını güncelle ve XP ver
       if (newBadges.isNotEmpty) {

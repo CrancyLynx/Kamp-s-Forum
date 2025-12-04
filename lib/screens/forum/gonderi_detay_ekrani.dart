@@ -16,6 +16,7 @@ import '../../widgets/app_header.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart';
 import 'gonderi_duzenleme_ekrani.dart';
 import '../../widgets/animated_list_item.dart';
+import '../../services/gamification_service.dart'; // ✅ XP SİSTEMİ
 
 class GonderiDetayEkrani extends StatefulWidget {
   final String postId;
@@ -159,6 +160,19 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
       } else { // Beğeniyorsa
         await postRef.update({'likes': FieldValue.arrayUnion([_currentUserId])});
         await userRef.update({'likeCount': FieldValue.increment(1)});
+        
+        // ✅ YENİ: XP ekleme - Beğeni yapma
+        try {
+          await GamificationService().addXP(
+            _currentUserId,
+            'comment_like',
+            1, // 1 XP per like
+            'like-${DateTime.now().millisecondsSinceEpoch}',
+          );
+        } catch (e) {
+          debugPrint('Beğeni XP ekleme hatası: $e');
+        }
+        
         await _sendLikeNotification();
       }
     } catch (e) {
@@ -293,6 +307,18 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
       await FirebaseFirestore.instance.collection('kullanicilar').doc(_currentUserId).update({
         'commentCount': FieldValue.increment(1),
       });
+
+      // ✅ YENİ: XP ekleme - Yorum yapma
+      try {
+        await GamificationService().addXP(
+          _currentUserId,
+          'comment_created',
+          5, // 5 XP per comment
+          'comment-${DateTime.now().millisecondsSinceEpoch}',
+        );
+      } catch (e) {
+        debugPrint('Yorum XP ekleme hatası: $e');
+      }
 
       // --- MENTION NOTIFICATION LOGIC (✅ SPAM KORUMASLI) ---
       final mentionRegex = RegExp(r'@(\w+)');
