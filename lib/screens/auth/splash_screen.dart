@@ -7,6 +7,21 @@ import '../../services/exam_dates_service.dart';
 import '../../services/data_preload_service.dart';
 import '../../utils/app_colors.dart';
 
+// Loading item model
+enum LoadingStatus { pending, loading, completed, failed }
+
+class LoadingItem {
+  final String name;
+  final String icon;
+  LoadingStatus status;
+
+  LoadingItem({
+    required this.name,
+    required this.icon,
+    this.status = LoadingStatus.pending,
+  });
+}
+
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -23,14 +38,31 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   late Animation<double> _floatingAnimation;
   Timer? _navigationTimer;
   String _loadingStatus = "Veriler hazırlanıyor...";
+  late List<LoadingItem> _loadingItems;
 
   @override
   void initState() {
     super.initState();
 
-    // Native Splash'i kaldır
+    // Loading items'ı başlat
+    _loadingItems = [
+      LoadingItem(name: "Forum Gönderileri", icon: "📝"),
+      LoadingItem(name: "Market Ürünleri", icon: "🛍️"),
+      LoadingItem(name: "Kullanıcı Profili", icon: "👤"),
+      LoadingItem(name: "Bildirimler", icon: "🔔"),
+      LoadingItem(name: "Bakiye ve Level", icon: "⭐"),
+      LoadingItem(name: "Sıralama Tablosu", icon: "🏆"),
+      LoadingItem(name: "Sınav Tarihleri", icon: "📅"),
+    ];
+
+    // 🔴 Native Splash'i HEMEN kaldır (addPostFrameCallback yerine)
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      FlutterNativeSplash.remove();
+      try {
+        FlutterNativeSplash.remove();
+        debugPrint('✅ Native splash kaldırıldı');
+      } catch (e) {
+        debugPrint('⚠️ Native splash kaldırılamadı: $e');
+      }
     });
 
     // Logo scale animasyonu (0.3s)
@@ -85,8 +117,14 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
   /// Cache yükleme işlemini başlat ve durumu güncelle
   void _startCachePreloading() {
+    // Loading items'ı dinamik olarak update et
+    _updateLoadingItemStatus('Forum Gönderileri', LoadingStatus.loading);
+    
     DataPreloadService.preloadAllData().then((results) {
       if (mounted) {
+        // Sonuçlara göre items'ı güncelle
+        _updateItemsBasedOnResults(results);
+        
         int successCount = results.values.where((v) => v == true).length;
         int totalCount = results.length;
         
@@ -103,6 +141,46 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
         });
       }
       debugPrint('⚠️ Cache preload hatası (çevrimdışı mod kullanılacak): $e');
+    });
+  }
+
+  /// Loading item'ı durumuna göre güncelle
+  void _updateLoadingItemStatus(String itemName, LoadingStatus status) {
+    if (mounted) {
+      setState(() {
+        final index = _loadingItems.indexWhere((item) => item.name == itemName);
+        if (index != -1) {
+          _loadingItems[index].status = status;
+        }
+      });
+    }
+  }
+
+  /// Preload sonuçlarına göre tüm items'ı güncelle
+  void _updateItemsBasedOnResults(Map<String, dynamic> results) {
+    if (!mounted) return;
+    
+    setState(() {
+      // Map results to loading items
+      final resultMapping = {
+        'forum_posts': 'Forum Gönderileri',
+        'market_products': 'Market Ürünleri',
+        'user_profile': 'Kullanıcı Profili',
+        'notifications': 'Bildirimler',
+        'user_balance': 'Bakiye ve Level',
+        'leaderboard': 'Sıralama Tablosu',
+        'exam_dates': 'Sınav Tarihleri',
+      };
+
+      results.forEach((key, success) {
+        final itemName = resultMapping[key];
+        if (itemName != null) {
+          final index = _loadingItems.indexWhere((item) => item.name == itemName);
+          if (index != -1) {
+            _loadingItems[index].status = success ? LoadingStatus.completed : LoadingStatus.failed;
+          }
+        }
+      });
     });
   }
 
@@ -326,37 +404,109 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
             // Loading indicator
             Positioned(
-              bottom: 80,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      isDark ? Colors.white : Colors.white,
+              bottom: 20,
+              left: 20,
+              right: 20,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Loading items list
+                    Container(
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.1),
+                          width: 1,
+                        ),
+                      ),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _loadingItems.length,
+                        itemBuilder: (context, index) {
+                          final item = _loadingItems[index];
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: [
+                                // Icon
+                                Text(
+                                  item.icon,
+                                  style: const TextStyle(fontSize: 16),
+                                ),
+                                const SizedBox(width: 12),
+                                // Item name
+                                Expanded(
+                                  child: Text(
+                                    item.name,
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.8),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // Status indicator
+                                if (item.status == LoadingStatus.pending)
+                                  SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: CircularProgressIndicator(
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white.withOpacity(0.5),
+                                      ),
+                                      strokeWidth: 1.5,
+                                    ),
+                                  )
+                                else if (item.status == LoadingStatus.loading)
+                                  SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: CircularProgressIndicator(
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.yellow[600]!,
+                                      ),
+                                      strokeWidth: 1.5,
+                                    ),
+                                  )
+                                else if (item.status == LoadingStatus.completed)
+                                  const Icon(
+                                    Icons.check_circle,
+                                    size: 12,
+                                    color: Colors.green,
+                                  )
+                                else
+                                  const Icon(
+                                    Icons.check_circle,
+                                    size: 12,
+                                    color: Colors.orange,
+                                  ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                    strokeWidth: 2,
-                  ),
-                ),
-              ),
-            ),
-
-            // Bottom text
-            Positioned(
-              bottom: 30,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Text(
-                  _loadingStatus,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 0.5,
-                  ),
+                    
+                    const SizedBox(height: 12),
+                    
+                    // Status text
+                    Text(
+                      _loadingStatus,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.3,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
             ),
