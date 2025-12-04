@@ -8,6 +8,7 @@ import 'dart:math' as math;
 
 // Utils & Services
 import '../../../utils/app_colors.dart';
+import '../../../utils/phone_formatter.dart';
 import '../../../main.dart';
 import '../../../widgets/app_logo.dart';
 import '../../../services/auth_service.dart';
@@ -363,19 +364,21 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
 
       final user = FirebaseAuth.instance.currentUser;
       
-      if (user != null) { // Mevcut kullanıcıya linkleme (2FA veya Telefon Doğrulama)
+      if (user != null && _isMfaVerification) { // Mevcut kullanıcıya linkleme (2FA veya Telefon Doğrulama)
         try {
           await user.linkWithCredential(credential);
           await user.reload();
           if (mounted) {
             showSnackBar("Telefon numaranız başarıyla doğrulandı.");
             setState(() => _codeSent = false);
+            setState(() => _isMfaVerification = false);
           }
         } on FirebaseAuthException catch (e) {
           if (mounted) {
             if (e.code == 'credential-already-in-use' || e.code == 'provider-already-linked') {
               showSnackBar("Bu telefon numarası zaten doğrulanmış.");
               setState(() => _codeSent = false);
+              setState(() => _isMfaVerification = false);
             } else {
               showSnackBar(_authService.publicHandleError(e), isError: true);
             }
@@ -408,25 +411,16 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
 
     if (isLogin && _isPhoneLoginMode) {
       final phone = _phoneController.text.trim();
-      final password = passwordController.text;
       
       // ✅ Phone validation
       if (phone.isEmpty) return showSnackBar("Telefon numarası boş olamaz.", isError: true);
-      if (phone.length < 10) return showSnackBar("Lütfen geçerli bir telefon numarası girin (en az 10 hane).", isError: true);
-      if (password.isEmpty) return showSnackBar("Şifre boş olamaz.", isError: true);
+      if (!phone.startsWith('+90')) return showSnackBar("Telefon numarası +90 ile başlamalıdır.", isError: true);
+      if (phone.length != 13) return showSnackBar("Telefon numarası +90 ile birlikte 13 karakter olmalıdır (örn: +905551234567).", isError: true);
 
       if (mounted) setState(() => _isLoading = true);
       
-      final error = await _authService.validatePhonePassword(phone, password);
-      
-      if (mounted) {
-        if (error == null) {
-          await _sendSmsCode(phone);
-        } else {
-          setState(() => _isLoading = false);
-          showSnackBar(error, isError: true);
-        }
-      }
+      // SMS kodu gönderme işlemini doğru şekilde başlat
+      await _sendSmsCode(phone);
       return;
     }
 
@@ -608,7 +602,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       children: [
         ModernTextField(controller: _adSoyadController, label: "Ad Soyad", iconData: Icons.person_outline, isDark: isDark),
         ModernTextField(controller: _takmaAdController, label: "Takma Ad", iconData: Icons.alternate_email, isDark: isDark),
-        ModernTextField(controller: _phoneController, label: "Telefon Numarası", iconData: Icons.phone_android, isDark: isDark, inputType: TextInputType.phone),
+        ModernTextField(controller: _phoneController, label: "Telefon Numarası", iconData: Icons.phone_android, isDark: isDark, inputType: TextInputType.phone, inputFormatters: [PhoneFormatter()]),
         ModernTextField(controller: emailController, label: "Üniversite E-postası (.edu.tr)", iconData: Icons.email_outlined, isDark: isDark, suffixIcon: _isEduEmail ? const Icon(Icons.check_circle, color: AppColors.success) : null),
         
         ModernSelectionField(
@@ -691,8 +685,7 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
     return Column(
       key: const ValueKey('phone_login'), 
       children: [
-        ModernTextField(controller: _phoneController, label: "Telefon Numarası", iconData: Icons.phone_android, isDark: isDark, inputType: TextInputType.phone),
-        ModernTextField(controller: passwordController, label: "Şifre", iconData: Icons.lock_outline, isDark: isDark, isPassword: true),
+        ModernTextField(controller: _phoneController, label: "Telefon Numarası", iconData: Icons.phone_android, isDark: isDark, inputType: TextInputType.phone, inputFormatters: [PhoneFormatter()]),
       ],
     );
   }

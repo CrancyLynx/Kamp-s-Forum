@@ -22,6 +22,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   late Animation<Offset> _slideAnimation;
   late Animation<double> _floatingAnimation;
   Timer? _navigationTimer;
+  String _loadingStatus = "Veriler hazırlanıyor...";
 
   @override
   void initState() {
@@ -70,8 +71,8 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     // Arka planda sınav tarihlerini güncelle
     _initializeExamDates();
 
-    // Arka planda tüm verileri preload et (cache'le)
-    DataPreloadService.preloadAllData();
+    // Arka planda tüm verileri preload et (cache'le) ve status güncelle
+    _startCachePreloading();
 
     _scaleController.forward().then((_) {
       _slideController.forward();
@@ -79,6 +80,29 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       _navigationTimer = Timer(const Duration(milliseconds: 2500), () {
         _navigateToHome();
       });
+    });
+  }
+
+  /// Cache yükleme işlemini başlat ve durumu güncelle
+  void _startCachePreloading() {
+    DataPreloadService.preloadAllData().then((results) {
+      if (mounted) {
+        int successCount = results.values.where((v) => v == true).length;
+        int totalCount = results.length;
+        
+        setState(() {
+          _loadingStatus = "✅ Veriler hazır ($successCount/$totalCount)";
+        });
+        
+        debugPrint('📦 Cache preload tamamlandı: $successCount/$totalCount başarılı');
+      }
+    }).catchError((e) {
+      if (mounted) {
+        setState(() {
+          _loadingStatus = "⚠️ Yükleniyor (çevrimdışı mod)...";
+        });
+      }
+      debugPrint('⚠️ Cache preload hatası (çevrimdışı mod kullanılacak): $e');
     });
   }
 
@@ -326,7 +350,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
               right: 0,
               child: Center(
                 child: Text(
-                  "Yükleniyor...",
+                  _loadingStatus,
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.7),
                     fontSize: 14,

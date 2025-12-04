@@ -3,9 +3,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/phone_formatter.dart';
 import '../../widgets/app_header.dart';
 import '../../services/auth_service.dart';
-import '../../main.dart'; 
+import '../../main.dart';
 
 class DogrulamaEkrani extends StatefulWidget {
   const DogrulamaEkrani({super.key});
@@ -336,9 +337,10 @@ class _DogrulamaEkraniState extends State<DogrulamaEkrani> {
             TextField(
               controller: _phoneController,
               keyboardType: TextInputType.phone,
+              inputFormatters: [PhoneFormatter()],
               decoration: const InputDecoration(
-                labelText: "Telefon (Örn: 555...)",
-                hintText: "5XXXXXXXXX",
+                labelText: "Telefon Numaranız",
+                hintText: "+905XXXXXXXXX",
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.phone),
               ),

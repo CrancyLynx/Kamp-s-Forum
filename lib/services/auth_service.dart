@@ -288,31 +288,6 @@ class AuthService {
     );
   }
   
-  Future<String?> validatePhonePassword(String phone, String password) async {
-    try {
-      // Telefon format kontrolü
-      if (!phone.startsWith('+90') || phone.length != 13) {
-        return "Geçersiz telefon numarası formatı. +90XXXXXXXXXX formatında olmalı.";
-      }
-      
-      final query = await _firestore
-          .collection('kullanicilar')
-          .where('phoneNumber', isEqualTo: phone)
-          .limit(1)
-          .get();
-      
-      if (query.docs.isEmpty) {
-        return "Bu numara ile kayıtlı hesap bulunamadı.";
-      }
-      
-      final email = query.docs.first.data()['email'] as String;
-      await _auth.signInWithEmailAndPassword(email: email, password: password);
-      return null;
-    } catch (e) {
-      return _handleError(e);
-    }
-  }
-  
   Future<String?> sendPasswordReset(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../utils/app_colors.dart';
 
@@ -15,6 +16,7 @@ class ModernTextField extends StatelessWidget {
   final VoidCallback? onTap;
   final String? prefixText;
   final int maxLines;
+  final List<TextInputFormatter>? inputFormatters;
 
   const ModernTextField({
     super.key,
@@ -29,6 +31,7 @@ class ModernTextField extends StatelessWidget {
     this.onTap,
     this.prefixText,
     this.maxLines = 1,
+    this.inputFormatters,
   });
 
   @override
@@ -51,6 +54,7 @@ class ModernTextField extends StatelessWidget {
         readOnly: readOnly,
         onTap: onTap,
         maxLines: maxLines,
+        inputFormatters: inputFormatters,
         style: TextStyle(color: isDark ? Colors.white : Colors.black87),
         decoration: InputDecoration(
           labelText: label,

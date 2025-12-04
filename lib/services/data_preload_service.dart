@@ -3,15 +3,19 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'dart:async';
 
 /// Uygulama başlangıcında verileri arka planda önceden yükler ve cache'ler
 class DataPreloadService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static final FirebaseAuth _auth = FirebaseAuth.instance;
+  
+  // Timeout süresi (10 saniye)
+  static const Duration _preloadTimeout = Duration(seconds: 10);
 
-  /// Tüm kritik verileri paralel olarak preload et
+  /// Tüm kritik verileri paralel olarak preload et - timeout ile korunan versiyon
   static Future<Map<String, dynamic>> preloadAllData() async {
-    debugPrint('🚀 Data preload başlatıldı...');
+    debugPrint('🚀 Data preload başlatıldı... (timeout: ${_preloadTimeout.inSeconds}s)');
 
     final results = {
       'forum_posts': false,
@@ -28,56 +32,81 @@ class DataPreloadService {
       
       // Guest kullanıcıysa sadece haber ve kamuya açık verileri yükle
       if (currentUser == null) {
-        try {
-          await Future.wait([
-            _preloadPublicForum(),
-            _preloadMarketProducts(),
-            _preloadExamDates(),
-          ]);
-          results['forum_posts'] = true;
-          results['market_products'] = true;
-          results['exam_dates'] = true;
-        } catch (e) {
-          debugPrint('❌ Public data preload hatası: $e');
-        }
+        debugPrint('👤 Guest kullanıcı - Kamu verilerini yüklüyor...');
+        
+        // Her bir task için timeout ile yapılmış preload
+        final futures = [
+          _preloadWithTimeout(_preloadPublicForum, 'public_forum', 'forum_posts'),
+          _preloadWithTimeout(_preloadMarketProducts, 'market_products', 'market_products'),
+          _preloadWithTimeout(_preloadExamDates, 'exam_dates', 'exam_dates'),
+        ];
+        
+        // Hepsi timeout olsa bile devam et
+        await Future.wait(
+          futures,
+          eagerError: false,
+        );
         
         debugPrint('✅ Guest data preload tamamlandı: $results');
         return results;
       }
 
-      // Authenticated kullanıcı - tüm verileri yükle
+      // Authenticated kullanıcı - tüm verileri yükle (timeout koruması ile)
+      debugPrint('👤 Authenticated kullanıcı - Tüm verileri yüklüyor...');
+      final userId = currentUser.uid;
+      
       final futures = [
-        _preloadForumPosts(),
-        _preloadMarketProducts(),
-        _preloadUserProfile(currentUser.uid),
-        _preloadNotifications(currentUser.uid),
-        _preloadUserBalance(currentUser.uid),
-        _preloadLeaderboard(),
-        _preloadExamDates(),
+        _preloadWithTimeout(_preloadForumPosts, 'forum_posts', 'forum_posts'),
+        _preloadWithTimeout(_preloadMarketProducts, 'market_products', 'market_products'),
+        _preloadWithTimeout(() => _preloadUserProfile(userId), 'user_profile', 'user_profile'),
+        _preloadWithTimeout(() => _preloadNotifications(userId), 'notifications', 'notifications'),
+        _preloadWithTimeout(() => _preloadUserBalance(userId), 'user_balance', 'user_balance'),
+        _preloadWithTimeout(_preloadLeaderboard, 'leaderboard', 'leaderboard'),
+        _preloadWithTimeout(_preloadExamDates, 'exam_dates', 'exam_dates'),
       ];
 
+      // Her bir result'ı kontrol et
       final settledResults = await Future.wait(
         futures,
         eagerError: false,
-      ).then((_) {
-        results['forum_posts'] = true;
-        results['market_products'] = true;
-        results['user_profile'] = true;
-        results['notifications'] = true;
-        results['user_balance'] = true;
-        results['leaderboard'] = true;
-        results['exam_dates'] = true;
-        return results;
-      }).catchError((e) {
-        debugPrint('❌ Bazı veri preload hataları: $e');
-        return results;
-      });
+      );
+      
+      // Başarılı olanları işaretle
+      for (var i = 0; i < settledResults.length; i++) {
+        if (settledResults[i] == true) {
+          results[results.keys.elementAt(i)] = true;
+        }
+      }
 
-      debugPrint('✅ Data preload tamamlandı: $settledResults');
-      return settledResults;
+      debugPrint('✅ Data preload tamamlandı: $results');
+      return results;
     } catch (e) {
       debugPrint('❌ Data preload genel hatası: $e');
       return results;
+    }
+  }
+
+  /// Timeout koruması ile herhangi bir preload işlemi gerçekleştir
+  static Future<bool> _preloadWithTimeout(
+    Future<void> Function() operation,
+    String operationName,
+    String resultKey,
+  ) async {
+    try {
+      await operation().timeout(
+        _preloadTimeout,
+        onTimeout: () {
+          debugPrint('⏱️ $operationName timeout - Cache kullanılacak');
+          throw TimeoutException('Preload timeout', _preloadTimeout);
+        },
+      );
+      return true;
+    } on TimeoutException catch (e) {
+      debugPrint('⏱️ Timeout: $operationName ($e) - Mevcut cache kullanılıyor');
+      return false; // Hata olsa bile false döndür, app'i blokla
+    } catch (e) {
+      debugPrint('⚠️ Hata: $operationName ($e) - Mevcut cache kullanılıyor');
+      return false; // Hata olsa bile false döndür, app'i blokla
     }
   }
 

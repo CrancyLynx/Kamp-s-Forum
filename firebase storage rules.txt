@@ -82,10 +82,11 @@ service firebase.storage {
       allow delete: if isSignedIn() && isOwnerOfFile(fileName);
     }
 
-    // 5. Sohbet Resimleri (Klasörlü yapı: chat_images/CHAT_ID/FILENAME)
-    match /chat_images/{chatId}/{fileName} {
+    // 5. Sohbet Resimleri (Klasörlü yapı: chat_images/CHATID-USERID-TIMESTAMP.jpg)
+    match /chat_images/{fileName} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && isValidImage();
+      allow write: if isSignedIn() && isValidImage() && fileName.matches('.*-' + request.auth.uid + '-.*');
+      allow delete: if isSignedIn() && fileName.matches('.*-' + request.auth.uid + '-.*');
     }
     
     // 6. Anket Resimleri
@@ -94,10 +95,11 @@ service firebase.storage {
       allow write: if isSignedIn() && isOwnerOfFile(fileName) && isValidImage();
     }
     
-    // 7. Etkinlik Resimleri (Sadece Admin ekler genelde ama kodda kontrol etmek lazım)
+    // 7. Etkinlik Resimleri (Sadece Admin ekler)
     match /events/{fileName} {
       allow read: if true;
-      allow write: if isSignedIn() && isValidImage(); // Geniş izin, admin kontrolü kodda yapılmalı
+      allow write: if false; // Sadece backend Cloud Functions
+      allow delete: if false;
     }
     
     // 8. Bildirim İkonları (Sistem tarafından kullanılan)
