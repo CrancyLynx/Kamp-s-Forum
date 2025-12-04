@@ -6,6 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart'; 
 import 'forum_sayfasi.dart'; 
 import '../../utils/app_colors.dart';
+import '../../utils/guest_security_helper.dart';
 import '../../widgets/app_header.dart';  // YENİ: Modern header widget'ı
 // YENİ: Servis importu
 import '../../services/image_compression_service.dart';
@@ -358,6 +359,43 @@ class _GonderiEklemeEkraniState extends State<GonderiEklemeEkrani> {
 
   @override
   Widget build(BuildContext context) {
+    // GUEST KONTROLÜ: Misafir kullanıcılar gonderi ekleyemez
+    if (GuestSecurityHelper.isGuest()) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Konu Başlat'),
+          elevation: 0,
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lock_outline, size: 80, color: Colors.orange[400]),
+              const SizedBox(height: 24),
+              const Text(
+                "İçerik Paylaşımı Engellendi",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                "Konu başlatmak için giriş yapmalısınız.",
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton(
+                onPressed: () => GuestSecurityHelper.requireLogin(context),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                ),
+                child: const Text("Giriş Yap"),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Scaffold(
       appBar: SimpleAppHeader(
         title: 'Konu Başlat',

@@ -5,6 +5,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/guest_security_helper.dart';
 import '../../widgets/app_header.dart';
 // YENİ: Servis importu
 import '../../services/image_compression_service.dart';
@@ -106,6 +107,43 @@ class _UrunEklemeEkraniState extends State<UrunEklemeEkrani> {
 
   @override
   Widget build(BuildContext context) {
+    // GUEST KONTROLÜ: Misafir kullanıcılar ürün ekleyemez
+    if (GuestSecurityHelper.isGuest()) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('İlan Ver'),
+          elevation: 0,
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lock_outline, size: 80, color: Colors.orange[400]),
+              const SizedBox(height: 24),
+              const Text(
+                "İlan Ekleme Engellendi",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                "İlan eklemek için giriş yapmalısınız.",
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton(
+                onPressed: () => GuestSecurityHelper.requireLogin(context),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                ),
+                child: const Text("Giriş Yap"),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Scaffold(
       appBar: SimpleAppHeader(title: 'İlan Ver'),
       body: SingleChildScrollView(

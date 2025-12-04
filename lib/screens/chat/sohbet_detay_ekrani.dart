@@ -10,6 +10,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:provider/provider.dart';
 import '../../providers/blocked_users_provider.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/guest_security_helper.dart';
 import '../../widgets/app_header.dart';
 import '../../widgets/typing_indicator.dart'; 
 
@@ -120,6 +121,16 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
   }
 
   void _sendMessage({String? imageUrl, String messageType = 'text'}) async {
+    // GUEST KONTROLÜ: Misafir kullanıcılar mesaj gönderemez
+    if (GuestSecurityHelper.isGuest()) {
+      await GuestSecurityHelper.showGuestBlockedDialog(
+        context,
+        title: "Mesaj Gönderme Engellendi",
+        message: "Mesaj göndermek için giriş yapmalısınız.",
+      );
+      return;
+    }
+
     final messageText = _messageController.text.trim();
     if (messageType == 'text' && messageText.isEmpty) return;
     if (messageType == 'image' && imageUrl == null) return;
@@ -592,12 +603,15 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
                 ),
                 child: TextField(
                   controller: _messageController,
+                  enabled: !GuestSecurityHelper.isGuest(), // Misafirler mesaj yazamaz
                   textCapitalization: TextCapitalization.sentences,
                   minLines: 1,
                   maxLines: 5,
                   style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
                   decoration: InputDecoration(
-                    hintText: "Mesaj yaz...",
+                    hintText: GuestSecurityHelper.isGuest() 
+                      ? "Mesaj yazmak için giriş yapın..." 
+                      : "Mesaj yaz...",
                     hintStyle: TextStyle(color: Colors.grey[500]),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

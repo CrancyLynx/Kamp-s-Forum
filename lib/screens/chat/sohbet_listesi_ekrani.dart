@@ -8,6 +8,7 @@ import '../../providers/blocked_users_provider.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../utils/maskot_helper.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/guest_security_helper.dart';
 import '../../widgets/animated_list_item.dart';
 import 'sohbet_detay_ekrani.dart';
 
@@ -33,6 +34,19 @@ class _SohbetListesiEkraniState extends State<SohbetListesiEkrani> {
   void initState() {
     super.initState();
     timeago.setLocaleMessages('tr', timeago.TrMessages());
+    
+    // GUEST KONTROLÜ: Misafir kullanıcılar sohbet listesin göremez
+    if (GuestSecurityHelper.isGuest()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        GuestSecurityHelper.showGuestBlockedDialog(
+          context,
+          title: "Mesajlaşma Engellendi",
+          message: "Mesajlaşmak için giriş yapmalısınız.",
+        );
+      });
+      return; // Stream'i başlatma, hemen dön
+    }
+    
     _initStream();
 
     _scrollController.addListener(() {
@@ -115,6 +129,26 @@ class _SohbetListesiEkraniState extends State<SohbetListesiEkrani> {
           }
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            // Misafir kullanıcılar için özel mesaj
+            if (GuestSecurityHelper.isGuest()) {
+              return Center(
+                key: _emptyStateKey,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.lock_outline, size: 60, color: Colors.orange[400]),
+                    const SizedBox(height: 16),
+                    const Text("Mesajlaşma için giriş yapın", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: () => GuestSecurityHelper.requireLogin(context),
+                      child: const Text("Giriş Yap"),
+                    ),
+                  ],
+                ),
+              );
+            }
+            
             return Center(
               key: _emptyStateKey,
               child: Column(

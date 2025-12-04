@@ -10,6 +10,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/guest_security_helper.dart';
 import '../../widgets/app_header.dart';
 import '../auth/giris_ekrani.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
@@ -1191,6 +1192,43 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
 
   @override
   Widget build(BuildContext context) {
+    // GUEST KONTROLÜ: Misafir kullanıcılar profil düzenleyemez
+    if (GuestSecurityHelper.isGuest()) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text("Profili Düzenle"),
+          elevation: 0,
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lock_outline, size: 80, color: Colors.orange[400]),
+              const SizedBox(height: 24),
+              const Text(
+                "Profil Düzenleme Engellendi",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                "Profil düzenlemek için giriş yapmalısınız.",
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton(
+                onPressed: () => GuestSecurityHelper.requireLogin(context),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                ),
+                child: const Text("Giriş Yap"),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Scaffold(
       appBar: SimpleAppHeader(
         title: "Profili Düzenle",

@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart'; 
 import 'package:firebase_storage/firebase_storage.dart'; 
 import '../../utils/app_colors.dart';
+import '../../utils/guest_security_helper.dart';
 import '../../widgets/app_header.dart';  // YENİ: Modern header
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../utils/maskot_helper.dart';
@@ -332,6 +333,43 @@ class _AnketEklemeEkraniState extends State<AnketEklemeEkrani> {
 
   @override
   Widget build(BuildContext context) {
+    // GUEST KONTROLÜ: Misafir kullanıcılar anket oluşturamazlar
+    if (GuestSecurityHelper.isGuest()) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Anket Oluştur'),
+          elevation: 0,
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lock_outline, size: 80, color: Colors.orange[400]),
+              const SizedBox(height: 24),
+              const Text(
+                "Anket Oluşturma Engellendi",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                "Anket oluşturmak için giriş yapmalısınız.",
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton(
+                onPressed: () => GuestSecurityHelper.requireLogin(context),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                ),
+                child: const Text("Giriş Yap"),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Scaffold(
       appBar: SimpleAppHeader(
         title: 'Anket Oluştur',
