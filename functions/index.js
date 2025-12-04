@@ -582,3 +582,696 @@ exports.scheduleExamDatesUpdate = functions.region(REGION)
       };
     }
   });
+
+/**
+ * =================================================================================
+ * 9. KULLANICI TAKIP/UNFOLLOW İŞLEMLERİ
+ * =================================================================================
+ */
+exports.followUser = functions.region(REGION).https.onCall(async (data, context) => {
+  checkAuth(context);
+  const currentUserId = context.auth.uid;
+  const targetUserId = data.targetUserId;
+
+  if (!targetUserId || currentUserId === targetUserId) {
+    throw new functions.https.HttpsError("invalid-argument", "Geçersiz kullanıcı ID'si.");
+  }
+
+  const batch = db.batch();
+  const currentUserRef = db.collection("kullanicilar").doc(currentUserId);
+  const targetUserRef = db.collection("kullanicilar").doc(targetUserId);
+
+  try {
+    // Zaten takip ediyor mu kontrol et
+    const currentUserDoc = await currentUserRef.get();
+    const following = currentUserDoc.data()?.following || [];
+    
+    if (following.includes(targetUserId)) {
+      throw new functions.https.HttpsError("already-exists", "Zaten bu kullanıcıyı takip ediyorsunuz.");
+    }
+
+    // Takip et
+    batch.update(currentUserRef, {
+      following: admin.firestore.FieldValue.arrayUnion(targetUserId),
+      followingCount: admin.firestore.FieldValue.increment(1)
+    });
+
+    batch.update(targetUserRef, {
+      followers: admin.firestore.FieldValue.arrayUnion(currentUserId),
+      followerCount: admin.firestore.FieldValue.increment(1)
+    });
+
+    // Bildirim gönder
+    const currentUserData = currentUserDoc.data();
+    batch.set(db.collection("bildirimler").doc(), {
+      userId: targetUserId,
+      senderId: currentUserId,
+      senderName: currentUserData.takmaAd || "Bilinmiyor",
+      type: "follow",
+      message: `${currentUserData.takmaAd} sizi takip etmeye başladı.`,
+      isRead: false,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    await batch.commit();
+    return { success: true, message: "Kullanıcı başarıyla takip edildi." };
+  } catch (error) {
+    if (error.code && error.code.startsWith("PERMISSION_DENIED")) {
+      throw new functions.https.HttpsError("permission-denied", "Yetkisiz işlem.");
+    }
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+exports.unfollowUser = functions.region(REGION).https.onCall(async (data, context) => {
+  checkAuth(context);
+  const currentUserId = context.auth.uid;
+  const targetUserId = data.targetUserId;
+
+  if (!targetUserId) {
+    throw new functions.https.HttpsError("invalid-argument", "Geçersiz kullanıcı ID'si.");
+  }
+
+  const batch = db.batch();
+  const currentUserRef = db.collection("kullanicilar").doc(currentUserId);
+  const targetUserRef = db.collection("kullanicilar").doc(targetUserId);
+
+  try {
+    batch.update(currentUserRef, {
+      following: admin.firestore.FieldValue.arrayRemove(targetUserId),
+      followingCount: admin.firestore.FieldValue.increment(-1)
+    });
+
+    batch.update(targetUserRef, {
+      followers: admin.firestore.FieldValue.arrayRemove(currentUserId),
+      followerCount: admin.firestore.FieldValue.increment(-1)
+    });
+
+    await batch.commit();
+    return { success: true, message: "Takip başarıyla kaldırıldı." };
+  } catch (error) {
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * =================================================================================
+ * 10. GÖNDERI LİKE/UNLIKE İŞLEMLERİ
+ * =================================================================================
+ */
+exports.likePost = functions.region(REGION).https.onCall(async (data, context) => {
+  checkAuth(context);
+  const currentUserId = context.auth.uid;
+  const postId = data.postId;
+
+  if (!postId) {
+    throw new functions.https.HttpsError("invalid-argument", "Gönderi ID'si eksik.");
+  }
+
+  const postRef = db.collection("gonderiler").doc(postId);
+  const batch = db.batch();
+
+  try {
+    const postDoc = await postRef.get();
+    if (!postDoc.exists) {
+      throw new functions.https.HttpsError("not-found", "Gönderi bulunamadı.");
+    }
+
+    const postData = postDoc.data();
+    const likes = postData.likes || [];
+
+    if (likes.includes(currentUserId)) {
+      throw new functions.https.HttpsError("already-exists", "Zaten bu gönderiyi beğenmiş..");
+    }
+
+    // Like ekle
+    batch.update(postRef, {
+      likes: admin.firestore.FieldValue.arrayUnion(currentUserId),
+      likeCount: admin.firestore.FieldValue.increment(1)
+    });
+
+    // Like eden ve post sahibi farklı kişiyse bildirim gönder
+    if (postData.userId !== currentUserId) {
+      const currentUserData = await db.collection("kullanicilar").doc(currentUserId).get();
+      batch.set(db.collection("bildirimler").doc(), {
+        userId: postData.userId,
+        senderId: currentUserId,
+        senderName: currentUserData.data()?.takmaAd || "Bilinmiyor",
+        type: "like",
+        postId: postId,
+        message: `${currentUserData.data()?.takmaAd} gönderiyi beğendi.`,
+        isRead: false,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
+    // Like eden kullanıcının like sayısını artır
+    batch.update(db.collection("kullanicilar").doc(currentUserId), {
+      likeCount: admin.firestore.FieldValue.increment(1)
+    });
+
+    await batch.commit();
+    return { success: true, message: "Gönderi beğenildi.", likeCount: likes.length + 1 };
+  } catch (error) {
+    if (error.code && error.code.startsWith("PERMISSION_DENIED")) {
+      throw new functions.https.HttpsError("permission-denied", "Yetkisiz işlem.");
+    }
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+exports.unlikePost = functions.region(REGION).https.onCall(async (data, context) => {
+  checkAuth(context);
+  const currentUserId = context.auth.uid;
+  const postId = data.postId;
+
+  if (!postId) {
+    throw new functions.https.HttpsError("invalid-argument", "Gönderi ID'si eksik.");
+  }
+
+  const postRef = db.collection("gonderiler").doc(postId);
+  const batch = db.batch();
+
+  try {
+    const postDoc = await postRef.get();
+    if (!postDoc.exists) {
+      throw new functions.https.HttpsError("not-found", "Gönderi bulunamadı.");
+    }
+
+    const postData = postDoc.data();
+    const likes = postData.likes || [];
+
+    if (!likes.includes(currentUserId)) {
+      throw new functions.https.HttpsError("not-found", "Bu gönderiyi beğenmemiş..");
+    }
+
+    // Like kaldır
+    batch.update(postRef, {
+      likes: admin.firestore.FieldValue.arrayRemove(currentUserId),
+      likeCount: admin.firestore.FieldValue.increment(-1)
+    });
+
+    // Like eden kullanıcının like sayısını azalt
+    batch.update(db.collection("kullanicilar").doc(currentUserId), {
+      likeCount: admin.firestore.FieldValue.increment(-1)
+    });
+
+    await batch.commit();
+    return { success: true, message: "Beğeni kaldırıldı.", likeCount: Math.max(0, likes.length - 1) };
+  } catch (error) {
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * =================================================================================
+ * 11. GÜNLÜK AKTİVİTE KURALLARI TEMIZLEYICI (SPAM EKLENTI)
+ * =================================================================================
+ */
+exports.cleanupInactiveUsers = functions.region(REGION)
+  .pubsub.schedule('0 3 * * *') // Günde bir kez saat 03:00
+  .timeZone('Europe/Istanbul')
+  .onRun(async (context) => {
+    try {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const inactiveUsersSnapshot = await db.collection("kullanicilar")
+        .where("lastActive", "<", thirtyDaysAgo)
+        .limit(100)
+        .get();
+
+      let cleanupCount = 0;
+      const batch = db.batch();
+
+      inactiveUsersSnapshot.forEach((doc) => {
+        batch.update(doc.ref, {
+          isOnline: false,
+          status: "Pasif"
+        });
+        cleanupCount++;
+      });
+
+      if (cleanupCount > 0) {
+        await batch.commit();
+      }
+
+      console.log(`[SUCCESS] ${cleanupCount} pasif kullanıcı temizlendi.`);
+      return { success: true, cleanedUsers: cleanupCount };
+    } catch (error) {
+      console.error('[ERROR] Pasif kullanıcı temizleme hatası:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+/**
+ * =================================================================================
+ * 12. KULLANICI AKTİVİTESİ LOGGER
+ * =================================================================================
+ */
+exports.logUserActivity = functions.region(REGION).https.onCall(async (data, context) => {
+  checkAuth(context);
+  const userId = context.auth.uid;
+  const activityType = data.activityType; // "view_post", "create_post", "like", "comment", etc.
+  const targetId = data.targetId; // Post ID, user ID, etc.
+
+  if (!activityType) {
+    throw new functions.https.HttpsError("invalid-argument", "Aktivite türü eksik.");
+  }
+
+  try {
+    // Son aktivite zamanını güncelle
+    await db.collection("kullanicilar").doc(userId).update({
+      lastActive: admin.firestore.FieldValue.serverTimestamp(),
+      isOnline: true
+    });
+
+    // Aktivite logu oluştur
+    await db.collection("activity_logs").add({
+      userId: userId,
+      activityType: activityType,
+      targetId: targetId || null,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      userAgent: data.userAgent || null
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Aktivite kayıt hatası:", error);
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * =================================================================================
+ * 13. CONTENT MODERATION OTOMASYONU
+ * =================================================================================
+ */
+exports.autoModerateContent = functions.region(REGION).firestore
+  .document("gonderiler/{postId}")
+  .onCreate(async (snap, context) => {
+    const postData = snap.data();
+    const content = (postData.title + " " + postData.content).toLowerCase();
+    const spamKeywords = ["viagra", "casino", "bet", "click here", "free money", "xxx"];
+    const isSpam = spamKeywords.some(keyword => content.includes(keyword));
+
+    if (isSpam) {
+      console.log(`[SPAM_DETECTED] Gönderi ${snap.id} spam olarak işaretlendi.`);
+      await snap.ref.update({
+        flaggedAsSpam: true,
+        flaggedAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: "pending_review"
+      });
+    }
+
+    // Profanity filter (basit kontrol)
+    const profanityWords = ["bad", "words", "here"]; // Gerçek listede daha çok olur
+    const hasProfanity = profanityWords.some(word => content.includes(word));
+
+    if (hasProfanity) {
+      console.log(`[PROFANITY_DETECTED] Gönderi ${snap.id} uygunsuz dil içeriyor.`);
+      await snap.ref.update({
+        flaggedForProfanity: true,
+        status: "pending_review"
+      });
+    }
+  });
+
+/**
+ * =================================================================================
+ * 14. YENİ EKLENEN VEYA EKSIK ALANLAR TAMAMLAYICI
+ * =================================================================================
+ */
+exports.migrateUserData = functions.region(REGION).https.onCall(async (data, context) => {
+  checkAuth(context);
+
+  try {
+    const usersSnapshot = await db.collection("kullanicilar").limit(100).get();
+    const batch = db.batch();
+    let migrateCount = 0;
+
+    usersSnapshot.forEach((doc) => {
+      const userData = doc.data();
+      const updateData = {};
+
+      // Eksik alanları kontrol et ve doldur
+      if (userData.postCount === undefined) updateData.postCount = 0;
+      if (userData.commentCount === undefined) updateData.commentCount = 0;
+      if (userData.likeCount === undefined) updateData.likeCount = 0;
+      if (userData.followerCount === undefined) updateData.followerCount = 0;
+      if (userData.followingCount === undefined) updateData.followingCount = 0;
+      if (userData.followers === undefined) updateData.followers = [];
+      if (userData.following === undefined) updateData.following = [];
+      if (userData.earnedBadges === undefined) updateData.earnedBadges = [];
+      if (userData.savedPosts === undefined) updateData.savedPosts = [];
+      if (userData.isOnline === undefined) updateData.isOnline = false;
+      if (userData.status === undefined) updateData.status = "Aktif";
+      if (userData.lastActive === undefined) updateData.lastActive = admin.firestore.FieldValue.serverTimestamp();
+      if (userData.blockedUsers === undefined) updateData.blockedUsers = [];
+      if (userData.fcmTokens === undefined) updateData.fcmTokens = [];
+      if (userData.unreadNotifications === undefined) updateData.unreadNotifications = 0;
+      if (userData.totalUnreadMessages === undefined) updateData.totalUnreadMessages = 0;
+
+      if (Object.keys(updateData).length > 0) {
+        batch.update(doc.ref, updateData);
+        migrateCount++;
+      }
+    });
+
+    if (migrateCount > 0) {
+      await batch.commit();
+    }
+
+    return {
+      success: true,
+      message: `${migrateCount} kullanıcı verisi migre edildi.`,
+      count: migrateCount
+    };
+  } catch (error) {
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * =================================================================================
+ * 15. KULLANICI BLOK/UNBLOCK İŞLEMLERİ
+ * =================================================================================
+ */
+exports.blockUser = functions.region(REGION).https.onCall(async (data, context) => {
+  checkAuth(context);
+  const currentUserId = context.auth.uid;
+  const targetUserId = data.targetUserId;
+
+  if (!targetUserId || currentUserId === targetUserId) {
+    throw new functions.https.HttpsError("invalid-argument", "Geçersiz kullanıcı ID'si.");
+  }
+
+  try {
+    const currentUserRef = db.collection("kullanicilar").doc(currentUserId);
+    const currentUserDoc = await currentUserRef.get();
+    const blockedUsers = currentUserDoc.data()?.blockedUsers || [];
+
+    if (blockedUsers.includes(targetUserId)) {
+      throw new functions.https.HttpsError("already-exists", "Zaten bu kullanıcıyı engellemişsiniz.");
+    }
+
+    await currentUserRef.update({
+      blockedUsers: admin.firestore.FieldValue.arrayUnion(targetUserId)
+    });
+
+    // Eğer takip ediyorsa, takipten çıkar
+    const following = currentUserDoc.data()?.following || [];
+    if (following.includes(targetUserId)) {
+      await currentUserRef.update({
+        following: admin.firestore.FieldValue.arrayRemove(targetUserId),
+        followingCount: admin.firestore.FieldValue.increment(-1)
+      });
+
+      await db.collection("kullanicilar").doc(targetUserId).update({
+        followers: admin.firestore.FieldValue.arrayRemove(currentUserId),
+        followerCount: admin.firestore.FieldValue.increment(-1)
+      });
+    }
+
+    return { success: true, message: "Kullanıcı başarıyla engellendi." };
+  } catch (error) {
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+exports.unblockUser = functions.region(REGION).https.onCall(async (data, context) => {
+  checkAuth(context);
+  const currentUserId = context.auth.uid;
+  const targetUserId = data.targetUserId;
+
+  if (!targetUserId) {
+    throw new functions.https.HttpsError("invalid-argument", "Geçersiz kullanıcı ID'si.");
+  }
+
+  try {
+    const currentUserRef = db.collection("kullanicilar").doc(currentUserId);
+    await currentUserRef.update({
+      blockedUsers: admin.firestore.FieldValue.arrayRemove(targetUserId)
+    });
+
+    return { success: true, message: "Engel başarıyla kaldırıldı." };
+  } catch (error) {
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * =================================================================================
+ * 16. KULLANICI SEARCHİNDEKS GÜNCELLEME
+ * =================================================================================
+ */
+exports.updateUserSearchIndex = functions.region(REGION).firestore
+  .document("kullanicilar/{userId}")
+  .onWrite(async (change, context) => {
+    const afterData = change.after.exists ? change.after.data() : null;
+    
+    if (!afterData) return null;
+
+    try {
+      // Search keywords oluştur
+      const searchKeywords = [];
+      if (afterData.takmaAd) {
+        searchKeywords.push(afterData.takmaAd.toLowerCase());
+        // Her kelimeyi ayrı ayrı ekle
+        afterData.takmaAd.toLowerCase().split(" ").forEach(word => {
+          if (word.length > 2) searchKeywords.push(word);
+        });
+      }
+      if (afterData.ad) {
+        searchKeywords.push(afterData.ad.toLowerCase());
+      }
+      if (afterData.universite) {
+        searchKeywords.push(afterData.universite.toLowerCase());
+      }
+
+      // Index'i güncelle
+      await change.after.ref.update({
+        searchKeywords: searchKeywords,
+        lastIndexedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Search index güncelleme hatası:", error);
+    }
+
+    return null;
+  });
+
+/**
+ * =================================================================================
+ * 17. AYLIKI KULLANICI İSTATİSTİKLERİ HESAPLAYICI
+ * =================================================================================
+ */
+exports.calculateMonthlyStats = functions.region(REGION)
+  .pubsub.schedule('0 0 1 * *') // Ayın ilk günü saat 00:00
+  .timeZone('Europe/Istanbul')
+  .onRun(async (context) => {
+    try {
+      const usersSnapshot = await db.collection("kullanicilar").get();
+      const statsData = {
+        totalUsers: usersSnapshot.size,
+        activeUsers: 0,
+        totalPosts: 0,
+        totalComments: 0,
+        totalLikes: 0,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        month: new Date().getMonth() + 1,
+        year: new Date().getFullYear()
+      };
+
+      // Kullanıcı istatistiklerini topla
+      usersSnapshot.forEach((doc) => {
+        const userData = doc.data();
+        if (userData.isOnline || userData.lastActive) statsData.activeUsers++;
+        if (userData.postCount) statsData.totalPosts += userData.postCount || 0;
+        if (userData.commentCount) statsData.totalComments += userData.commentCount || 0;
+        if (userData.likeCount) statsData.totalLikes += userData.likeCount || 0;
+      });
+
+      // İstatistikleri kaydet
+      await db.collection("platform_stats").doc(`${statsData.year}_${statsData.month}`).set(statsData);
+
+      console.log(`[SUCCESS] Aylık istatistikler kaydedildi: ${statsData.year}/${statsData.month}`);
+      return { success: true, stats: statsData };
+    } catch (error) {
+      console.error('[ERROR] Aylık istatistik hesaplama hatası:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+/**
+ * =================================================================================
+ * 18. BADGE/ACHIEVEMENT SİSTEMİ
+ * =================================================================================
+ */
+exports.checkAndAwardBadges = functions.region(REGION).https.onCall(async (data, context) => {
+  checkAuth(context);
+  const userId = context.auth.uid;
+
+  try {
+    const userDoc = await db.collection("kullanicilar").doc(userId).get();
+    const userData = userDoc.data();
+    const badges = userData.earnedBadges || [];
+    const updateData = {};
+
+    // 🏆 İlk Gönderi Badge
+    if (userData.postCount === 1 && !badges.includes("first_post")) {
+      updateData.earnedBadges = admin.firestore.FieldValue.arrayUnion("first_post");
+    }
+
+    // 🔥 Aktif Kullanıcı Badge (100+ gönderi)
+    if ((userData.postCount || 0) >= 100 && !badges.includes("power_poster")) {
+      updateData.earnedBadges = admin.firestore.FieldValue.arrayUnion("power_poster");
+    }
+
+    // 👥 Sosyal Badge (100+ takipçi)
+    if ((userData.followerCount || 0) >= 100 && !badges.includes("social_butterfly")) {
+      updateData.earnedBadges = admin.firestore.FieldValue.arrayUnion("social_butterfly");
+    }
+
+    // 👍 Like Badge (500+ like)
+    if ((userData.likeCount || 0) >= 500 && !badges.includes("liked_by_many")) {
+      updateData.earnedBadges = admin.firestore.FieldValue.arrayUnion("liked_by_many");
+    }
+
+    // 💬 Comment Badge (100+ yorum)
+    if ((userData.commentCount || 0) >= 100 && !badges.includes("great_conversationalist")) {
+      updateData.earnedBadges = admin.firestore.FieldValue.arrayUnion("great_conversationalist");
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      await userDoc.ref.update(updateData);
+      return { success: true, newBadges: updateData.earnedBadges };
+    }
+
+    return { success: true, newBadges: [] };
+  } catch (error) {
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * =================================================================================
+ * 19. BATCH EMAIL GÖNDERICI (Newsletter, Duyurular)
+ * =================================================================================
+ */
+exports.sendBatchEmails = functions.region(REGION).https.onCall(async (data, context) => {
+  checkAuth(context);
+  const { subject, body, recipientFilter } = data;
+
+  // Admin kontrolü
+  const adminDoc = await db.collection("kullanicilar").doc(context.auth.uid).get();
+  if (adminDoc.data()?.role !== "admin") {
+    throw new functions.https.HttpsError("permission-denied", "Sadece admin gönderebilir.");
+  }
+
+  try {
+    let query = db.collection("kullanicilar");
+
+    // Filtre uygula (aktif, belirli üniversite, vb.)
+    if (recipientFilter?.isActive) {
+      query = query.where("isOnline", "==", true);
+    }
+    if (recipientFilter?.university) {
+      query = query.where("universite", "==", recipientFilter.university);
+    }
+
+    const recipients = await query.get();
+    const emailPromises = [];
+
+    recipients.forEach((doc) => {
+      const userData = doc.data();
+      if (userData.email) {
+        // Email gönderme logunun kaydını tut (gerçek email API kullanılacak)
+        emailPromises.push(
+          db.collection("email_queue").add({
+            recipientEmail: userData.email,
+            recipientId: doc.id,
+            subject: subject,
+            body: body,
+            sentAt: admin.firestore.FieldValue.serverTimestamp(),
+            status: "pending"
+          })
+        );
+      }
+    });
+
+    await Promise.all(emailPromises);
+
+    return {
+      success: true,
+      message: `${recipients.size} e-posta gönderi kuyruğuna alındı.`,
+      count: recipients.size
+    };
+  } catch (error) {
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * =================================================================================
+ * 20. SUGGESTION ENGİNE (Kişiselleştirilmiş İçerik Önerme)
+ * =================================================================================
+ */
+exports.generatePersonalizedSuggestions = functions.region(REGION).https.onCall(async (data, context) => {
+  checkAuth(context);
+  const userId = context.auth.uid;
+
+  try {
+    const userDoc = await db.collection("kullanicilar").doc(userId).get();
+    const userData = userDoc.data();
+    
+    // Kullanıcının ilgi alanları (takip ettiği kategoriler)
+    const following = userData.following || [];
+    const suggestions = [];
+
+    // Takip edilen kullanıcıların izleyenlerini öner
+    if (following.length > 0) {
+      const followingUsersSnapshot = await db.collection("kullanicilar")
+        .where("__name__", "in", following)
+        .limit(5)
+        .get();
+
+      followingUsersSnapshot.forEach((doc) => {
+        const followersOfFollowing = doc.data().followers || [];
+        followersOfFollowing.forEach((follower) => {
+          if (!following.includes(follower) && follower !== userId) {
+            suggestions.push({
+              type: "follow_suggestion",
+              targetId: follower,
+              reason: "Takip ettiğiniz kişilerin de takip ettiği"
+            });
+          }
+        });
+      });
+    }
+
+    // İlgi gördü posts öneri
+    const popularPostsSnapshot = await db.collection("gonderiler")
+      .orderBy("likeCount", "desc")
+      .limit(10)
+      .get();
+
+    popularPostsSnapshot.forEach((doc) => {
+      const postData = doc.data();
+      const userLikedPosts = userData.savedPosts || [];
+      if (!userLikedPosts.includes(doc.id) && postData.userId !== userId) {
+        suggestions.push({
+          type: "post_suggestion",
+          targetId: doc.id,
+          title: postData.title,
+          reason: "Çok beğenilen gönderi"
+        });
+      }
+    });
+
+    return {
+      success: true,
+      suggestions: suggestions.slice(0, 10) // İlk 10 öneeri
+    };
+  } catch (error) {
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
