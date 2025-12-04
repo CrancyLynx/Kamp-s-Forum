@@ -17,7 +17,6 @@ import '../profile/kullanici_profil_detay_ekrani.dart';
 import '../event/etkinlik_detay_ekrani.dart';
 import '../chat/sohbet_listesi_ekrani.dart';
 import '../notification/bildirim_ekrani.dart';
-import '../exam/exam_calendar_screen.dart';
 
 class KesfetSayfasi extends StatefulWidget {
   const KesfetSayfasi({super.key});
@@ -50,7 +49,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     _leaderboardTabController = TabController(length: 2, vsync: this);
     _loadData();
   }
@@ -440,7 +439,6 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                               tabs: const [
                                 Tab(child: Text("Popüler Tartışmalar", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
                                 Tab(child: Text("En İyi Katılımcılar", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-                                Tab(child: Text("Sınavlar", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
                               ],
                             ),
                           ),
@@ -488,7 +486,6 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                             },
                           ),
                           _buildLeaderboardTabs(),
-                          const ExamCalendarScreen(),
                         ],
                       ),
                     ),

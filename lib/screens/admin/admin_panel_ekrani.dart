@@ -9,9 +9,6 @@ import 'admin_reports_tab.dart';
 import 'admin_ring_moderation_tab.dart';
 import 'admin_statistics_tab.dart';
 import 'etkinlik_listesi_ekrani.dart';
-import '../admin/audit_log_viewer_screen.dart';
-import '../vision/vision_quota_monitor_screen.dart';
-import '../admin/system_bot_screen.dart';
 
 class AdminPanelEkrani extends StatefulWidget {
   const AdminPanelEkrani({super.key});
@@ -30,7 +27,7 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
   void initState() {
     super.initState();
     _checkAdminAccess();
-    _tabController = TabController(length: 10, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
   }
 
   Future<void> _checkAdminAccess() async {
@@ -145,9 +142,6 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
                 Tab(icon: Icon(Icons.event_note_rounded, size: 20), text: "Etkinlikler"),
                 Tab(icon: Icon(Icons.directions_bus_rounded, size: 20), text: "Ring Modü"),
                 Tab(icon: Icon(Icons.bar_chart_rounded, size: 20), text: "İstatistik"),
-                Tab(icon: Icon(Icons.history_rounded, size: 20), text: "Denetim Günü"),
-                Tab(icon: Icon(Icons.trending_up_rounded, size: 20), text: "API Kontenjanı"),
-                Tab(icon: Icon(Icons.smart_toy_rounded, size: 20), text: "Sistem Botları"),
               ],
             ),
           ),
@@ -162,9 +156,6 @@ class _AdminPanelEkraniState extends State<AdminPanelEkrani> with SingleTickerPr
             const EtkinlikListesiEkrani(),
             const AdminRingModerationTab(),
             const AdminStatisticsTab(),
-            const AuditLogViewerScreen(),
-            const VisionQuotaMonitorScreen(),
-            const SystemBotScreen(),
           ],
         ),
       ),
