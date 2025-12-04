@@ -397,34 +397,47 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
   }
 
   Widget _buildCategoryFilters() {
-    return SizedBox(
-      height: 50,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: kFilterCategories.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final category = kFilterCategories[index];
-          final isSelected = _selectedFilter == category;
-          final isDark = Theme.of(context).brightness == Brightness.dark;
-          return ChoiceChip(
-            label: Text(category),
-            selected: isSelected,
-            onSelected: (bool selected) {
-              if (selected) {
-                setState(() => _selectedFilter = category);
-                _resetAndFetch();
-              }
-            },
-            selectedColor: AppColors.primary,
-            backgroundColor: isDark ? Colors.grey[800] : Colors.grey[100],
-            labelStyle: TextStyle(
-              color: isSelected ? Colors.white : Colors.grey,
-              fontWeight: FontWeight.bold,
-            ),
-          );
-        },
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Theme.of(context).scaffoldBackgroundColor.withOpacity(0.6),
+            Theme.of(context).scaffoldBackgroundColor.withOpacity(0.3),
+          ],
+        ),
+      ),
+      child: SizedBox(
+        height: 50,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: kFilterCategories.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (context, index) {
+            final category = kFilterCategories[index];
+            final isSelected = _selectedFilter == category;
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            return ChoiceChip(
+              label: Text(category),
+              selected: isSelected,
+              onSelected: (bool selected) {
+                if (selected) {
+                  setState(() => _selectedFilter = category);
+                  _resetAndFetch();
+                }
+              },
+              selectedColor: AppColors.primary,
+              backgroundColor: isDark ? Colors.grey[800] : Colors.grey[100],
+              labelStyle: TextStyle(
+                color: isSelected ? Colors.white : Colors.grey,
+                fontWeight: FontWeight.bold,
+              ),
+            );
+          },
+        ),
       ),
     );
   }

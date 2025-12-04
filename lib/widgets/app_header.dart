@@ -167,80 +167,56 @@ class PanelHeader extends StatelessWidget {
           ],
         ),
       ),
-      child: Stack(
-        clipBehavior: Clip.none,
+      child: Row(
         children: [
-          // Bottom fade gradient (aşağıya doğru yok olan - çizgi hissi olmadan)
-          Positioned(
-            bottom: -20,
-            left: -16,
-            right: -16,
-            height: 40,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    bgColor.withOpacity(0.2),
-                    bgColor.withOpacity(0),
-                  ],
-                ),
-              ),
+          // İkon container
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: accentColor.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              icon,
+              color: accentColor,
+              size: 24,
             ),
           ),
-          Row(
-            children: [
-              // İkon container
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: accentColor.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
+          const SizedBox(width: 16),
+          // Başlık ve alt başlık
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isDarkMode ? Colors.white : Colors.black87,
+                  ),
                 ),
-                child: Icon(
-                  icon,
-                  color: accentColor,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 16),
-              // Başlık ve alt başlık
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: isDarkMode ? Colors.white : Colors.black87,
-                      ),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDarkMode 
+                        ? Colors.grey[400]
+                        : Colors.grey[600],
                     ),
-                    if (subtitle.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isDarkMode 
-                            ? Colors.grey[400]
-                            : Colors.grey[600],
-                        ),
-                      ),
-                    ]
-                  ],
-                ),
-              ),
-              // Trailing widget
-              if (trailing != null) ...[
-                const SizedBox(width: 12),
-                trailing!,
+                  ),
+                ]
               ],
-            ],
+            ),
           ),
+          // Trailing widget
+          if (trailing != null) ...[
+            const SizedBox(width: 12),
+            trailing!,
+          ],
         ],
       ),
     );

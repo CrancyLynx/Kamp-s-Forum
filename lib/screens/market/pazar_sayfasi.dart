@@ -168,8 +168,18 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
             ),
 
             // 2. KATEGORİLER VE SIRALAMA - Kompakt tasarım
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Theme.of(context).scaffoldBackgroundColor.withOpacity(0.6),
+                    Theme.of(context).scaffoldBackgroundColor.withOpacity(0.3),
+                  ],
+                ),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
