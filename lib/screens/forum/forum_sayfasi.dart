@@ -37,13 +37,28 @@ class ForumSayfasi extends StatefulWidget {
   State<ForumSayfasi> createState() => _ForumSayfasiState();
 }
 
+// In-memory cache
+class _ForumCache {
+  static List<DocumentSnapshot>? _posts;
+  static List<DocumentSnapshot>? _pinnedPosts;
+  static DocumentSnapshot? _lastDocument;
+  static bool _hasMore = true;
+
+  static void clear() {
+    _posts = null;
+    _pinnedPosts = null;
+    _lastDocument = null;
+    _hasMore = true;
+  }
+}
+
 class _ForumSayfasiState extends State<ForumSayfasi> {
   SortType _currentSort = SortType.newestTopics;
   String _selectedFilter = 'Tümü';
 
   final ScrollController _scrollController = ScrollController();
   List<DocumentSnapshot> _posts = [];
-  List<DocumentSnapshot> _pinnedPosts = []; 
+  List<DocumentSnapshot> _pinnedPosts = [];
   bool _isLoading = false;
   bool _hasMore = true;
   DocumentSnapshot? _lastDocument;
@@ -52,7 +67,7 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
   @override
   void initState() {
     super.initState();
-    _fetchInitialPosts();
+    _resetAndFetch();
 
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200 &&
@@ -87,6 +102,7 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
   }
 
   Future<void> _resetAndFetch() async {
+    _ForumCache.clear();
     if (!mounted) return;
     setState(() { _posts = []; _pinnedPosts = []; _lastDocument = null; _hasMore = true; });
     await _fetchInitialPosts();
@@ -95,6 +111,19 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
   Future<void> _fetchPosts({bool isInitial = false}) async {
     if (_isLoading) return;
     if (mounted) setState(() { _isLoading = true; });
+
+    if (isInitial && _ForumCache._posts != null) {
+      if(mounted) {
+        setState(() {
+          _posts = _ForumCache._posts!;
+          _pinnedPosts = _ForumCache._pinnedPosts!;
+          _lastDocument = _ForumCache._lastDocument;
+          _hasMore = _ForumCache._hasMore;
+          _isLoading = false;
+        });
+      }
+      return;
+    }
 
     try {
       // Pinned posts'u al
@@ -107,6 +136,8 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
               .limit(10)
               .get();
           if (mounted) setState(() => _pinnedPosts = pinnedQuerySnapshot.docs);
+          _ForumCache._pinnedPosts = _pinnedPosts;
+
         } catch (e) {
           debugPrint('Pinned posts yükleme hatası: $e');
           if (mounted) setState(() => _pinnedPosts = []);
@@ -148,11 +179,14 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
             _posts.addAll(querySnapshot.docs);
           });
         }
+        _ForumCache._lastDocument = _lastDocument;
+        _ForumCache._posts = _posts;
       }
       
       // _hasMore flag'ini güncelle
       if (querySnapshot.docs.length < 15) {
         if (mounted) setState(() => _hasMore = false);
+        _ForumCache._hasMore = false;
       }
 
     } on FirebaseException catch (e) {
@@ -244,7 +278,6 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
       body: SafeArea(
         child: Column(
           children: [
-            // ✅ Modern senkronize header
             PanelHeader(
               title: 'Kampüs Forum',
               subtitle: 'Soru, fikir ve tartışmaları paylaş',

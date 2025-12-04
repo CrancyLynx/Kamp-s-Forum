@@ -228,89 +228,104 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
 
               final List<String> earnedBadges = List<String>.from(userData['earnedBadges'] ?? []);
               final bool isUserAdmin = (userData['role'] == 'admin');
+              final theme = Theme.of(context);
 
               return Scaffold(
-                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                body: NestedScrollView(
-                  headerSliverBuilder: (context, innerBoxIsScrolled) {
-                    return [
-                      SliverAppBar(
-                        pinned: true,
-                        floating: true,
-                        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                        elevation: innerBoxIsScrolled ? 2 : 0,
-                        leading: !_isOwnProfile ? IconButton(
-                          icon: Icon(Icons.arrow_back, color: Theme.of(context).textTheme.bodyLarge?.color),
-                          onPressed: () => Navigator.pop(context),
-                        ) : null,
-                        actions: [
-                          // YENİ: ROZETLER İKONU
-                          IconButton(
-                            icon: const Icon(Icons.military_tech, color: AppColors.primaryAccent, size: 28),
-                            tooltip: 'Rozet Koleksiyonu',
-                            onPressed: () {
-                              Navigator.push(context, MaterialPageRoute(builder: (context) => RozetlerSayfasi(
-                                earnedBadgeIds: Set<String>.from(earnedBadges),
-                                isAdmin: isUserAdmin,
-                                userData: userData,
-                              )));
-                            },
-                          ),
-                          
-                          if (_isOwnProfile)
+                backgroundColor: Colors.transparent,
+                body: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.primary.withOpacity(0.1),
+                        theme.scaffoldBackgroundColor,
+                        theme.scaffoldBackgroundColor,
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: const [0.0, 0.4, 1.0],
+                    ),
+                  ),
+                  child: NestedScrollView(
+                    headerSliverBuilder: (context, innerBoxIsScrolled) {
+                      return [
+                        SliverAppBar(
+                          pinned: true,
+                          floating: true,
+                          backgroundColor: Colors.transparent,
+                          elevation: 0, // Remove shadow
+                          leading: !_isOwnProfile ? IconButton(
+                            icon: Icon(Icons.arrow_back, color: Theme.of(context).textTheme.bodyLarge?.color),
+                            onPressed: () => Navigator.pop(context),
+                          ) : null,
+                          actions: [
+                            // YENİ: ROZETLER İKONU
                             IconButton(
-                              icon: const Icon(Icons.settings),
-                              color: Theme.of(context).textTheme.bodyLarge?.color,
-                              onPressed: () => _showSettingsModal(context, userData['role'] == 'admin'),
+                              icon: const Icon(Icons.military_tech, color: AppColors.primaryAccent, size: 28),
+                              tooltip: 'Rozet Koleksiyonu',
+                              onPressed: () {
+                                Navigator.push(context, MaterialPageRoute(builder: (context) => RozetlerSayfasi(
+                                  earnedBadgeIds: Set<String>.from(earnedBadges),
+                                  isAdmin: isUserAdmin,
+                                  userData: userData,
+                                )));
+                              },
                             ),
-                          
-                          // DÜZELTİLMİŞ TEMA BUTONU
-                          Consumer<ThemeProvider>(
-                            builder: (context, themeProvider, child) {
-                              final isSystemDark = MediaQuery.of(context).platformBrightness == Brightness.dark;
-                              final isDark = themeProvider.themeMode == ThemeMode.dark || 
-                                            (themeProvider.themeMode == ThemeMode.system && isSystemDark);
-                              
-                              return IconButton(
-                                icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
+                            
+                            if (_isOwnProfile)
+                              IconButton(
+                                icon: const Icon(Icons.settings),
                                 color: Theme.of(context).textTheme.bodyLarge?.color,
-                                onPressed: () {
-                                  themeProvider.setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark);
-                                },
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                      
-                      SliverToBoxAdapter(
-                        child: _buildProfileHeader(userData, amIAdmin),
-                      ),
-
-                      SliverPersistentHeader(
-                        delegate: _SliverAppBarDelegate(
-                          TabBar(
-                            labelColor: AppColors.primary,
-                            unselectedLabelColor: Colors.grey,
-                            indicatorColor: AppColors.primary,
-                            indicatorWeight: 3,
-                            labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                            tabs: [
-                              const Tab(text: "Gönderiler"),
-                              if (_isOwnProfile) const Tab(text: "Kaydedilenler"),
-                            ],
-                          ),
+                                onPressed: () => _showSettingsModal(context, userData['role'] == 'admin'),
+                              ),
+                            
+                            // DÜZELTİLMİŞ TEMA BUTONU
+                            Consumer<ThemeProvider>(
+                              builder: (context, themeProvider, child) {
+                                final isSystemDark = MediaQuery.of(context).platformBrightness == Brightness.dark;
+                                final isDark = themeProvider.themeMode == ThemeMode.dark || 
+                                              (themeProvider.themeMode == ThemeMode.system && isSystemDark);
+                                
+                                return IconButton(
+                                  icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
+                                  color: Theme.of(context).textTheme.bodyLarge?.color,
+                                  onPressed: () {
+                                    themeProvider.setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark);
+                                  },
+                                );
+                              },
+                            ),
+                          ],
                         ),
-                        pinned: true,
-                      ),
-                    ];
-                  },
-                  body: TabBarView(
-                    children: [
-                      _buildPostsList(_targetUserId), 
-                      if (_isOwnProfile) 
-                        _buildSavedPostsList(List<String>.from(userData['savedPosts'] ?? [])),
-                    ],
+                        
+                        SliverToBoxAdapter(
+                          child: _buildProfileHeader(userData, amIAdmin),
+                        ),
+
+                        SliverPersistentHeader(
+                          delegate: _SliverAppBarDelegate(
+                                                      TabBar(
+                                                        dividerHeight: 0, // YENİ: Sekmelerin altındaki çizgiyi kaldır
+                                                        labelColor: AppColors.primary,
+                                                        unselectedLabelColor: Colors.grey,
+                                                        indicatorColor: AppColors.primary,
+                                                        indicatorWeight: 3,
+                                                        labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                                        tabs: [
+                                                          const Tab(text: "Gönderiler"),
+                                                          if (_isOwnProfile) const Tab(text: "Kaydedilenler"),
+                                                        ],
+                                                      ),                          ),
+                          pinned: true,
+                        ),
+                      ];
+                    },
+                    body: TabBarView(
+                      children: [
+                        _buildPostsList(_targetUserId), 
+                        if (_isOwnProfile) 
+                          _buildSavedPostsList(List<String>.from(userData['savedPosts'] ?? [])),
+                      ],
+                    ),
                   ),
                 ),
               );
@@ -340,57 +355,46 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     final String? xPlatform = data['x_platform'];
     final bool hasSocial = (github?.isNotEmpty ?? false) || (linkedin?.isNotEmpty ?? false) || (instagram?.isNotEmpty ?? false) || (xPlatform?.isNotEmpty ?? false);
 
+    final theme = Theme.of(context);
+    final cardColor = theme.cardColor;
+    final textColor = theme.textTheme.bodyLarge?.color;
+
     return Column(
       children: [
-        const SizedBox(height: 10),
+        const SizedBox(height: 20),
         
-        Container(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 20, spreadRadius: 5),
-            ],
-          ),
+        CircleAvatar(
+          radius: 55,
+          backgroundColor: theme.scaffoldBackgroundColor.withOpacity(0.5),
           child: CircleAvatar(
-            radius: 60,
+            radius: 50,
             backgroundColor: Colors.white,
-            child: avatarUrl.isNotEmpty
-                ? ClipOval(
-                    child: CachedNetworkImage(
-                      imageUrl: avatarUrl,
-                      memCacheWidth: 240,
-                      memCacheHeight: 240,
-                      fit: BoxFit.cover,
-                      width: 120,
-                      height: 120,
-                    ),
-                  )
-                : (name.isNotEmpty
-                    ? Text(name[0].toUpperCase(), style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: AppColors.primary))
-                    : null),
+            backgroundImage: avatarUrl.isNotEmpty ? CachedNetworkImageProvider(avatarUrl) : null,
+            child: avatarUrl.isEmpty && name.isNotEmpty
+                ? Text(name[0].toUpperCase(), style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: AppColors.primary))
+                : null,
           ),
         ),
         
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
 
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Text(
               name, 
               style: TextStyle(
-                fontSize: 26, 
-                fontWeight: FontWeight.w900, 
-                letterSpacing: 0.5,
-                color: Theme.of(context).textTheme.bodyLarge?.color
+                fontSize: 24, 
+                fontWeight: FontWeight.bold,
+                color: textColor
               )
             ),
             if (isUserAdmin) 
               const Padding(
                 padding: EdgeInsets.only(left: 6), 
-                child: Icon(Icons.verified, color: AppColors.primary, size: 24)
+                child: Icon(Icons.verified, color: AppColors.primary, size: 22)
               ),
-            // YENİ: Seviye Göstergesi
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -402,29 +406,44 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
             ),
           ],
         ),
+
         if (realName.isNotEmpty) 
-          Text(realName, style: TextStyle(fontSize: 16, color: Colors.grey[600], fontWeight: FontWeight.w500)),
+          Padding(
+            padding: const EdgeInsets.only(top: 2.0),
+            child: Text(realName, style: TextStyle(fontSize: 15, color: Colors.grey[600], fontWeight: FontWeight.w400)),
+          ),
 
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
 
+        if (bio.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40.0),
+            child: Text(
+              bio, 
+              textAlign: TextAlign.center, 
+              style: TextStyle(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.8), fontSize: 14, height: 1.4)
+            ),
+          ),
+
+        const SizedBox(height: 16),
+        
         if (university.isNotEmpty)
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 40),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             decoration: BoxDecoration(
               color: AppColors.primary.withOpacity(0.08),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.primary.withOpacity(0.2)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(FontAwesomeIcons.graduationCap, color: AppColors.primary, size: 14),
+                const Icon(FontAwesomeIcons.graduationCap, color: AppColors.primary, size: 13),
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
-                    "$university ${department.isNotEmpty ? '| $department' : ''}",
-                    style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13),
+                    "$university ${department.isNotEmpty ? '• $department' : ''}",
+                    style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12),
                     textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -433,61 +452,16 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
               ],
             ),
           ),
-
-        const SizedBox(height: 16),
-
-        if (badges.isNotEmpty)
-          SizedBox(
-            key: _badgesKey,
-            height: 50,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20), 
-              itemCount: badges.length,
-              itemBuilder: (context, index) {
-                final badgeId = badges[index];
-                final badge = allBadges.firstWhere((b) => b.id == badgeId, orElse: () => allBadges[0]);
-                return Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: Tooltip(
-                    message: badge.name,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: badge.color.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: badge.color.withOpacity(0.3)),
-                      ),
-                      child: FaIcon(badge.icon, size: 18, color: badge.color),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-
-        const SizedBox(height: 16),
-
-        if (bio.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              bio, 
-              textAlign: TextAlign.center, 
-              style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.8), fontSize: 14, height: 1.4)
-            ),
-          ),
-
-        const SizedBox(height: 20),
+          
+        const SizedBox(height: 24),
 
         Container(
           key: _statsKey,
-          margin: const EdgeInsets.symmetric(horizontal: 20),
-          padding: const EdgeInsets.symmetric(vertical: 16),
+          margin: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
+            color: cardColor.withOpacity(0.5),
             borderRadius: BorderRadius.circular(20),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))],
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -495,21 +469,19 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
               _buildStatItem("Takipçi", data['followerCount'] ?? 0,
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => KullaniciListesiEkrani(title: "$name Takipçileri", userIds: List<String>.from(data['followers'] ?? []))))
               ),
-              Container(height: 30, width: 1, color: Colors.grey.withOpacity(0.3)),
+              Container(height: 30, width: 1, color: Colors.grey.withOpacity(0.2)),
               _buildStatItem("Takip", data['followingCount'] ?? 0,
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => KullaniciListesiEkrani(title: "$name Takip Ettikleri", userIds: List<String>.from(data['following'] ?? []))))
               ),
-              Container(height: 30, width: 1, color: Colors.grey.withOpacity(0.3)),
+              Container(height: 30, width: 1, color: Colors.grey.withOpacity(0.2)),
               _buildStatItem("Gönderi", data['postCount'] ?? 0),
             ],
           ),
         ),
-
-        const SizedBox(height: 20),
-
+        
         if (hasSocial)
           Padding(
-            padding: const EdgeInsets.only(bottom: 20.0),
+            padding: const EdgeInsets.only(top: 20.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -521,36 +493,84 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
             ),
           ),
 
+        if (badges.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 24.0, left: 24, right: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("Kazanılan Rozetler", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 12),
+                SizedBox(
+                  key: _badgesKey,
+                  height: 40,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: badges.length,
+                    itemBuilder: (context, index) {
+                      final badgeId = badges[index];
+                      final badge = allBadges.firstWhere((b) => b.id == badgeId, orElse: () => allBadges[0]);
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: Tooltip(
+                          message: badge.name,
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: badge.color.withOpacity(0.15),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: badge.color.withOpacity(0.4), width: 1.5),
+                            ),
+                            child: Center(
+                              child: FaIcon(badge.icon, size: 16, color: badge.color),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        const SizedBox(height: 24),
+        
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
           child: _isOwnProfile
             ? SizedBox(
                 key: _actionButtonsKey,
                 width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
+                height: 48,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.edit, size: 18),
+                  label: const Text("Profili Düzenle"),
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilDuzenlemeEkrani())),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary, 
+                    foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    elevation: 4,
+                    textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    elevation: 2,
                   ),
-                  child: const Text("Profili Düzenle", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
               )
             : Row(
                 key: _actionButtonsKey,
                 children: [
                   Expanded(
+                    flex: 2,
                     child: SizedBox(
-                      height: 50,
+                      height: 48,
                       child: ElevatedButton(
                         onPressed: () => _toggleFollow(isFollowing),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: isFollowing ? Colors.grey[200] : AppColors.primary,
+                          backgroundColor: isFollowing ? Colors.grey.shade300 : AppColors.primary,
                           foregroundColor: isFollowing ? Colors.black87 : Colors.white,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          elevation: isFollowing ? 0 : 4,
+                          elevation: isFollowing ? 0 : 2,
                         ),
                         child: Text(isFollowing ? "Takibi Bırak" : "Takip Et", style: const TextStyle(fontWeight: FontWeight.bold)),
                       ),
@@ -558,8 +578,9 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                   ),
                   const SizedBox(width: 12),
                   Expanded(
+                    flex: 2,
                     child: SizedBox(
-                      height: 50,
+                      height: 48,
                       child: OutlinedButton(
                         onPressed: () {
                           final chatId = _getChatId(_currentUserId, _targetUserId);
@@ -571,9 +592,9 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                         },
                         style: OutlinedButton.styleFrom(
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          side: BorderSide(color: AppColors.primary.withOpacity(0.5), width: 1.5),
+                          side: BorderSide(color: AppColors.primary.withOpacity(0.7), width: 1.5),
                         ),
-                        child: const Text("Mesaj Gönder", style: TextStyle(fontWeight: FontWeight.bold)),
+                        child: const Text("Mesaj", style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ),
@@ -593,7 +614,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
             ),
           ),
 
-        const SizedBox(height: 20),
+        const SizedBox(height: 24),
       ],
     );
   }
@@ -603,23 +624,24 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
               count.toString(), 
               style: TextStyle(
-                fontSize: 20, 
-                fontWeight: FontWeight.w900, 
+                fontSize: 18, 
+                fontWeight: FontWeight.bold, 
                 color: Theme.of(context).textTheme.bodyLarge?.color
               )
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               label, 
               style: TextStyle(
                 color: Colors.grey[600], 
-                fontSize: 13, 
+                fontSize: 12, 
                 fontWeight: FontWeight.w500
               )
             ),
@@ -631,22 +653,16 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
 
   Widget _buildSocialIcon(IconData icon, String url) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: GestureDetector(
-        onTap: () => _launchURL(url),
-        child: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
-            shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)],
-          ),
-          child: FaIcon(icon, size: 20, color: Theme.of(context).iconTheme.color),
-        ),
+      padding: const EdgeInsets.symmetric(horizontal: 6.0),
+      child: IconButton(
+        icon: FaIcon(icon, size: 20),
+        color: Theme.of(context).textTheme.bodyMedium?.color,
+        visualDensity: VisualDensity.compact,
+        onPressed: () => _launchURL(url),
+        tooltip: url,
       ),
     );
   }
-
   Widget _buildPostsList(String userId) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -1016,7 +1032,7 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Container(
-      color: Theme.of(context).scaffoldBackgroundColor,
+      color: Colors.transparent,
       child: _tabBar,
     );
   }

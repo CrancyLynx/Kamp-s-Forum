@@ -81,10 +81,5 @@ flutter_launcher_icons:
 
 # Dosyanın en altına bu bloğu ekleyin:
 flutter_native_splash:
-  color: "#212121"
-  image: assets/images/app_icon.png # Logonuzun yolu
-  fullscreen: true
-  
-  # Android 12 ve üzeri için özel ayarlar (Zorunlu)
-  android_12:
-    image: assets/images/app_icon.png
+  color: "#FFFFFF"
+  color_dark: "#212121"

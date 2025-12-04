@@ -1,5 +1,7 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const axios = require("axios");
+const cheerio = require("cheerio");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -425,107 +427,74 @@ exports.recalculateUserCounters = functions.region(REGION).https.onCall(async (d
  * =================================================================================
  */
 
-// Ülke geneli resmi sınav tarihlerinin veritabanı (2025-2026)
-const getOfficialExamDates = () => {
-  return [
-    {
-      id: 'kpss_2025',
-      name: 'KPSS 2025',
-      date: new Date(2025, 4, 18), // 18 Mayıs 2025
-      description: 'Kamu Personeli Seçme Sınavı - Yazılı Sınav',
-      color: 'orange',
-      type: 'exam',
-      source: 'OSYM',
-      importance: 'high'
-    },
-    {
-      id: 'yks_2025',
-      name: 'YKS 2025',
-      date: new Date(2025, 5, 15), // 15 Haziran 2025
-      description: 'Yükseköğretim Kurumları Sınavı',
-      color: 'blue',
-      type: 'exam',
-      source: 'OSYM',
-      importance: 'high'
-    },
-    {
-      id: 'dus_2025',
-      name: 'DÜŞ 2025',
-      date: new Date(2025, 8, 22), // 22 Eylül 2025
-      description: 'Diş Hekimliği Uzmanlaşma Sınavı',
-      color: 'red',
-      type: 'exam',
-      source: 'OSYM',
-      importance: 'medium'
-    },
-    {
-      id: 'tus_2025',
-      name: 'TUS 2025',
-      date: new Date(2025, 3, 27), // 27 Nisan 2025
-      description: 'Tıp Uzmanlaşma Sınavı',
-      color: 'green',
-      type: 'exam',
-      source: 'OSYM',
-      importance: 'high'
-    },
-    {
-      id: 'ales_2025_1',
-      name: 'ALES 2025 (Bahar)',
-      date: new Date(2025, 4, 11), // 11 Mayıs 2025
-      description: 'Akademik Personel ve Lisansüstü Eğitim Giriş Sınavı - 1. Oturum',
-      color: 'purple',
-      type: 'exam',
-      source: 'OSYM',
-      importance: 'medium'
-    },
-    {
-      id: 'ales_2025_2',
-      name: 'ALES 2025 (Güz)',
-      date: new Date(2025, 8, 14), // 14 Eylül 2025
-      description: 'Akademik Personel ve Lisansüstü Eğitim Giriş Sınavı - 2. Oturum',
-      color: 'purple',
-      type: 'exam',
-      source: 'OSYM',
-      importance: 'medium'
-    },
-    {
-      id: 'oabt_2025',
-      name: 'ÖABT 2025',
-      date: new Date(2025, 6, 20), // 20 Temmuz 2025
-      description: 'Öğretmenlik Alan Bilgisi Testi',
-      color: 'teal',
-      type: 'exam',
-      source: 'OSYM',
-      importance: 'high'
-    },
-    {
-      id: 'kamu_personeli_yazili',
-      name: 'Yazılı Sınavlar (Kamu Personeli)',
-      date: new Date(2025, 10, 9), // 9 Kasım 2025
-      description: 'Kamu kurumları yazılı sınav takvimi',
-      color: 'amber',
-      type: 'exam',
-      source: 'DPB',
-      importance: 'medium'
-    },
-    {
-      id: 'kpss_2026',
-      name: 'KPSS 2026',
-      date: new Date(2026, 4, 17), // 17 Mayıs 2026
-      description: 'Kamu Personeli Seçme Sınavı - Yazılı Sınav',
-      color: 'orange',
-      type: 'exam',
-      source: 'OSYM',
-      importance: 'high'
+// Function to parse Turkish date strings
+const parseTurkishDate = (dateString) => {
+  if (!dateString || dateString.trim() === '') return null;
+  const parts = dateString.split('.');
+  if (parts.length !== 3) return null;
+  // Note: Months are 0-indexed in JavaScript Dates
+  return new Date(parts[2], parts[1] - 1, parts[0]);
+};
+
+// Scrapes exam data from ÖSYM's website for a given year
+const scrapeOsymExams = async (year) => {
+  try {
+    const urls = {
+      2025: "https://www.osym.gov.tr/TR,8709/2025-yili-sinav-takvimi.html",
+      2026: "https://www.osym.gov.tr/TR,29560/2026-yili-sinav-takvimi.html"
+    };
+
+    const url = urls[year];
+    if (!url) {
+      console.error(`No URL found for year: ${year}`);
+      return [];
     }
-  ];
+
+    const { data } = await axios.get(url);
+    const $ = cheerio.load(data);
+    const exams = [];
+    const relevantExams = ["KPSS", "YKS", "ALES", "DGS", "TUS", "DUS", "YÖKDİL"];
+
+    $('table.table > tbody > tr').each((i, el) => {
+      const examName = $(el).find('td:nth-child(1)').text().trim();
+      
+      if (relevantExams.some(keyword => examName.includes(keyword))) {
+        const examDateStr = $(el).find('td:nth-child(2)').text().trim();
+        const appStartDateStr = $(el).find('td:nth-child(3)').text().trim();
+        const resultDateStr = $(el).find('td:nth-child(4)').text().trim();
+
+        const examDate = parseTurkishDate(examDateStr);
+
+        if (examName && examDate) {
+          exams.push({
+            id: `${year}_${examName.replace(/\s+/g, '_').toLowerCase()}`,
+            name: examName,
+            date: examDate,
+            description: `Başvuru: ${appStartDateStr}, Sonuç: ${resultDateStr}`,
+            color: 'blue',
+            type: 'exam',
+            source: 'OSYM',
+            importance: 'high'
+          });
+        }
+      }
+    });
+
+    return exams;
+  } catch (error) {
+    console.error(`Error scraping ÖSYM website for year ${year}:`, error);
+    return []; // Return an empty array on error
+  }
 };
 
 // HTTP isteği ile sınav tarihlerini güncelle (manuel tetikleme)
 exports.updateExamDates = functions.region(REGION).https.onCall(
   async (data, context) => {
     try {
-      const examDates = getOfficialExamDates();
+      const exams2025 = await scrapeOsymExams(2025);
+      const exams2026 = await scrapeOsymExams(2026);
+      const examDates = [...exams2025, ...exams2026];
+      
       const batch = db.batch();
       let updateCount = 0;
 
@@ -564,7 +533,9 @@ exports.scheduleExamDatesUpdate = functions.region(REGION)
   .timeZone('Europe/Istanbul')
   .onRun(async (context) => {
     try {
-      const examDates = getOfficialExamDates();
+      const exams2025 = await scrapeOsymExams(2025);
+      const exams2026 = await scrapeOsymExams(2026);
+      const examDates = [...exams2025, ...exams2026];
       const batch = db.batch();
       let updateCount = 0;
       const now = new Date();

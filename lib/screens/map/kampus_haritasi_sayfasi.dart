@@ -48,17 +48,18 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   String _currentFilter = 'all';
   Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
-  Set<Circle> _radiusCircles = {};
+  Set<Circle> _circles = {}; // DÜZELTME: _radiusCircles -> _circles
   LatLng? _userLocation;
+  double _currentAccuracy = 0.0; // YENİ: GPS doğruluğu için
   BitmapDescriptor? _iconUser;
   bool _isLoading = false;
   bool _isRouteActive = false;
 
-  // ✅ RADIUS KONTROLLERİ
-  double _searchRadiusKm = 5.0; // Başlangıç: 5km
-  bool _showRadiusCircle = false; // Sadece filter != 'all' olunca göster
+  // RADIUS KONTROLLERİ
+  double _searchRadiusKm = 5.0; 
+  bool _showRadiusCircle = false; 
   
-  // ✅ YENİ: Error state tracking
+  // YENİ: Error state tracking
   String? _locationError;
   bool _permissionDenied = false;
   
@@ -73,7 +74,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   final TextEditingController _searchController = TextEditingController();
   List<Map<String, dynamic>> _searchResults = [];
   Timer? _debounce;
-  DateTime? _lastApiCall; // ✅ Rate limiting
+  DateTime? _lastApiCall;
 
   // Global Key'ler (Tutorial için)
   final GlobalKey _searchBarKey = GlobalKey();
@@ -107,10 +108,9 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     super.initState();
     _currentFilter = widget.initialFilter;
     _initializeMapSequence();
-    _fetchUserUniversity(); // Üniversite bilgisini çek
+    _fetchUserUniversity();
   }
 
-  // Kullanıcının kayıtlı üniversitesini öğren
   Future<void> _fetchUserUniversity() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -118,7 +118,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
         final doc = await FirebaseFirestore.instance.collection('kullanicilar').doc(user.uid).get();
         if (doc.exists && mounted) {
           final data = doc.data();
-          // submissionData içinden veya ana profilden üniversite adını al
           String? uniName = data?['universite'];
           if (uniName == null && data?['submissionData'] != null) {
              uniName = data?['submissionData']['university'];
@@ -157,7 +156,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     }
   }
 
-  // --- 1. Marker İkonlarını Oluşturma ---
   Future<void> _prepareCustomMarkers() async {
     try {
       _iconUser = await _createMarkerBitmap(Icons.person_pin, AppColors.primary);
@@ -201,7 +199,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     return BitmapDescriptor.fromBytes(data!.buffer.asUint8List());
   }
 
-  // --- 2. Kullanıcı Konumu (DÜZELTİLEN KISIM) ---
   Future<void> _initializeLocationStream() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -236,43 +233,23 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
         return;
       }
 
-      // Platforma özel LocationSettings
       LocationSettings locationSettings;
-      try {
-        if (Platform.isAndroid) {
-          // ✅ GÜNCELLENDİ: bestForNavigation (maksimum doğruluk - navigasyon için)
-          // ✅ GÜNCELLENDİ: intervalDuration 2 saniyeye düşürüldü (daha hızlı güncellemeler)
-          // ✅ GÜNCELLENDİ: distanceFilter 2 metreye düşürüldü (anında güncelleme)
-          // ✅ GÜNCELLENDİ: pauseLocationUpdatesAutomatically false (sürekli takip)
-          locationSettings = AndroidSettings(
-            accuracy: LocationAccuracy.bestForNavigation,
-            distanceFilter: 2,
-            intervalDuration: const Duration(seconds: 2),
-            forceLocationManager: false,
-          );
-        } else if (Platform.isIOS) {
-          locationSettings = AppleSettings(
-            accuracy: LocationAccuracy.bestForNavigation,
-            activityType: ActivityType.fitness,
-            distanceFilter: 2,
-            pauseLocationUpdatesAutomatically: false,
-          );
-        } else {
-          locationSettings = const LocationSettings(
-            accuracy: LocationAccuracy.bestForNavigation,
-            distanceFilter: 2,
-          );
-        }
-      } catch (e) {
-        // LocationSettings başarısız olursa fallback
-        debugPrint("LocationSettings hatası: $e");
-        locationSettings = const LocationSettings(
-          accuracy: LocationAccuracy.best,
-          distanceFilter: 5,
+      if (Platform.isAndroid) {
+        locationSettings = AndroidSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          distanceFilter: 0, // YENİ: En ufak hareketi bile yakala
+          forceLocationManager: true, // YENİ: Sadece GPS kullanmaya zorla
+          intervalDuration: const Duration(seconds: 2),
+        );
+      } else {
+        locationSettings = AppleSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          activityType: ActivityType.fitness,
+          distanceFilter: 0,
+          pauseLocationUpdatesAutomatically: false,
         );
       }
 
-      // İlk konum al - ✅ bestForNavigation ile (maksimum doğruluk)
       try {
         Position initialPos = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.bestForNavigation,
@@ -282,10 +259,10 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
         if (mounted) {
           setState(() {
             _userLocation = LatLng(initialPos.latitude, initialPos.longitude);
-            _locationError = null; // Hata temizle
+            _currentAccuracy = initialPos.accuracy;
+            _locationError = null;
           });
           
-          // Marker'ları güncelle
           _updateMarkers();
           
           if (widget.initialFocus == null && _mapController != null) {
@@ -296,10 +273,8 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
         }
       } catch (e) {
         debugPrint("İlk konum alınamadı: $e");
-        // Hata olsa da stream'i başlat
       }
 
-      // Stream dinleme
       _locationSubscription = Geolocator.getPositionStream(
         locationSettings: locationSettings,
       ).listen(
@@ -307,6 +282,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
           if (mounted) {
             setState(() {
               _userLocation = LatLng(pos.latitude, pos.longitude);
+              _currentAccuracy = pos.accuracy; // YENİ: Doğruluk bilgisini anlık güncelle
               _updateMarkers();
             });
           }
@@ -327,7 +303,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     }
   }
 
-  // --- 3. Mekanları Getirme (Firestore + Google Places) ---
   Future<void> _loadPlaces() async {
     if (!mounted) return;
     await _firestoreSubscription?.cancel();
@@ -351,13 +326,11 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     }
   }
 
-  // --- Markerları Birleştirme ---
   void _updateMarkers() {
     if (!mounted) return;
     Set<Marker> newMarkers = {};
     Set<Circle> newCircles = {};
 
-    // ✅ KULLANICI KONUM MARKER'I - TÜM KATEGORİLERDE GÖSTER
     if (_userLocation != null) {
       newMarkers.add(
         Marker(
@@ -366,10 +339,23 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
           icon: _iconUser ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
           infoWindow: const InfoWindow(title: 'Konumun'),
           zIndex: 3,
+          anchor: const Offset(0.5, 0.5), // YENİ: İkonu ortala
         ),
       );
       
-      // ✅ RADIUS DÜLESİ - Sadece 'all' dışında ve açıksa göster
+      // YENİ: GPS Doğruluk Dairesi
+      newCircles.add(
+        Circle(
+          circleId: const CircleId('accuracy_circle'),
+          center: _userLocation!,
+          radius: _currentAccuracy, // Konumun doğruluk (sapma) payı
+          fillColor: Colors.blue.withOpacity(0.1),
+          strokeColor: Colors.blue.withOpacity(0.3),
+          strokeWidth: 1,
+          zIndex: 0,
+        )
+      );
+
       if (_currentFilter != 'all' && _showRadiusCircle) {
         newCircles.add(
           Circle(
@@ -385,7 +371,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       }
     }
 
-    // Firestore lokasyonları (Radius ile filtrele)
     for (var loc in _firestoreLocations) {
       bool isInRadius = true;
       if (_userLocation != null && _currentFilter != 'all' && _showRadiusCircle) {
@@ -404,7 +389,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       }
     }
 
-    // Google Places lokasyonları
     for (var loc in _googleLocations) {
       bool isDuplicate = _firestoreLocations.any((f) {
         double dist = _calculateDistance(f.position, loc.position);
@@ -428,22 +412,19 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       }
     }
 
-    // Arama sonuçları marker'ları
     final searchMarkers = _markers.where((m) => m.markerId.value.startsWith("s_"));
     newMarkers.addAll(searchMarkers);
 
     setState(() {
       _markers = newMarkers;
-      _radiusCircles = newCircles;
+      _circles = newCircles; // DÜZELTME: _radiusCircles -> _circles
     });
     
-    // ✅ ZOOM OPTIMIZATION
     if (_mapController != null && _showRadiusCircle && _userLocation != null) {
       _optimizeZoomLevel();
     }
   }
 
-  // ✅ ZOOM SEVIYESINI OTOMATİK AYARLA
   void _optimizeZoomLevel() {
     if (_mapController == null || _markers.isEmpty) return;
     double baseZoom = 15.0;
@@ -500,7 +481,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       return;
     }
 
-    // ✅ Rate limiting: API'yi en fazla 5 saniyede bir çağır
     final now = DateTime.now();
     if (_lastApiCall != null && now.difference(_lastApiCall!).inSeconds < 5) {
       return;
@@ -530,7 +510,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     setState(() { 
       _searchResults = []; 
       _isLoading = true;
-      _isRouteActive = false; // ✅ Rota temizle
+      _isRouteActive = false; 
     });
     _searchController.clear();
 
@@ -552,7 +532,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
         
         if (_mapController != null) {
           _mapController?.animateCamera(CameraUpdate.newLatLngZoom(location.position, 17));
-          await Future.delayed(const Duration(milliseconds: 300)); // ✅ Animation bitmesini bekle
+          await Future.delayed(const Duration(milliseconds: 300));
           if (mounted) {
             _showLocationDetails(location);
           }
@@ -653,7 +633,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     return LatLngBounds(northeast: LatLng(x1!, y1!), southwest: LatLng(x0!, y0!));
   }
 
-  // --- YENİ: Ring Seferleri Paneli ---
   void _showRingSchedule() {
     if (_userUniversity == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profilinizde üniversite bilgisi bulunamadı.")));
@@ -664,11 +643,10 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       context: context,
       isScrollControlled: true, 
       backgroundColor: Colors.transparent,
-      builder: (context) => RingSeferleriSheet(universityName: _userUniversity!), // Parametre gönderiliyor
+      builder: (context) => RingSeferleriSheet(universityName: _userUniversity!),
     );
   }
 
-  // --- Yorum/Puanlama Ekranları ---
   void _showAddReviewDialog(LocationModel location) {
     final pageContext = context;
     double rating = 3.0;
@@ -741,7 +719,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     );
   }
 
-  // --- Detay BottomSheet ---
   void _showLocationDetails(LocationModel location) {
     String distanceText = "Bilinmiyor";
     String timeText = "---";
@@ -772,7 +749,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
               controller: scrollController,
               padding: EdgeInsets.zero,
               children: [
-                // Resim Alanı
                 SizedBox(
                   height: 200,
                   child: Stack(
@@ -806,7 +782,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                   ),
                 ),
                 
-                // İçerik Alanı
                 Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
@@ -835,7 +810,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                       ),
                       const SizedBox(height: 24),
 
-                      // Aksiyon Butonları
                       Row(
                         children: [
                           Expanded(
@@ -901,7 +875,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     );
   }
 
-  // --- Tutorial ---
   void _showTutorial() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       MaskotHelper.checkAndShow(context,
@@ -938,7 +911,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     });
   }
 
-  // --- Küçük UI Bileşenleri ---
   Widget _buildInfoBadge(IconData icon, String text, Color color) {
     return Container(
       margin: const EdgeInsets.only(right: 10),
@@ -1017,20 +989,41 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     return Scaffold(
       body: Stack(
         children: [
-          // 1. HARİTA KATMANI
           GoogleMap(
             initialCameraPosition: const CameraPosition(target: LatLng(41.0082, 28.9784), zoom: 12),
             onMapCreated: _onMapCreated,
             markers: _markers,
             polylines: _polylines,
-            circles: _radiusCircles,
+            circles: _circles,
             myLocationEnabled: false, 
             myLocationButtonEnabled: false, 
             zoomControlsEnabled: false,
             mapToolbarEnabled: false,
           ),
 
-          // ✅ YENİ: Konum izni hata durumu gösterimi
+          // YENİ: Gradient Overlay Katmanı
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Container(
+                height: 250, // Geniş bir alan vererek yumuşak geçiş sağla
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Theme.of(context).scaffoldBackgroundColor,
+                      Theme.of(context).scaffoldBackgroundColor.withOpacity(0),
+                    ],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: const [0.4, 1.0], // Geçişin nerede biteceğini ayarla
+                  ),
+                ),
+              ),
+            ),
+          ),
+
           if (_permissionDenied)
             Positioned(
               top: 0,
@@ -1087,18 +1080,17 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
               ),
             ),
 
-          // 2. ARAMA VE FİLTRE BAR (SafeArea içinde)
+          // YENİ: UI Katmanı (Gradient'in üzerinde)
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Arama Çubuğu
                   Container(
                     key: _searchBarKey,
                     decoration: BoxDecoration(
-                      color: Theme.of(context).cardColor,
+                      color: Theme.of(context).cardColor.withOpacity(0.95), // YARI-ŞEFFAF ARKA PLAN
                       borderRadius: BorderRadius.circular(30),
                       boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))],
                     ),
@@ -1123,6 +1115,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                             icon: const Icon(Icons.clear),
                             onPressed: () {
                               _searchController.clear();
+                              _onSearchChanged('');
                             },
                           ),
                         const SizedBox(width: 8),
@@ -1130,7 +1123,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                     ),
                   ),
 
-                  // Arama Sonuçları Listesi
                   if (_searchResults.isNotEmpty)
                     Container(
                       margin: const EdgeInsets.only(top: 8),
@@ -1158,7 +1150,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
 
                   const SizedBox(height: 12),
 
-                  // Filtre Çipleri
                   if (_searchResults.isEmpty)
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
@@ -1178,7 +1169,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
             ),
           ),
 
-          // ✅ YENİ: RADIUS KONTROL PANELİ
           if (_showRadiusCircle && _userLocation != null)
             Positioned(
               left: 16,
@@ -1201,7 +1191,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    // Bottom fade gradient (çizgi hissi olmadan)
                     Positioned(
                       bottom: -12,
                       left: -12,
@@ -1263,7 +1252,6 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
               ),
             ),
 
-          // 3. YÜKLENİYOR İNDİKATÖRÜ
           if (_isLoading)
             Positioned(
               top: 130, left: 0, right: 0,
@@ -1283,20 +1271,18 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
               ),
             ),
 
-          // 4. ALT AKSİYON BUTONLARI (Konum & Rota & Ring)
           Positioned(
             bottom: 30, right: 20,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // YENİ: Ring Seferleri Butonu
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: FloatingActionButton.small(
                     heroTag: 'ringSchedule',
                     backgroundColor: Colors.amber[700],
                     child: const Icon(Icons.directions_bus, color: Colors.white),
-                    onPressed: _showRingSchedule, // Yeni fonksiyon
+                    onPressed: _showRingSchedule, 
                   ),
                 ),
 
@@ -1325,7 +1311,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                     if (_userLocation != null) {
                       _mapController?.animateCamera(CameraUpdate.newLatLngZoom(_userLocation!, 16));
                     } else {
-                      _initializeLocationStream(); // Konum yoksa tekrar iste
+                      _initializeLocationStream(); 
                     }
                   },
                 ),

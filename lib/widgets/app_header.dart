@@ -78,16 +78,6 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
         (isDarkMode ? Colors.grey[900] : Colors.white),
       foregroundColor: isDarkMode ? Colors.white : Colors.black87,
       surfaceTintColor: Colors.transparent,
-      // Modern görünüm için bottom border
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(1),
-        child: Container(
-          color: isDarkMode 
-            ? Colors.white.withOpacity(0.05)
-            : Colors.black.withOpacity(0.05),
-          height: 1,
-        ),
-      ),
     );
   }
 }
@@ -136,15 +126,6 @@ class SimpleAppHeader extends StatelessWidget implements PreferredSizeWidget {
         : Colors.white,
       foregroundColor: isDarkMode ? Colors.white : Colors.black87,
       surfaceTintColor: Colors.transparent,
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(1),
-        child: Container(
-          color: isDarkMode 
-            ? Colors.white.withOpacity(0.05)
-            : Colors.black.withOpacity(0.05),
-          height: 1,
-        ),
-      ),
     );
   }
 }
@@ -156,6 +137,7 @@ class PanelHeader extends StatelessWidget {
   final IconData icon;
   final Color accentColor;
   final Widget? trailing;
+  final bool transparent;
 
   const PanelHeader({
     super.key,
@@ -164,6 +146,7 @@ class PanelHeader extends StatelessWidget {
     required this.icon,
     this.accentColor = AppColors.primary,
     this.trailing,
+    this.transparent = false,
   });
 
   @override
@@ -174,8 +157,8 @@ class PanelHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: bgColor,
-        gradient: LinearGradient(
+        color: transparent ? Colors.transparent : bgColor,
+        gradient: transparent ? null : LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
