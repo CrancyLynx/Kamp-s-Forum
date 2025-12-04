@@ -14,6 +14,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 // Servis ve Yardımcılar
 import '../../services/map_data_service.dart';
+import '../../services/phase2_services.dart'; // LocationMarkerService için
+import '../../models/phase2_models.dart'; // LocationMarker model için
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/maskot_helper.dart';
@@ -65,6 +67,10 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   
   // Kullanıcı Üniversitesi (Ring sistemi için)
   String? _userUniversity;
+
+  // YENİ: Location Markers
+  bool _showCustomMarkers = true;
+  List<LocationMarker> _customLocationMarkers = [];
 
   // Veri Havuzları
   List<LocationModel> _firestoreLocations = [];
@@ -148,6 +154,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       await _prepareCustomMarkers();
       await _initializeLocationStream();
       await _loadPlaces();
+      await _loadCustomLocationMarkers();
       if (mounted) _showTutorial();
     } catch (e) {
       debugPrint("Harita başlatma hatası: $e");
@@ -512,6 +519,23 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
 
     final searchMarkers = _markers.where((m) => m.markerId.value.startsWith("s_"));
     newMarkers.addAll(searchMarkers);
+
+    // YENİ: Custom location markers ekle
+    if (_showCustomMarkers) {
+      for (var marker in _customLocationMarkers) {
+        final iconColor = _getMarkerColorByType(marker.iconType);
+        newMarkers.add(Marker(
+          markerId: MarkerId("cm_${marker.id}"),
+          position: LatLng(marker.latitude, marker.longitude),
+          icon: BitmapDescriptor.defaultMarkerWithHue(_getHueForColor(iconColor)),
+          infoWindow: InfoWindow(
+            title: marker.name,
+            snippet: marker.description,
+          ),
+          onTap: () => _showCustomMarkerDetails(marker),
+        ));
+      }
+    }
 
     setState(() {
       _markers = newMarkers;
@@ -1517,6 +1541,87 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // YENİ: Location Marker yardımcı metodlar
+  Future<void> _loadCustomLocationMarkers() async {
+    try {
+      final markers = await LocationMarkerService.getAllMarkers().first;
+      if (mounted) {
+        setState(() {
+          _customLocationMarkers = markers;
+        });
+        _updateMarkers();
+      }
+    } catch (e) {
+      debugPrint("Location markers yükleme hatası: $e");
+    }
+  }
+
+  Color _getMarkerColorByType(String iconType) {
+    switch (iconType.toLowerCase()) {
+      case 'canteen':
+        return Colors.orangeAccent;
+      case 'library':
+        return Colors.purpleAccent;
+      case 'classroom':
+        return Colors.blueAccent;
+      case 'event':
+        return Colors.redAccent;
+      default:
+        return Colors.greenAccent;
+    }
+  }
+
+  double _getHueForColor(Color color) {
+    // Renk değerini HSV hue değerine dönüştür
+    if (color == Colors.orangeAccent) return BitmapDescriptor.hueOrange;
+    if (color == Colors.purpleAccent) return BitmapDescriptor.hueViolet;
+    if (color == Colors.blueAccent) return BitmapDescriptor.hueBlue;
+    if (color == Colors.redAccent) return BitmapDescriptor.hueRed;
+    return BitmapDescriptor.hueGreen;
+  }
+
+  void _showCustomMarkerDetails(LocationMarker marker) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(marker.name),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Kategori: ${marker.category}'),
+            const SizedBox(height: 8),
+            Text('Tür: ${marker.iconType}'),
+            const SizedBox(height: 8),
+            Text(marker.description),
+            const SizedBox(height: 8),
+            Text('Konum: (${marker.latitude.toStringAsFixed(4)}, ${marker.longitude.toStringAsFixed(4)})'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Kapat'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (_mapController != null) {
+                _mapController?.animateCamera(
+                  CameraUpdate.newLatLngZoom(
+                    LatLng(marker.latitude, marker.longitude),
+                    16,
+                  ),
+                );
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Merkeze Al'),
           ),
         ],
       ),

@@ -258,6 +258,93 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
     }
   }
 
+  void _showReportDialog() {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (widget.isGuest || currentUserId == null) {
+      widget.onShowLoginRequired();
+      return;
+    }
+
+    final descriptionController = TextEditingController();
+    String selectedReason = 'spam';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Gönderiyi Bildir'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Neden bildiriyorsunuz?', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              StatefulBuilder(
+                builder: (context, setState) => DropdownButton<String>(
+                  value: selectedReason,
+                  isExpanded: true,
+                  items: ['spam', 'inappropriate', 'harassment', 'misinformation', 'copyright', 'other']
+                      .map((reason) => DropdownMenuItem(
+                            value: reason,
+                            child: Text(reason),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    setState(() => selectedReason = value ?? 'spam');
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('Açıklama (isteğe bağlı)', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: descriptionController,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  hintText: 'Neler yanlış olduğunu açıklayın...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await FirebaseFirestore.instance.collection('reports').add({
+                  'reportedUserId': widget.authorUserId,
+                  'reportType': 'post',
+                  'reportedItemId': widget.postId,
+                  'reason': selectedReason,
+                  'description': descriptionController.text,
+                  'reporterUserId': currentUserId,
+                  'status': 'pending',
+                  'createdAt': Timestamp.now(),
+                });
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Gönderi bildirildi. Teşekkürler!'), backgroundColor: AppColors.success),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  _showErrorDialog('Bildir gönderirken hata oluştu');
+                }
+              }
+            },
+            child: const Text('Bildir'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _checkAndAwardLikeBadges(DocumentReference authorRef) async {
     final authorSnapshot = await authorRef.get();
     if (!authorSnapshot.exists) return;
@@ -453,13 +540,19 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                                 const SizedBox(width: 6),
                                 Container(width: 3, height: 3, decoration: const BoxDecoration(color: Colors.grey, shape: BoxShape.circle)),
                                 const SizedBox(width: 6),
-                                Text(widget.kategori, style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w500)),
+                                Flexible(
+                                  child: Text(widget.kategori, style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
+                                ),
                               ],
                             ),
                           ],
                         ),
                       ),
-                                            if (widget.authorBadges.isNotEmpty) _buildAuthorBadges(widget.authorBadges),
+                      if (widget.authorBadges.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8.0),
+                          child: _buildAuthorBadges(widget.authorBadges),
+                        ),
                       const Spacer(),
                       if (!widget.isGuest && (FirebaseAuth.instance.currentUser?.uid == widget.authorUserId || widget.isAdmin))
                         PopupMenuButton<String>(
@@ -555,6 +648,10 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                         children: [
                           IconButton(onPressed: () => _toggleSave(FirebaseAuth.instance.currentUser?.uid, widget.isSaved), icon: Icon(widget.isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded, color: widget.isSaved ? AppColors.primary : Colors.grey)),
                           if (widget.isAdmin) IconButton(onPressed: _togglePin, icon: FaIcon(FontAwesomeIcons.thumbtack, color: widget.isPinned ? AppColors.primary : Colors.grey)),
+                          IconButton(
+                            onPressed: _showReportDialog,
+                            icon: const Icon(Icons.flag_outlined, color: Colors.grey, size: 22),
+                          ),
                         ],
                       ),
                     ],

@@ -1,7 +1,166 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/phase2_models.dart';
+import '../models/emoji_sticker_model.dart' as emoji_model;
 
+/// NEWS SERVICE
+class NewsService {
+  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  /// Haber yayınla
+  static Future<String> publishNews(News news) async {
+    try {
+      final docRef = await _firestore.collection('haberler').add(news.toFirestore());
+      return docRef.id;
+    } catch (e) {
+      throw Exception('Haber yayınlama hatası: $e');
+    }
+  }
+
+  /// Haberi güncelle
+  static Future<void> updateNews(String newsId, News news) async {
+    try {
+      await _firestore.collection('haberler').doc(newsId).update(news.toFirestore());
+    } catch (e) {
+      throw Exception('Haber güncelleme hatası: $e');
+    }
+  }
+
+  /// Haberi sil
+  static Future<void> deleteNews(String newsId) async {
+    try {
+      await _firestore.collection('haberler').doc(newsId).delete();
+    } catch (e) {
+      throw Exception('Haber silme hatası: $e');
+    }
+  }
+
+  /// Tüm haberler (aktif)
+  static Stream<List<News>> getActiveNews() {
+    return _firestore
+        .collection('haberler')
+        .where('isPublished', isEqualTo: true)
+        .orderBy('publishedAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => News.fromFirestore(doc))
+            .toList());
+  }
+
+  /// Kategoriye göre haberler
+  static Stream<List<News>> getNewsByCategory(String category) {
+    return _firestore
+        .collection('haberler')
+        .where('category', isEqualTo: category)
+        .where('isPublished', isEqualTo: true)
+        .orderBy('publishedAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => News.fromFirestore(doc))
+            .toList());
+  }
+
+  /// Sabitlenmiş haberler
+  static Stream<List<News>> getPinnedNews() {
+    return _firestore
+        .collection('haberler')
+        .where('isPinned', isEqualTo: true)
+        .where('isPublished', isEqualTo: true)
+        .orderBy('publishedAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => News.fromFirestore(doc))
+            .toList());
+  }
+
+  /// Haber sabitleme
+  static Future<void> pinNews(String newsId, bool isPinned) async {
+    try {
+      await _firestore.collection('haberler').doc(newsId).update({
+        'isPinned': isPinned,
+      });
+    } catch (e) {
+      throw Exception('Haber sabitleme hatası: $e');
+    }
+  }
+}
+
+/// EMOJI & STICKER SERVICE
+class EmojiStickerService {
+  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  /// Emoji paketi getir
+  static Stream<List<EmojiPack>> getEmojiPacks() {
+    return _firestore
+        .collection('emoji_packs')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => EmojiPack.fromFirestore(doc))
+            .toList());
+  }
+
+  /// Paket emoji'leri getir
+  static Stream<List<dynamic>> getEmojisByPack(String packId) {
+    return _firestore
+        .collection('emoji_packs')
+        .doc(packId)
+        .collection('emojis')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => emoji_model.Emoji.fromMap(doc.data()))
+            .toList());
+  }
+
+  /// Emoji reaction ekle
+  static Future<String> addEmojiReaction({
+    required String messageId,
+    required String emoji,
+    required String userId,
+  }) async {
+    try {
+      final docRef = await _firestore
+          .collection('messages')
+          .doc(messageId)
+          .collection('reactions')
+          .add({
+            'emoji': emoji,
+            'userId': userId,
+            'addedAt': Timestamp.now(),
+          });
+      return docRef.id;
+    } catch (e) {
+      throw Exception('Emoji reaction ekleme hatası: $e');
+    }
+  }
+
+  /// Mesaj reactions
+  static Stream<List<emoji_model.EmojiReaction>> getMessageReactions(String messageId) {
+    return _firestore
+        .collection('messages')
+        .doc(messageId)
+        .collection('reactions')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => emoji_model.EmojiReaction.fromFirestore(doc))
+            .toList());
+  }
+
+  /// Reaction kaldır
+  static Future<void> removeEmojiReaction(String messageId, String reactionId) async {
+    try {
+      await _firestore
+          .collection('messages')
+          .doc(messageId)
+          .collection('reactions')
+          .doc(reactionId)
+          .delete();
+    } catch (e) {
+      throw Exception('Reaction kaldırma hatası: $e');
+    }
+  }
+}
+
+/// LOCATION MARKER SERVICE
 class LocationMarkerService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -48,6 +207,17 @@ class LocationMarkerService {
     return _firestore
         .collection('location_markers')
         .where('category', isEqualTo: category)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => LocationMarker.fromFirestore(doc))
+            .toList());
+  }
+
+  /// İkon tipine göre işaretler (getMarkersByType alias)
+  static Stream<List<LocationMarker>> getMarkersByType(String iconType) {
+    return _firestore
+        .collection('location_markers')
+        .where('iconType', isEqualTo: iconType)
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => LocationMarker.fromFirestore(doc))

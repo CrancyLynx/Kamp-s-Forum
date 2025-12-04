@@ -21,6 +21,7 @@ import '../../services/university_service.dart';
 import '../../utils/maskot_helper.dart';
 import '../../services/image_compression_service.dart';
 import '../../services/image_cache_manager.dart';
+import 'notification_settings_dialog.dart';
 
 class ProfilDuzenlemeEkrani extends StatefulWidget {
   const ProfilDuzenlemeEkrani({super.key});
@@ -1209,6 +1210,15 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
       appBar: SimpleAppHeader(
         title: "Profili Düzenle",
         actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications, color: AppColors.primary),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => const NotificationSettingsDialog(),
+              );
+            },
+          ),
           IconButton(
             key: _saveButtonKey,
             icon: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)) : const Icon(Icons.check_rounded, color: AppColors.primary),

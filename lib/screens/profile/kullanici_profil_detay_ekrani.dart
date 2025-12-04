@@ -362,6 +362,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                         SliverPersistentHeader(
                           delegate: _SliverAppBarDelegate(
                                                       TabBar(
+                                                        isScrollable: true,
                                                         dividerHeight: 0, // YENİ: Sekmelerin altındaki çizgiyi kaldır
                                                         labelColor: AppColors.primary,
                                                         unselectedLabelColor: Colors.grey,
@@ -866,8 +867,12 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
 
     final idsToShow = savedPostIds.reversed.take(10).toList();
 
-    return FutureBuilder<List<DocumentSnapshot>>(
-      future: Future.wait(idsToShow.map((id) => FirebaseFirestore.instance.collection('gonderiler').doc(id).get())),
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('gonderiler')
+          .where(FieldPath.documentId, whereIn: idsToShow)
+          .orderBy('zaman', descending: true)
+          .snapshots(),
       builder: (context, snapshot) {
         // Loading state
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -891,14 +896,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                 const SizedBox(height: 15),
                 ElevatedButton(
                   onPressed: () {
-                    // Sayfayı yenile
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(
-                        builder: (context) => KullaniciProfilDetayEkrani(
-                          userId: _targetUserId,
-                        ),
-                      ),
-                    );
+                    setState(() {});
                   },
                   child: const Text("Yeniden Dene"),
                 ),
@@ -907,11 +905,8 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
           );
         }
 
-        // Docs filtering
-        final docs = snapshot.data?.where((doc) => doc.exists).toList() ?? [];
-        
         // No data state
-        if (docs.isEmpty) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -928,6 +923,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
         }
 
         // Success state
+        final docs = snapshot.data!.docs;
         return ListView.builder(
           padding: const EdgeInsets.all(12),
           itemCount: docs.length,

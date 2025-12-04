@@ -12,7 +12,8 @@ import '../../providers/blocked_users_provider.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/guest_security_helper.dart';
 import '../../widgets/app_header.dart';
-import '../../widgets/typing_indicator.dart'; 
+import '../../widgets/typing_indicator.dart';
+import '../../widgets/emoji_picker_widget.dart'; 
 
 class SohbetDetayEkrani extends StatefulWidget {
   final String chatId;
@@ -591,6 +592,22 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
                 child: _isUploading 
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
                     : const Icon(Icons.attach_file_rounded, color: AppColors.primary, size: 22),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () {
+                showEmojiPicker(context, (emoji) {
+                  _messageController.text = _messageController.text + emoji;
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Text('😊', style: TextStyle(fontSize: 20)),
               ),
             ),
             const SizedBox(width: 8),
