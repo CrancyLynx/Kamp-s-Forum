@@ -31,9 +31,9 @@ jobs:
         continue-on-error: true
       
       - name: Deploy to Firebase
-        run: cd functions && npx firebase-tools deploy --only functions --token=${{ secrets.FIREBASE_TOKEN }}
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: cd functions && npx firebase-tools deploy --only functions
       
       - name: Deployment Success
         if: success()
