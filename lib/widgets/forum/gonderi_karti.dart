@@ -7,7 +7,6 @@ import 'package:shimmer/shimmer.dart';
 import 'package:provider/provider.dart';
 import '../../providers/blocked_users_provider.dart';
 import '../../utils/app_colors.dart';
-import '../../utils/guest_security_helper.dart';
 import '../../models/badge_model.dart';
 import '../badge_widget.dart';
 import '../../screens/forum/gonderi_detay_ekrani.dart';

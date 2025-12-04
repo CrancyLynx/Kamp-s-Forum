@@ -196,32 +196,6 @@ class _ProfilDuzenlemeEkraniState extends State<ProfilDuzenlemeEkrani> {
   }
 
   // ⚙️ Yükleme Dialog'u - Çalışkan Mascot ile
-  void _showLoadingDialog(String message) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 🎭 Çalışkan Mascot
-            Image.asset(
-              'assets/images/calıskan_bay.png',
-              height: 120,
-              fit: BoxFit.contain,
-              errorBuilder: (c, e, s) => const CircularProgressIndicator(),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14, color: Colors.grey),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Future<void> _loadUserData() async {
     try {
