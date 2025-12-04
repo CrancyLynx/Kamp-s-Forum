@@ -327,4 +327,204 @@ class ForumRuleService {
       return {};
     }
   }
+
+  // Content Filtering Operations
+
+  /// İçerik filtresi ekle
+  static Future<String?> addContentFilter({
+    required String filterType,
+    required String filterValue,
+    required String category,
+    required int severity,
+    required String action,
+  }) async {
+    try {
+      final filterRef = _firestore.collection('content_filters').doc();
+
+      await filterRef.set({
+        'filterType': filterType,
+        'filterValue': filterValue,
+        'category': category,
+        'severity': severity,
+        'action': action,
+        'isActive': true,
+        'createdAt': Timestamp.now(),
+        'exceptions': [],
+      });
+
+      debugPrint('[FILTER] Content filter eklendi: ${filterRef.id}');
+      return filterRef.id;
+    } catch (e) {
+      debugPrint('[FILTER] Filter ekleme hatasi: $e');
+      return null;
+    }
+  }
+
+  /// İçeriği kontrol et
+  static Future<Map<String, dynamic>> checkContent(
+      String content, String userId) async {
+    try {
+      final filters = await _firestore
+          .collection('content_filters')
+          .where('isActive', isEqualTo: true)
+          .get();
+
+      final violatedFilters = <String>[];
+      int maxSeverity = 0;
+
+      for (var doc in filters.docs) {
+        final filter = doc.data();
+        final filterValue = (filter['filterValue'] as String).toLowerCase();
+        final contentLower = content.toLowerCase();
+
+        // Basit anahtar sözcük eşleştirmesi
+        if (contentLower.contains(filterValue)) {
+          final severity = (filter['severity'] as num).toInt();
+          if (severity > maxSeverity) {
+            maxSeverity = severity;
+          }
+          violatedFilters.add(doc.id);
+        }
+      }
+
+      if (violatedFilters.isNotEmpty) {
+        return {
+          'passed': false,
+          'violatedFilters': violatedFilters,
+          'maxSeverity': maxSeverity,
+          'action': maxSeverity >= 4 ? 'block' : 'flag',
+        };
+      }
+
+      return {
+        'passed': true,
+        'violatedFilters': [],
+        'maxSeverity': 0,
+      };
+    } catch (e) {
+      debugPrint('[FILTER] Content check hatasi: $e');
+      return {'passed': true};
+    }
+  }
+
+  /// İçerik uyarısı ekle
+  static Future<String?> issueContentWarning({
+    required String userId,
+    required String contentId,
+    required String contentType,
+    required String reason,
+  }) async {
+    try {
+      final warningRef = _firestore.collection('content_warnings').doc();
+
+      await warningRef.set({
+        'userId': userId,
+        'contentId': contentId,
+        'contentType': contentType,
+        'reason': reason,
+        'createdAt': Timestamp.now(),
+        'status': 'active',
+        'isAutomatic': false,
+      });
+
+      debugPrint('[WARNING] İçerik uyarısı verildi: ${warningRef.id}');
+      return warningRef.id;
+    } catch (e) {
+      debugPrint('[WARNING] Uyarı verme hatasi: $e');
+      return null;
+    }
+  }
+
+  /// Kullanıcının aktif uyarılarını getir
+  static Future<List<Map<String, dynamic>>> getUserActiveWarnings(
+      String userId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('content_warnings')
+          .where('userId', isEqualTo: userId)
+          .where('status', isEqualTo: 'active')
+          .get();
+
+      return snapshot.docs.map((doc) => doc.data()).toList();
+    } catch (e) {
+      debugPrint('[WARNING] Warnings getirme hatasi: $e');
+      return [];
+    }
+  }
+
+  /// Otomatik içerik raporu oluştur
+  static Future<String?> createAutomaticReport({
+    required String contentId,
+    required String contentType,
+    required String detectionType,
+    required double confidenceScore,
+  }) async {
+    try {
+      final reportRef = _firestore.collection('automatic_content_reports').doc();
+
+      await reportRef.set({
+        'contentId': contentId,
+        'contentType': contentType,
+        'detectionType': detectionType,
+        'confidenceScore': confidenceScore,
+        'detectedBy': 'keyword_filter',
+        'createdAt': Timestamp.now(),
+        'reviewed': false,
+      });
+
+      debugPrint('[AUTO_REPORT] Otomatik rapor: ${reportRef.id}');
+      return reportRef.id;
+    } catch (e) {
+      debugPrint('[AUTO_REPORT] Report hatasi: $e');
+      return null;
+    }
+  }
+
+  /// Gözden geçirilmemiş otomatik raporları getir
+  static Future<List<Map<String, dynamic>>> getUnreviewedAutomaticReports() async {
+    try {
+      final snapshot = await _firestore
+          .collection('automatic_content_reports')
+          .where('reviewed', isEqualTo: false)
+          .orderBy('createdAt', descending: true)
+          .limit(50)
+          .get();
+
+      return snapshot.docs.map((doc) => doc.data()).toList();
+    } catch (e) {
+      debugPrint('[AUTO_REPORT] Reports getirme hatasi: $e');
+      return [];
+    }
+  }
+
+  /// Filtreleri yönet
+  static Future<bool> toggleFilter(String filterId, bool isActive) async {
+    try {
+      await _firestore
+          .collection('content_filters')
+          .doc(filterId)
+          .update({'isActive': isActive});
+      return true;
+    } catch (e) {
+      debugPrint('[FILTER] Toggle hatasi: $e');
+      return false;
+    }
+  }
+
+  /// Filtreden exception ekle
+  static Future<bool> addFilterException(
+      String filterId, String userId) async {
+    try {
+      await _firestore
+          .collection('content_filters')
+          .doc(filterId)
+          .update({
+        'exceptions': FieldValue.arrayUnion([userId]),
+      });
+      return true;
+    } catch (e) {
+      debugPrint('[FILTER] Exception ekleme hatasi: $e');
+      return false;
+    }
+  }
 }

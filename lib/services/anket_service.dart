@@ -287,4 +287,250 @@ class AnketService {
       return {};
     }
   }
+
+  // Analytics Operations
+
+  /// Anket analitiklerini hesapla
+  static Future<Map<String, dynamic>> calculatePollAnalytics(
+      String pollId) async {
+    try {
+      final doc = await _firestore.collection('anketler').doc(pollId).get();
+      if (!doc.exists) return {};
+
+      final poll = Anket.fromFirestore(doc);
+      final totalVotes = poll.totalVotes;
+
+      final analytics = {
+        'pollId': pollId,
+        'totalVotes': totalVotes,
+        'optionsCount': poll.options.length,
+        'averageVotesPerOption': totalVotes > 0
+            ? (totalVotes / poll.options.length).toStringAsFixed(2)
+            : '0',
+        'leadingOption': _getLeadingOption(poll),
+        'closestMatch':
+            totalVotes > 0 ? _getClosestMatch(poll) : null,
+        'voteDistribution': _calculateVoteDistribution(poll),
+        'analysisDate': Timestamp.now(),
+      };
+
+      return analytics;
+    } catch (e) {
+      debugPrint('[POLL] Analytics hesaplama hatasi: $e');
+      return {};
+    }
+  }
+
+  static String _getLeadingOption(Anket poll) {
+    if (poll.options.isEmpty) return 'N/A';
+    PollOption leading = poll.options[0];
+    for (var option in poll.options) {
+      if (option.voteCount > leading.voteCount) {
+        leading = option;
+      }
+    }
+    return '${leading.emoji} ${leading.text} (${leading.voteCount})';
+  }
+
+  static String _getClosestMatch(Anket poll) {
+    if (poll.options.length < 2) return 'N/A';
+    PollOption first = poll.options[0];
+    PollOption second = poll.options[1];
+
+    for (var option in poll.options) {
+      if (option.voteCount > first.voteCount) {
+        second = first;
+        first = option;
+      } else if (option.voteCount > second.voteCount) {
+        second = option;
+      }
+    }
+
+    final diff = (first.voteCount - second.voteCount).abs();
+    return '${first.emoji} vs ${second.emoji} (Fark: $diff)';
+  }
+
+  static Map<String, int> _calculateVoteDistribution(Anket poll) {
+    final distribution = <String, int>{};
+    for (var option in poll.options) {
+      distribution[option.emoji] = option.voteCount;
+    }
+    return distribution;
+  }
+
+  /// Trending anketleri getir
+  static Future<List<Map<String, dynamic>>> getTrendingPolls() async {
+    try {
+      final snapshot = await _firestore
+          .collection('anketler')
+          .where('isActive', isEqualTo: true)
+          .orderBy('totalVotes', descending: true)
+          .limit(10)
+          .get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'pollId': doc.id,
+          'title': data['title'],
+          'votes': data['totalVotes'],
+          'isTrending': (data['totalVotes'] as num).toInt() > 50,
+          'category': data['category'],
+        };
+      }).toList();
+    } catch (e) {
+      debugPrint('[POLL] Trending polls hatasi: $e');
+      return [];
+    }
+  }
+
+  /// Anket raporla
+  static Future<String?> reportPoll({
+    required String pollId,
+    required String reporterUserId,
+    required String reason,
+    required String description,
+  }) async {
+    try {
+      final reportRef = _firestore.collection('poll_reports').doc();
+
+      await reportRef.set({
+        'pollId': pollId,
+        'reporterUserId': reporterUserId,
+        'reason': reason,
+        'description': description,
+        'createdAt': Timestamp.now(),
+        'status': 'pending',
+      });
+
+      debugPrint('[POLL] Report gönderildi: ${reportRef.id}');
+      return reportRef.id;
+    } catch (e) {
+      debugPrint('[POLL] Report hatasi: $e');
+      return null;
+    }
+  }
+
+  /// Yönetici - Bekleyen raporları getir
+  static Future<List<Map<String, dynamic>>> getPendingReports() async {
+    try {
+      final snapshot = await _firestore
+          .collection('poll_reports')
+          .where('status', isEqualTo: 'pending')
+          .orderBy('createdAt', descending: true)
+          .get();
+
+      return snapshot.docs.map((doc) => doc.data()).toList();
+    } catch (e) {
+      debugPrint('[POLL] Pending reports hatasi: $e');
+      return [];
+    }
+  }
+
+  /// Yönetici - Rapor işle
+  static Future<bool> processReport({
+    required String reportId,
+    required String status,
+    required String? action,
+  }) async {
+    try {
+      await _firestore
+          .collection('poll_reports')
+          .doc(reportId)
+          .update({
+        'status': status,
+        'action': action,
+        'processedAt': Timestamp.now(),
+      });
+      return true;
+    } catch (e) {
+      debugPrint('[POLL] Report process hatasi: $e');
+      return false;
+    }
+  }
+
+  /// Kategoriye göre anketleri getir (istatistik ile)
+  static Future<List<Map<String, dynamic>>> getPollsByCategoryWithStats(
+      String category) async {
+    try {
+      final snapshot = await _firestore
+          .collection('anketler')
+          .where('category', isEqualTo: category)
+          .where('isActive', isEqualTo: true)
+          .orderBy('createdAt', descending: true)
+          .get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'pollId': doc.id,
+          'title': data['title'],
+          'votes': data['totalVotes'],
+          'category': data['category'],
+        };
+      }).toList();
+    } catch (e) {
+      debugPrint('[POLL] Category polls hatasi: $e');
+      return [];
+    }
+  }
+
+  /// Anket süresi sona ermiş mi kontrol et
+  static Future<bool> checkAndClosePoll(String pollId) async {
+    try {
+      final doc = await _firestore.collection('anketler').doc(pollId).get();
+      if (!doc.exists) return false;
+
+      final data = doc.data()!;
+      final expiresAt = (data['expiresAt'] as Timestamp).toDate();
+
+      if (DateTime.now().isAfter(expiresAt) && data['isActive'] == true) {
+        await _firestore
+            .collection('anketler')
+            .doc(pollId)
+            .update({'isActive': false});
+        debugPrint('[POLL] Poll kapatıldı: $pollId');
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      debugPrint('[POLL] Poll kapama hatasi: $e');
+      return false;
+    }
+  }
+
+  /// Anket paylaş istatistiği
+  static Future<bool> recordPollShare(String pollId, String userId) async {
+    try {
+      await _firestore
+          .collection('anketler')
+          .doc(pollId)
+          .collection('shares')
+          .doc(userId)
+          .set({
+        'userId': userId,
+        'sharedAt': Timestamp.now(),
+      });
+      return true;
+    } catch (e) {
+      debugPrint('[POLL] Share record hatasi: $e');
+      return false;
+    }
+  }
+
+  /// Anket paylaşım sayısını getir
+  static Future<int> getPollShareCount(String pollId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('anketler')
+          .doc(pollId)
+          .collection('shares')
+          .get();
+      return snapshot.docs.length;
+    } catch (e) {
+      debugPrint('[POLL] Share count hatasi: $e');
+      return 0;
+    }
+  }
 }

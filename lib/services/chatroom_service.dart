@@ -423,7 +423,7 @@ class ChatRoomService {
         .snapshots()
         .map((snapshot) {
       return snapshot.docs
-          .map((doc) => doc.data() as Map<String, dynamic>)
+          .map((doc) => doc.data())
           .where((data) {
         final typingStartedAt = data['typingStartedAt'] as Timestamp?;
         if (typingStartedAt == null) return false;
@@ -490,7 +490,7 @@ class ChatRoomService {
       return snapshot.docs
           .map((doc) => {
                 'userId': doc.id,
-                ...doc.data() as Map<String, dynamic>,
+                ...doc.data(),
               })
           .toList();
     });
@@ -615,7 +615,7 @@ class ChatRoomService {
       return snapshot.docs
           .map((doc) => {
                 'emoji': doc.id,
-                ...doc.data() as Map<String, dynamic>,
+                ...doc.data(),
               })
           .toList();
     });
