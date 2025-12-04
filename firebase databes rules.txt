@@ -258,5 +258,144 @@ match /{document=**} {
       allow read: if true;
       allow write: if isAdmin();
     }
+    
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // EKSIK KOLEKSİYONLAR VE ALANLAR
+    // ═══════════════════════════════════════════════════════════════════════════════
+    
+    // Sistem Yapılandırması (herkese açık okuma, admin yazma)
+    match /sistem_config/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Duyuru ve Haberler (herkese açık okuma, admin/moderatör yazma)
+    match /haberler/{newsId} {
+      allow read: if true;
+      allow create, update: if isAdmin() || isModerator();
+      allow delete: if isAdmin();
+    }
+    
+    // Sınav Takvimi (herkese açık okuma, admin/moderatör yazma)
+    match /sinav_takvimi/{eventId} {
+      allow read: if true;
+      allow create, update: if isAdmin() || isModerator();
+      allow delete: if isAdmin();
+    }
+    
+    // Etkinlik Kategorileri (herkese açık okuma, admin yazma)
+    match /etkinlik_kategorileri/{categoryId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // Gamification Seviyeleri ve Badge'ler (herkese açık okuma, admin yazma)
+    match /gamifikasyon_seviyeleri/{levelId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    match /rozetler/{badgeId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Kullanıcı Rozet ve XP Takibi
+    match /gamifikasyon_durumu/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update: if isSignedIn(); // Sistem fonksiyonları da yazabilir
+      allow delete: if isAdmin();
+    }
+    
+    // Ring Sistemi - Ana Koleksiyon
+    match /ringlar/{ringId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update: if isOwner(resource.data.creatorId) || isAdmin();
+      allow delete: if isOwner(resource.data.creatorId) || isAdmin();
+      
+      // Ring üyeleri
+      match /members/{userId} {
+        allow read: if true;
+        allow write: if isOwner(resource.data.ringId) || isAdmin();
+      }
+      
+      // Ring seferleri
+      match /seferler/{seferId} {
+        allow read: if true;
+        allow create: if isSignedIn();
+        allow update: if isOwner(resource.data.driverId) || isAdmin();
+        allow delete: if isOwner(resource.data.driverId) || isAdmin();
+      }
+    }
+    
+    // Anketler (Polls)
+    match /anketler/{pollId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isOwner(resource.data.userId) || isAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes', 'totalVotes', 'options']));
+      allow delete: if isOwner(resource.data.userId) || isAdmin();
+      
+      // Anket Seçenekleri
+      match /options/{optionId} {
+        allow read: if true;
+        allow write: if get(/databases/$(database)/documents/anketler/$(pollId)).data.userId == request.auth.uid || isAdmin();
+      }
+    }
+    
+    // Forum Hakkında / Kurallar
+    match /forum_rules/{ruleId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Canlı Sohbet Odaları
+    match /chat_rooms/{roomId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update: if isOwner(resource.data.creatorId) || isAdmin();
+      allow delete: if isOwner(resource.data.creatorId) || isAdmin();
+      
+      // Oda Mesajları
+      match /messages/{messageId} {
+        allow read: if true;
+        allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
+        allow update: if isOwner(resource.data.senderId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isEdited', 'editedAt', 'content']);
+        allow delete: if isOwner(resource.data.senderId) || isAdmin();
+      }
+    }
+    
+    // Hızlı Mesajlar / Reactions (Emoji tepkiler)
+    match /gonderi_reactions/{postId}/{userId} {
+      allow read: if true;
+      allow write: if isOwner(userId);
+    }
+    
+    // Log Koleksiyonları (Güvenlik ve Audit)
+    match /audit_logs/{logId} {
+      allow read: if isAdmin() || isModerator();
+      allow create: if isSignedIn(); // Sistem otomatik oluşturur
+      allow delete: if isAdmin();
+    }
+    
+    match /error_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn(); // App-side error logging
+      allow delete: if isAdmin();
+    }
+    
+    // Geri Bildirim ve Öneriler
+    match /feedback/{feedbackId} {
+      allow read: if isAdmin() || isOwner(resource.data.userId);
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    // ⚠️  CATCH-ALL RULE - Tüm kalan istekler reddi (GÜVENLİ VERSİYON)
+    // Bu rule, yukarıda tanımlanmayan herhangi bir koleksiyon/belge erişimini reddeder
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }

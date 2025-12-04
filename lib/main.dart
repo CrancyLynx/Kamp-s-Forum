@@ -276,16 +276,26 @@ class _AnaKontrolcuState extends State<AnaKontrolcu> with WidgetsBindingObserver
     final blockedUsersProvider = Provider.of<BlockedUsersProvider>(context, listen: false);
     final gamificationProvider = Provider.of<GamificationProvider>(context, listen: false); // YENİ EKLENDİ
 
-    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) async {
       if (!mounted) return;
+      
+      debugPrint('[AUTH] Auth state changed: ${user?.uid ?? 'null'}');
+      
       setState(() {
         _currentUser = user;
         if (!_authInitialized) _authInitialized = true;
       });
 
+      // Kısa delay - Firebase bazen Firestore okuma izni vermek için zaman gerekiyor
+      await Future.delayed(const Duration(milliseconds: 500));
+
       if (user != null && !user.isAnonymous) {
-        // Kullanıcı giriş yaptığında Gamification dinlemeyi başlat
-        gamificationProvider.startListening(user.uid);
+        try {
+          gamificationProvider.startListening(user.uid);
+          debugPrint('[AUTH] Gamification listening başlatıldı');
+        } catch (e) {
+          debugPrint('[AUTH] Gamification error: $e');
+        }
       }
 
       if (user == null || user.isAnonymous) {

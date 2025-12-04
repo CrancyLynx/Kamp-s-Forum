@@ -582,7 +582,10 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
 
         if (mounted) {
           if (result == "success") {
+            // Başarılı giriş - Auth listener otomatik handle eder
+            showSnackBar("Giriş başarılı! Yükleniyor...");
             setState(() => _isLoading = false);
+            // Navigator güncelleme - auth listener tarafından yapılacak
           } else if (result == "mfa_required") {
             // MFA Mantığı
             setState(() => _isMfaVerification = true);

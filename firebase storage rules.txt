@@ -168,5 +168,59 @@ service firebase.storage {
       allow write: if isSignedIn() && isValidImage(); // Kullanıcı yükleme yapabilir
       allow delete: if false; // Sadece admin silebilir
     }
+    
+    // 18. Etkinlik/Forum Banner Resimleri
+    match /forum_banners/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && isOwnerOfFile(fileName) && isValidImage();
+      allow delete: if isSignedIn() && isOwnerOfFile(fileName);
+    }
+    
+    // 19. Kullanıcı Rozet/Badge Görselleri
+    match /user_badges/{userId}/{badgeId} {
+      allow read: if true;
+      allow write: if false; // Sadece backend tarafından (sistem tarafından kazanılır)
+      allow delete: if false;
+    }
+    
+    // 20. Harita/Mekan İkon Resimleri
+    match /location_markers/{fileName} {
+      allow read: if true;
+      allow write: if false; // Sadece backend
+      allow delete: if false;
+    }
+    
+    // 21. İçerik Moderasyon Resimleri
+    match /moderated_content/{fileName} {
+      allow read: if false; // Sadece admin/moderatör
+      allow write: if false; // Sadece system functions
+      allow delete: if false;
+    }
+    
+    // 22. Yedek / Arşiv Resimleri (Silinmiş içerik)
+    match /archive/{fileName} {
+      allow read: if false; // Sadece admin
+      allow write: if false; // Sadece system functions
+      allow delete: if false;
+    }
+    
+    // 23. Hızlı Mesajlar İçin Emoji/Sticker
+    match /emojis/{fileName} {
+      allow read: if true;
+      allow write: if false; // Sadece admin
+      allow delete: if false;
+    }
+    
+    // 24. Anket Banner Resimleri
+    match /poll_banners/{pollId}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && isValidImage();
+      allow delete: if isSignedIn();
+    }
+    
+    // ⚠️ CATCH-ALL RULE - Tüm kalan istekler reddi (GÜVENLİ VERSİYON)
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }
