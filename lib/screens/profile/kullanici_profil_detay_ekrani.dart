@@ -945,6 +945,14 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
       formattedTime = timeago.format((data['zaman'] as Timestamp).toDate(), locale: 'tr');
     }
 
+    // Fotoğrafları güvenli şekilde al
+    List<String> imageUrls = [];
+    if (data['fotoğraflar'] != null && data['fotoğraflar'] is List) {
+      imageUrls = List<String>.from(data['fotoğraflar'] as List);
+    } else if (data['imageUrls'] != null && data['imageUrls'] is List) {
+      imageUrls = List<String>.from(data['imageUrls'] as List);
+    }
+
     return AnimatedListItem(
       index: 0, 
       child: GonderiKarti(
@@ -968,6 +976,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
         likes: (data['likes'] as List<dynamic>? ?? []),
         commentCount: (data['commentCount'] as int? ?? 0),
         authorBadges: List<String>.from(data['authorBadges'] ?? []),
+        imageUrls: imageUrls,
       ),
     );
   }
