@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import '../../main.dart';
 import '../../services/exam_dates_service.dart';
+import '../../services/data_preload_service.dart';
 import '../../utils/app_colors.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -68,6 +69,9 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   void _startSequentialAnimation() {
     // Arka planda sınav tarihlerini güncelle
     _initializeExamDates();
+
+    // Arka planda tüm verileri preload et (cache'le)
+    DataPreloadService.preloadAllData();
 
     _scaleController.forward().then((_) {
       _slideController.forward();

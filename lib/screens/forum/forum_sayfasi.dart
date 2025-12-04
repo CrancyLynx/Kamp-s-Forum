@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:timeago/timeago.dart' as timeago; // Timeago eklendi
 import '../../services/auth_service.dart';
+import '../../services/data_preload_service.dart';
 import '../../widgets/animated_list_item.dart';
 import '../../utils/app_colors.dart';
 import '../../widgets/app_header.dart';  // YENİ: Modern header widget'ı
@@ -123,6 +124,26 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
         });
       }
       return;
+    }
+
+    // Cache'ten başlangıç verisi oku
+    if (isInitial) {
+      try {
+        final cachedPosts = await DataPreloadService.getCachedData('forum_posts');
+        if (cachedPosts != null && cachedPosts is List && cachedPosts.isNotEmpty) {
+          debugPrint('Forum cache yüklendi (${cachedPosts.length} posts)');
+          if (mounted) {
+            setState(() {
+              _isLoading = false;
+            });
+          }
+          // Arka planda live veriye geç
+          _fetchInitialPosts();
+          return;
+        }
+      } catch (e) {
+        debugPrint('Cache okuma hatasi: $e');
+      }
     }
 
     try {
