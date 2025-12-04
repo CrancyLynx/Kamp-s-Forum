@@ -122,4 +122,14 @@ class UserGamificationStatus {
       lastXPUpdate: (data['lastXPUpdate'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
+
+  Map<String, dynamic> toFirestore() {
+    return {
+      'xp': totalXP,
+      'seviye': currentLevel,
+      'xpInCurrentLevel': xpInCurrentLevel,
+      'earnedBadges': unlockedBadgeIds,
+      'lastXPUpdate': Timestamp.fromDate(lastXPUpdate),
+    };
+  }
 }
