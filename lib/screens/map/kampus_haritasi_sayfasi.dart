@@ -291,6 +291,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
           debugPrint("Location stream hatası: $e");
           if (mounted) {
             setState(() => _locationError = "Konum alma hatası");
+            _showLocationErrorDialog("Konumunuz alınamadı. Lütfen konum izninizi kontrol edin.");
           }
         },
       );
@@ -299,8 +300,71 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
       debugPrint("Konum sistemi hatası: $e");
       if (mounted) {
         setState(() => _locationError = "Konum servisi başlatılamadı");
+        _showLocationErrorDialog("Konum servisi başlatılamadı. Tekrar deneyin.");
       }
     }
+  }
+
+  void _showLocationErrorDialog(String message) {
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: Colors.red.shade50,
+        content: SizedBox(
+          width: 300,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/images/uzgun_bay.png',
+                width: 100,
+                height: 100,
+                errorBuilder: (c, e, s) => Icon(
+                  Icons.location_off_rounded,
+                  size: 80,
+                  color: Colors.red.shade300,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                "Konum Hatası ⚠️",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red.shade700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Colors.red.shade600,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade600,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text(
+                  "Anlaşıldı",
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _loadPlaces() async {

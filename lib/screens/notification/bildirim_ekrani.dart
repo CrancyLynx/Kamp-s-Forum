@@ -278,11 +278,23 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.error_outline, size: 60, color: Colors.red[300]),
+                  // Uzgun_bay mascot with asset fallback
+                  Image.asset(
+                    'assets/images/uzgun_bay.png',
+                    width: 120,
+                    height: 120,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Icon(Icons.error_outline, size: 60, color: Colors.red[300]);
+                    },
+                  ),
                   const SizedBox(height: 10),
                   Text(
-                    "Bildirimler yüklenemedi.",
-                    style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                    "Bildirimler yüklenemedi 😢",
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Padding(

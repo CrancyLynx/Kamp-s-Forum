@@ -202,7 +202,9 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
       _sendMessage(imageUrl: downloadUrl, messageType: 'image');
 
     } catch (e) {
-       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Resim seçilemedi veya yüklenemedi.")));
+       if (mounted) {
+         _showErrorDialog("Resim seçilemedi veya yüklenemedi. Tekrar deneyin.");
+       }
     } finally {
       if (mounted) {
         setState(() {
@@ -211,6 +213,68 @@ class _SohbetDetayEkraniState extends State<SohbetDetayEkrani> with WidgetsBindi
         });
       }
     }
+  }
+
+  void _showErrorDialog(String message) {
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: Colors.red.shade50,
+        content: SizedBox(
+          width: 300,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/images/uzgun_bay.png',
+                width: 100,
+                height: 100,
+                errorBuilder: (c, e, s) => Icon(
+                  Icons.error_outline_rounded,
+                  size: 80,
+                  color: Colors.red.shade300,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                "Hata ⚠️",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red.shade700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Colors.red.shade600,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade600,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text(
+                  "Anlaşıldı",
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _handleTyping() {

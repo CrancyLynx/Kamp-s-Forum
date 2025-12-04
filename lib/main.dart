@@ -392,10 +392,25 @@ class _KullaniciVerisiYukleyiciState extends State<_KullaniciVerisiYukleyici> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.error_outline, color: Colors.red, size: 50),
+                  // Uzgun_bay mascot with asset fallback
+                  Image.asset(
+                    'assets/images/uzgun_bay.png',
+                    width: 120,
+                    height: 120,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Icon(Icons.error_outline, color: Colors.red, size: 50);
+                    },
+                  ),
                   const SizedBox(height: 16),
-                  const Text("Veri yüklenirken hata oluştu."),
-                  Text("Hata: ${userSnapshot.error}", textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  const Text(
+                    "Veri yüklenirken hata oluştu 😢",
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    "Hata: ${userSnapshot.error}",
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                   const SizedBox(height: 20),
                   ElevatedButton(
                     onPressed: () => AuthService().signOut(),
