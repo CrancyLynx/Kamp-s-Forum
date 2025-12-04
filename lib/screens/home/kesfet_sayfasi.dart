@@ -49,7 +49,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 8, vsync: this); // Phase 2 ekranları: Haberler, Konumlar, Emoji, Chat Mod, Aktivite, Yer Yorum, İstat, Şablonlar
     _leaderboardTabController = TabController(length: 2, vsync: this);
     _loadData();
   }

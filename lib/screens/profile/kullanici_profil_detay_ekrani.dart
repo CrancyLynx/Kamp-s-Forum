@@ -23,6 +23,7 @@ import 'rozetler_sayfasi.dart';
 import '../admin/admin_panel_ekrani.dart';
 import '../auth/giris_ekrani.dart'; 
 import '../admin/kullanici_listesi_ekrani.dart';
+import '../systems/phase2to4_integration_panel.dart';
 
 import '../../services/auth_service.dart';
 import '../../services/cloud_functions_service.dart';
@@ -196,7 +197,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     }
 
     return DefaultTabController(
-      length: _isOwnProfile ? 2 : 1,
+      length: _isOwnProfile ? 3 : 1,
       child: FutureBuilder<DocumentSnapshot?>(
         future: _myUserDataFuture,
         builder: (context, mySnapshot) {
@@ -372,6 +373,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                                                         tabs: [
                                                           const Tab(text: "Gönderiler"),
                                                           if (_isOwnProfile) const Tab(text: "Kaydedilenler"),
+                                                          if (_isOwnProfile) const Tab(text: "Tüm Sistemler"),
                                                         ],
                                                       ),                          ),
                           pinned: true,
@@ -383,6 +385,8 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                         _buildPostsList(_targetUserId), 
                         if (_isOwnProfile) 
                           _buildSavedPostsList(List<String>.from(userData['savedPosts'] ?? [])),
+                        if (_isOwnProfile) 
+                          const Phase2to4IntegrationPanel(),
                       ],
                     ),
                   ),
