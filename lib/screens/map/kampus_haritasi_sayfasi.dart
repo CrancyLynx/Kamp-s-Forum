@@ -380,7 +380,19 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     });
 
     try {
-      final googlePlaces = await _mapDataService.searchNearbyPlaces(center: center, typeFilter: _currentFilter);
+      List<LocationModel> googlePlaces = [];
+      
+      // "Tümü" ise tüm kategorileri yükle
+      if (_currentFilter == 'all') {
+        final uniPlaces = await _mapDataService.searchNearbyPlaces(center: center, typeFilter: 'universite');
+        final restPlaces = await _mapDataService.searchNearbyPlaces(center: center, typeFilter: 'yemek');
+        final transitPlaces = await _mapDataService.searchNearbyPlaces(center: center, typeFilter: 'durak');
+        final libPlaces = await _mapDataService.searchNearbyPlaces(center: center, typeFilter: 'kutuphane');
+        googlePlaces = [...uniPlaces, ...restPlaces, ...transitPlaces, ...libPlaces];
+      } else {
+        googlePlaces = await _mapDataService.searchNearbyPlaces(center: center, typeFilter: _currentFilter);
+      }
+      
       if (mounted) {
         _googleLocations = googlePlaces;
         _updateMarkers(); 
@@ -499,9 +511,23 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     if (_markers.length > 40) baseZoom -= 1;
     if (_markers.length > 60) baseZoom -= 2;
     baseZoom = baseZoom.clamp(10.0, 18.0);
+    _animateZoomToLevel(baseZoom);
+  }
+
+  void _animateZoomForRadius() {
+    if (_mapController == null || _userLocation == null) return;
+    double baseZoom = 15.0;
+    if (_searchRadiusKm > 15) baseZoom = 12.0;
+    else if (_searchRadiusKm > 10) baseZoom = 13.0;
+    else if (_searchRadiusKm > 5) baseZoom = 14.0;
+    baseZoom = baseZoom.clamp(10.0, 18.0);
+    _animateZoomToLevel(baseZoom);
+  }
+
+  void _animateZoomToLevel(double zoom) {
     try {
-      _mapController!.animateCamera(
-        CameraUpdate.newLatLngZoom(_userLocation!, baseZoom),
+      _mapController?.animateCamera(
+        CameraUpdate.newLatLngZoom(_userLocation!, zoom),
       );
     } catch (e) {
       debugPrint("Zoom animation hatası: $e");
@@ -572,21 +598,26 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
     });
   }
 
-  Future<void> _onSearchResultSelected(String placeId) async {
+  Future<void> _onSearchResultSelected(Map<String, dynamic> item) async {
     FocusScope.of(context).unfocus();
     setState(() { 
       _searchResults = []; 
-      _isLoading = true;
+      _isLoading = false;
       _isRouteActive = false; 
     });
     _searchController.clear();
 
     try {
-      final location = await _mapDataService.getPlaceDetails(placeId);
-      
-      if (location != null && mounted) {
+      final location = LocationModel(
+        id: item['title'] ?? 'unknown',
+        title: item['title'] ?? 'Bilinmeyen Yer',
+        snippet: item['snippet'] ?? '',
+        position: LatLng(item['lat'] ?? 0.0, item['lng'] ?? 0.0),
+        type: item['type'] ?? 'diger',
+      );
+
+      if (mounted) {
         setState(() {
-          _isLoading = false;
           _markers.removeWhere((m) => m.markerId.value.startsWith("s_"));
           _markers.add(Marker(
             markerId: MarkerId("s_${location.id}"),
@@ -604,22 +635,30 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
             _showLocationDetails(location);
           }
         }
-      } else {
-        if (mounted) {
-          setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Konum detayları alınamadı.")),
-          );
-        }
       }
     } catch (e) {
       debugPrint("Mekan detayı hatası: $e");
       if (mounted) {
-        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Hata: $e")),
         );
       }
+    }
+  }
+
+  // Tür için uygun ikonu al
+  IconData _getIconForType(String type) {
+    switch (type.toLowerCase()) {
+      case 'universite':
+        return Icons.school;
+      case 'yemek':
+        return Icons.restaurant;
+      case 'durak':
+        return Icons.directions_bus;
+      case 'kutuphane':
+        return Icons.menu_book;
+      default:
+        return Icons.location_on_outlined;
     }
   }
 
@@ -1262,11 +1301,18 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                         separatorBuilder: (c, i) => const Divider(height: 1),
                         itemBuilder: (context, index) {
                           final item = _searchResults[index];
+                          final title = item['title'] ?? item['structured_formatting']?['main_text'] ?? '';
+                          final subtitle = item['snippet'] ?? item['structured_formatting']?['secondary_text'] ?? '';
+                          final type = item['type'] ?? 'diger';
+                          
                           return ListTile(
-                            leading: const Icon(Icons.location_on_outlined, color: Colors.grey),
-                            title: Text(item['structured_formatting']['main_text'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text(item['structured_formatting']['secondary_text'] ?? '', maxLines: 1),
-                            onTap: () => _onSearchResultSelected(item['place_id']),
+                            leading: Icon(
+                              _getIconForType(type),
+                              color: Colors.grey,
+                            ),
+                            title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: Text(subtitle, maxLines: 1),
+                            onTap: () => _onSearchResultSelected(item),
                           );
                         },
                       ),
@@ -1296,7 +1342,7 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
           if (_showRadiusCircle && _userLocation != null)
             Positioned(
               left: 16,
-              top: 130,
+              bottom: 20,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 decoration: BoxDecoration(
@@ -1312,62 +1358,54 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
                     ],
                   ),
                 ),
-                child: Stack(
-                  clipBehavior: Clip.none,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Positioned(
-                      bottom: -12,
-                      left: -12,
-                      right: -12,
-                      height: 20,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Theme.of(context).cardColor.withOpacity(0.2),
-                              Theme.of(context).cardColor.withOpacity(0),
-                            ],
-                          ),
-                        ),
-                      ),
+                    Text(
+                      '${_searchRadiusKm.toStringAsFixed(1)} km',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                     ),
-                    Column(
+                    const SizedBox(height: 8),
+                    Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          '${_searchRadiusKm.toStringAsFixed(1)} km',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        FloatingActionButton.small(
+                          heroTag: 'radiusDown',
+                          backgroundColor: Colors.red.withOpacity(0.8),
+                          child: const Icon(Icons.remove, color: Colors.white, size: 18),
+                          onPressed: () {
+                            if (_searchRadiusKm > 1.0) {
+                              setState(() => _searchRadiusKm -= 1.0);
+                              _updateMarkers();
+                              _animateZoomForRadius();
+                            }
+                          },
                         ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            FloatingActionButton.small(
-                              heroTag: 'radiusDown',
-                              backgroundColor: Colors.red.withOpacity(0.8),
-                              child: const Icon(Icons.remove, color: Colors.white, size: 18),
-                              onPressed: () {
-                                if (_searchRadiusKm > 1.0) {
-                                  setState(() => _searchRadiusKm -= 1.0);
-                                  _updateMarkers();
-                                }
-                              },
-                            ),
-                            const SizedBox(width: 8),
-                            FloatingActionButton.small(
-                              heroTag: 'radiusUp',
-                              backgroundColor: Colors.green.withOpacity(0.8),
-                              child: const Icon(Icons.add, color: Colors.white, size: 18),
-                              onPressed: () {
-                                if (_searchRadiusKm < 25.0) {
-                                  setState(() => _searchRadiusKm += 1.0);
-                                  _updateMarkers();
-                                }
-                              },
-                            ),
-                          ],
+                        const SizedBox(width: 8),
+                        FloatingActionButton.small(
+                          heroTag: 'radiusUp',
+                          backgroundColor: Colors.green.withOpacity(0.8),
+                          child: const Icon(Icons.add, color: Colors.white, size: 18),
+                          onPressed: () {
+                            if (_searchRadiusKm < 25.0) {
+                              setState(() => _searchRadiusKm += 1.0);
+                              _updateMarkers();
+                              _animateZoomForRadius();
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        FloatingActionButton.small(
+                          heroTag: 'radiusUp',
+                          backgroundColor: Colors.green.withOpacity(0.8),
+                          child: const Icon(Icons.add, color: Colors.white, size: 18),
+                          onPressed: () {
+                            if (_searchRadiusKm < 25.0) {
+                              setState(() => _searchRadiusKm += 1.0);
+                              _updateMarkers();
+                              _animateZoomForRadius();
+                            }
+                          },
                         ),
                       ],
                     ),
