@@ -230,11 +230,25 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.error_outline, size: 80, color: Colors.red),
+                        Image.asset(
+                          'assets/images/uzgun_bay.png',
+                          width: 120,
+                          height: 120,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Icon(Icons.error_outline, size: 80, color: Colors.red);
+                          },
+                        ),
                         const SizedBox(height: 16),
-                        const Text("Profil yüklenemedi.", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const Text(
+                          "Profil yüklenemedi 😢",
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
                         const SizedBox(height: 8),
-                        Text(snapshot.error.toString(), style: const TextStyle(fontSize: 12, color: Colors.grey), textAlign: TextAlign.center),
+                        Text(
+                          snapshot.error.toString(),
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          textAlign: TextAlign.center,
+                        ),
                         const SizedBox(height: 20),
                         ElevatedButton(
                           onPressed: () => Navigator.pop(context),
@@ -767,11 +781,21 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.error_outline, size: 60, color: Colors.red[300]),
+                Image.asset(
+                  'assets/images/uzgun_bay.png',
+                  width: 100,
+                  height: 100,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Icon(Icons.error_outline, size: 60, color: Colors.red[300]);
+                  },
+                ),
                 const SizedBox(height: 10),
                 Text(
-                  "Gönderiler yüklenemedi.",
-                  style: TextStyle(color: Colors.grey[600]),
+                  "Gönderiler yüklenemedi 😢",
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 15),
                 ElevatedButton(

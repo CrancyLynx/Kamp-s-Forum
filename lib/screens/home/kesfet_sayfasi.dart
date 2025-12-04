@@ -661,9 +661,27 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.error_outline, color: Colors.red, size: 40),
+                  Image.asset(
+                    'assets/images/uzgun_bay.png',
+                    width: 80,
+                    height: 80,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Icon(Icons.error_outline, color: Colors.red, size: 40);
+                    },
+                  ),
                   const SizedBox(height: 8),
-                  Text("Haberler yüklenemedi", style: TextStyle(color: Colors.red[700])),
+                  Text(
+                    "Haberler yüklenemedi 😢",
+                    style: TextStyle(
+                      color: Colors.red[700],
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Lütfen internet bağlantınızı kontrol edin",
+                    style: TextStyle(fontSize: 12, color: Colors.red[600]),
+                  ),
                 ],
               ),
             ),
@@ -1203,12 +1221,35 @@ void _showCalendarPanel(BuildContext context) {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.error_outline, color: Colors.red),
+                          Image.asset(
+                            'assets/images/uzgun_bay.png',
+                            width: 50,
+                            height: 50,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Icon(Icons.error_outline, color: Colors.red, size: 24);
+                            },
+                          ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: Text(
-                              'Sınav tarihleri yüklenemedi. Lütfen daha sonra deneyiniz.',
-                              style: TextStyle(color: Colors.red[700]),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Sınav tarihleri yüklenemedi 😢',
+                                  style: TextStyle(
+                                    color: Colors.red[700],
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Lütfen daha sonra deneyiniz.',
+                                  style: TextStyle(
+                                    color: Colors.red[600],
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
