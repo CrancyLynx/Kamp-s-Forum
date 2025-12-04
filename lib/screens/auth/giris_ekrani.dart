@@ -384,12 +384,26 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
             }
           }
         }
-      } else { // Telefonla giriş
+      } else { // Telefonla giriş (MFA değil, normal phone login)
         try {
           await FirebaseAuth.instance.signInWithCredential(credential);
-          if (mounted) showSnackBar("Giriş başarılı!");
+          if (mounted) {
+            // ✅ Doğrulama başarılı, state'i sıfırla
+            setState(() {
+              _codeSent = false;
+              _smsCodeController.clear();
+              _phoneController.clear();
+              _phoneController.text = '+90';
+              _verificationId = null;
+            });
+            showSnackBar("Giriş başarılı!");
+            // Ana ekrana yönlendirme auth listener tarafından yapılacak
+          }
         } on FirebaseAuthException catch (e) {
-          if (mounted) showSnackBar(_authService.publicHandleError(e), isError: true);
+          if (mounted) {
+            setState(() => _isLoading = false);
+            showSnackBar(_authService.publicHandleError(e), isError: true);
+          }
         }
       }
     } on FirebaseAuthException catch (e) {
@@ -404,11 +418,13 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
   void handleAuth() async {
     FocusScope.of(context).unfocus();
 
+    // 1️⃣ SMS KODU DOĞRULAMA AŞAMASI
     if (_codeSent) {
-      _verifySmsCode();
+      await _verifySmsCode();
       return;
     }
 
+    // 2️⃣ TELEFON MOD: KOD GÖNDERME
     if (isLogin && _isPhoneLoginMode) {
       final phone = _phoneController.text.trim();
       
@@ -420,8 +436,9 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
       if (mounted) setState(() => _isLoading = true);
       
       // SMS kodu gönderme işlemini doğru şekilde başlat
+      // _sendSmsCode içinde _codeSent = true olacak
       await _sendSmsCode(phone);
-      return;
+      return; // 🛑 Giriş yapma, doğrulama ekranında bekle
     }
 
     if (mounted) setState(() => _isLoading = true);
@@ -798,7 +815,19 @@ class _GirisEkraniState extends State<GirisEkrani> with SingleTickerProviderStat
                             ),
                           ),
                           if ((_isPhoneLoginMode && _codeSent) || _isMfaVerification)
-                            TextButton(onPressed: () { setState(() { _codeSent = false; _isMfaVerification = false; _isPhoneLoginMode = false; _isLoading = false; }); }, child: const Text("Vazgeç / Düzenle", style: TextStyle(color: Colors.grey))),
+                            TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  _codeSent = false;
+                                  _isMfaVerification = false;
+                                  _smsCodeController.clear();
+                                  _verificationId = null;
+                                  _isLoading = false;
+                                  // Telefon modundan çık değilse kal
+                                });
+                              },
+                              child: const Text("Vazgeç / Düzenle", style: TextStyle(color: Colors.grey))
+                            ),
                         ],
                       ),
                       ),
