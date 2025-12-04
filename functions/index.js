@@ -862,36 +862,97 @@ exports.logUserActivity = functions.region(REGION).https.onCall(async (data, con
 
 /**
  * =================================================================================
- * 13. CONTENT MODERATION OTOMASYONU
+ * PROFANITY VE KÖTÜ KELIME LİSTESİ
+ * =================================================================================
+ */
+const PROFANITY_WORDS = [
+  // Türkçe kötü kelimeler (kapsamlı)
+  "orospu", "yıkık", "aptal", "idiot", "sersem", "budala", "salak", "saçma",
+  "piç", "bok", "sikeyim", "çüğü", "şerefsiz", "namussuz", "hain",
+  "encelade", "falan", "karı", "dişi", "erkek", "bacı", "kız",
+  "göt", "sıç", "tokat", "yarrağı", "klitoris", "penis", "vagina",
+  "am", "bok", "kusura", "değer", "sapık", "pedofil", "ensest",
+  "topniyetçi", "faşist", "komünist", "terörist", "cihatçı",
+  
+  // İngilizce kötü kelimeler
+  "fuck", "shit", "cunt", "bastard", "asshole", "damn", "hell",
+  "whore", "bitch", "pussy", "dick", "cock", "prick", "twat",
+  "motherfucker", "cocksucker", "dammit", "goddamn", "bullshit",
+  
+  // Spam ve aldatmaca kelimeleri
+  "viagra", "casino", "bet", "click here", "free money", "xxx",
+  "loto", "iddia", "at yarışı", "ödl", "pin", "wespa",
+  
+  // Nefret söylemi ve tehdit
+  "kızıllar", "sarışınlar", "züğürtler", "fakir", "zengin",
+  "müslüman", "hristiyan", "yahudi", "ateist", "diniz",
+  "ölüm", "öldür", "bomba", "silah", "intihar",
+];
+
+const SPAM_KEYWORDS = ["viagra", "casino", "bet", "click here", "free money", "xxx", "loto", "iddia"];
+
+/**
+ * Kötü içerik kontrolü yapan utility fonksiyonu
+ */
+const checkContentForBadWords = (text) => {
+  if (!text) return { hasProfanity: false, foundWords: [] };
+  
+  const lowerText = text.toLowerCase();
+  const foundWords = [];
+  
+  PROFANITY_WORDS.forEach(word => {
+    const regex = new RegExp(`\\b${word}\\b`, 'gi');
+    if (regex.test(lowerText)) {
+      foundWords.push(word);
+    }
+  });
+  
+  return {
+    hasProfanity: foundWords.length > 0,
+    foundWords: [...new Set(foundWords)] // Unique words
+  };
+};
+
+/**
+ * =================================================================================
+ * 13. CONTENT MODERATION OTOMASYONU (GENİŞLETİLMİŞ)
  * =================================================================================
  */
 exports.autoModerateContent = functions.region(REGION).firestore
   .document("gonderiler/{postId}")
   .onCreate(async (snap, context) => {
     const postData = snap.data();
-    const content = (postData.title + " " + postData.content).toLowerCase();
-    const spamKeywords = ["viagra", "casino", "bet", "click here", "free money", "xxx"];
-    const isSpam = spamKeywords.some(keyword => content.includes(keyword));
+    const title = postData.title || "";
+    const content = postData.content || "";
+    const fullText = (title + " " + content).toLowerCase();
+
+    // 1. SPAM KONTROLÜ
+    const isSpam = SPAM_KEYWORDS.some(keyword => fullText.includes(keyword));
+
+    // 2. PROFANITY KONTROLÜ
+    const profanityCheck = checkContentForBadWords(fullText);
+
+    // 3. UPDATE EDİLECEK DATA
+    const updateData = {};
 
     if (isSpam) {
       console.log(`[SPAM_DETECTED] Gönderi ${snap.id} spam olarak işaretlendi.`);
-      await snap.ref.update({
-        flaggedAsSpam: true,
-        flaggedAt: admin.firestore.FieldValue.serverTimestamp(),
-        status: "pending_review"
-      });
+      updateData.flaggedAsSpam = true;
+      updateData.flaggedAt = admin.firestore.FieldValue.serverTimestamp();
+      updateData.status = "pending_review";
     }
 
-    // Profanity filter (basit kontrol)
-    const profanityWords = ["bad", "words", "here"]; // Gerçek listede daha çok olur
-    const hasProfanity = profanityWords.some(word => content.includes(word));
+    if (profanityCheck.hasProfanity) {
+      console.log(`[PROFANITY_DETECTED] Gönderi ${snap.id} uygunsuz dil içeriyor: ${profanityCheck.foundWords.join(", ")}`);
+      updateData.flaggedForProfanity = true;
+      updateData.foundBadWords = profanityCheck.foundWords;
+      updateData.status = "pending_review";
+      updateData.visible = false; // Yayınlanmasını engelle
+      updateData.moderationMessage = `Gönderi uygunsuz dil içeriyor: "${profanityCheck.foundWords.join(", ")}". Lütfen düzeltip yeniden gönderin.`;
+    }
 
-    if (hasProfanity) {
-      console.log(`[PROFANITY_DETECTED] Gönderi ${snap.id} uygunsuz dil içeriyor.`);
-      await snap.ref.update({
-        flaggedForProfanity: true,
-        status: "pending_review"
-      });
+    if (Object.keys(updateData).length > 0) {
+      await snap.ref.update(updateData);
     }
   });
 
@@ -1272,6 +1333,298 @@ exports.generatePersonalizedSuggestions = functions.region(REGION).https.onCall(
       suggestions: suggestions.slice(0, 10) // İlk 10 öneeri
     };
   } catch (error) {
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * =================================================================================
+ * 21. YORUM MODERASYONU TRIGGER
+ * =================================================================================
+ */
+exports.moderateComment = functions.region(REGION).firestore
+  .document("gonderiler/{postId}/yorumlar/{commentId}")
+  .onCreate(async (snap, context) => {
+    const commentData = snap.data();
+    const text = commentData.text || commentData.content || "";
+    const postId = context.params.postId;
+
+    // Kötü kelime kontrolü
+    const profanityCheck = checkContentForBadWords(text);
+
+    if (profanityCheck.hasProfanity) {
+      console.log(`[COMMENT_PROFANITY] Yorum ${snap.id} uygunsuz dil içeriyor: ${profanityCheck.foundWords.join(", ")}`);
+      
+      await snap.ref.update({
+        flaggedForProfanity: true,
+        foundBadWords: profanityCheck.foundWords,
+        visible: false,
+        moderationMessage: `Yorumunuz uygunsuz dil içeriyor: "${profanityCheck.foundWords.join(", ")}". Lütfen düzeltip yeniden gönderin.`,
+        flaggedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      // Admin'e bildirim gönder
+      await db.collection("bildirimler").add({
+        userId: "admin",
+        senderId: commentData.userId,
+        type: "moderation_alert",
+        message: `Uygunsuz yorum: "${text.substring(0, 50)}..."`,
+        postId: postId,
+        commentId: snap.id,
+        isRead: false,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+    }
+  });
+
+/**
+ * =================================================================================
+ * 22. ANKET (POLL) MODERASYONU TRIGGER
+ * =================================================================================
+ */
+exports.moderatePoll = functions.region(REGION).firestore
+  .document("anketler/{pollId}")
+  .onCreate(async (snap, context) => {
+    const pollData = snap.data();
+    const title = pollData.title || "";
+    const question = pollData.question || "";
+    const options = pollData.options || [];
+
+    // Başlık ve soru kontrolü
+    const titleCheck = checkContentForBadWords(title);
+    const questionCheck = checkContentForBadWords(question);
+
+    // Seçenekleri kontrol et
+    let hasOptionProfanity = false;
+    const badOptions = [];
+    options.forEach((option, index) => {
+      const optionText = option.text || option;
+      const optionCheck = checkContentForBadWords(optionText);
+      if (optionCheck.hasProfanity) {
+        hasOptionProfanity = true;
+        badOptions.push({ index, text: optionText, words: optionCheck.foundWords });
+      }
+    });
+
+    const updateData = {};
+    const foundWords = [
+      ...titleCheck.foundWords,
+      ...questionCheck.foundWords,
+      ...badOptions.flatMap(o => o.words)
+    ];
+
+    if (titleCheck.hasProfanity || questionCheck.hasProfanity || hasOptionProfanity) {
+      console.log(`[POLL_PROFANITY] Anket ${snap.id} uygunsuz dil içeriyor: ${foundWords.join(", ")}`);
+      
+      updateData.flaggedForProfanity = true;
+      updateData.foundBadWords = [...new Set(foundWords)];
+      updateData.status = "pending_review";
+      updateData.visible = false;
+      updateData.moderationMessage = `Anket uygunsuz dil içeriyor: "${foundWords.join(", ")}". Lütfen düzeltip yeniden gönderin.`;
+      updateData.flaggedAt = admin.firestore.FieldValue.serverTimestamp();
+
+      await snap.ref.update(updateData);
+
+      // Admin'e bildirim gönder
+      await db.collection("bildirimler").add({
+        userId: "admin",
+        senderId: pollData.userId,
+        type: "moderation_alert",
+        message: `Uygunsuz anket: "${title.substring(0, 50)}..."`,
+        pollId: snap.id,
+        isRead: false,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+    }
+  });
+
+/**
+ * =================================================================================
+ * 23. FORUM MESAJ MODERASYONU TRIGGER
+ * =================================================================================
+ */
+exports.moderateForumMessage = functions.region(REGION).firestore
+  .document("forumlar/{forumId}/mesajlar/{messageId}")
+  .onCreate(async (snap, context) => {
+    const messageData = snap.data();
+    const text = messageData.message || messageData.content || "";
+    const forumId = context.params.forumId;
+
+    // Kötü kelime kontrolü
+    const profanityCheck = checkContentForBadWords(text);
+
+    if (profanityCheck.hasProfanity) {
+      console.log(`[FORUM_MESSAGE_PROFANITY] Forum mesajı ${snap.id} uygunsuz dil içeriyor: ${profanityCheck.foundWords.join(", ")}`);
+      
+      await snap.ref.update({
+        flaggedForProfanity: true,
+        foundBadWords: profanityCheck.foundWords,
+        visible: false,
+        moderationMessage: `Mesajınız uygunsuz dil içeriyor: "${profanityCheck.foundWords.join(", ")}". Lütfen düzeltip yeniden gönderin.`,
+        flaggedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      // Admin'e bildirim gönder
+      await db.collection("bildirimler").add({
+        userId: "admin",
+        senderId: messageData.userId,
+        type: "moderation_alert",
+        message: `Uygunsuz forum mesajı: "${text.substring(0, 50)}..."`,
+        forumId: forumId,
+        messageId: snap.id,
+        isRead: false,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+    }
+  });
+
+/**
+ * =================================================================================
+ * 24. İÇERİK KONTROL VE MODERASYON (CLIENT SIDE SUBMISSION)
+ * =================================================================================
+ * Bu fonksiyon kullanıcı içerik göndermeden önce profanity kontrolü yapar
+ * ve sonucu döner. Eğer kötü kelime varsa, kullanıcıya hata mesajı gösterilir
+ * ve içeriği düzeltmesini istenir.
+ */
+exports.checkAndFixContent = functions.region(REGION).https.onCall(async (data, context) => {
+  checkAuth(context);
+  
+  const { contentType, title, content, text, question, options, message } = data;
+
+  // Geçerli content tipleri
+  const validTypes = ["post", "comment", "poll", "forum_message"];
+  if (!validTypes.includes(contentType)) {
+    throw new functions.https.HttpsError("invalid-argument", "Geçersiz içerik türü.");
+  }
+
+  try {
+    let textToCheck = "";
+    const foundWords = [];
+
+    // Content türüne göre kontrol metni oluştur
+    if (contentType === "post") {
+      textToCheck = (title || "") + " " + (content || "");
+    } else if (contentType === "comment") {
+      textToCheck = text || "";
+    } else if (contentType === "poll") {
+      textToCheck = (title || "") + " " + (question || "") + " " + (options || []).join(" ");
+    } else if (contentType === "forum_message") {
+      textToCheck = message || "";
+    }
+
+    if (!textToCheck || textToCheck.trim().length === 0) {
+      throw new functions.https.HttpsError("invalid-argument", "İçerik boş olamaz.");
+    }
+
+    // Profanity kontrolü yap
+    const profanityCheck = checkContentForBadWords(textToCheck);
+
+    if (profanityCheck.hasProfanity) {
+      console.log(`[PROFANITY_CHECK_FAILED] ${contentType}: ${profanityCheck.foundWords.join(", ")}`);
+      
+      return {
+        success: false,
+        message: `⚠️ İçeriğinizde uygunsuz kelimeler bulundu: "${profanityCheck.foundWords.join(", ")}"\nLütfen düzeltip yeniden gönderin.`,
+        foundWords: profanityCheck.foundWords,
+        requiresModeration: true,
+        canPublish: false
+      };
+    }
+
+    // Profanity kontrolü geçti
+    console.log(`[PROFANITY_CHECK_PASSED] ${contentType}: İçerik temiz`);
+    
+    return {
+      success: true,
+      message: "✅ İçerik kontrolü geçti! Yayınlayabilirsiniz.",
+      foundWords: [],
+      requiresModeration: false,
+      canPublish: true
+    };
+
+  } catch (error) {
+    console.error("İçerik kontrol hatası:", error);
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * =================================================================================
+ * 25. BAYRAKLANMIŞ IÇERIĞI DÜZELTİLMİŞ HALİYLE GÜNCELLE
+ * =================================================================================
+ * Moderasyon başarısız olan içeriği, kullanıcı düzeltince yeniden kontrol eder
+ * ve geçerse yayınlar.
+ */
+exports.resubmitModeratedContent = functions.region(REGION).https.onCall(async (data, context) => {
+  checkAuth(context);
+  const userId = context.auth.uid;
+  const { contentType, contentId, updatedText } = data;
+
+  // Geçerli content tipleri
+  const validTypes = ["post", "comment", "poll", "forum_message"];
+  if (!validTypes.includes(contentType)) {
+    throw new functions.https.HttpsError("invalid-argument", "Geçersiz içerik türü.");
+  }
+
+  if (!contentId || !updatedText) {
+    throw new functions.https.HttpsError("invalid-argument", "Gerekli alanlar eksik.");
+  }
+
+  try {
+    // Tekrar profanity kontrolü yap
+    const newCheck = checkContentForBadWords(updatedText);
+
+    if (newCheck.hasProfanity) {
+      console.log(`[RESUBMIT_FAILED] ${contentType}: Hâlâ kötü kelimeler var: ${newCheck.foundWords.join(", ")}`);
+      return {
+        success: false,
+        message: `⚠️ Düzeltilen içerik hâlâ uygunsuz kelimeler içeriyor: "${newCheck.foundWords.join(", ")}"`,
+        foundWords: newCheck.foundWords
+      };
+    }
+
+    // Güncellenecek data
+    const updateData = {
+      content: updatedText,
+      text: updatedText,
+      flaggedForProfanity: false,
+      foundBadWords: [],
+      visible: true,
+      status: "published",
+      moderationMessage: null,
+      resubmittedAt: admin.firestore.FieldValue.serverTimestamp(),
+      resubmittedBy: userId
+    };
+
+    // Content türüne göre güncelle
+    if (contentType === "post") {
+      await db.collection("gonderiler").doc(contentId).update(updateData);
+    } else if (contentType === "comment") {
+      // Yorum'un postId'sini bulmamız gerekir - collectionGroup ile ara
+      const allPostsSnapshot = await db.collectionGroup("yorumlar").where("__name__", "==", contentId).get();
+      if (allPostsSnapshot.empty) {
+        throw new functions.https.HttpsError("not-found", "Yorum bulunamadı.");
+      }
+      await allPostsSnapshot.docs[0].ref.update(updateData);
+    } else if (contentType === "poll") {
+      await db.collection("anketler").doc(contentId).update(updateData);
+    } else if (contentType === "forum_message") {
+      // Forum mesajı'nın forumId'sini bulmamız gerekir
+      const allForumsSnapshot = await db.collectionGroup("mesajlar").where("__name__", "==", contentId).get();
+      if (allForumsSnapshot.empty) {
+        throw new functions.https.HttpsError("not-found", "Forum mesajı bulunamadı.");
+      }
+      await allForumsSnapshot.docs[0].ref.update(updateData);
+    }
+
+    console.log(`[RESUBMIT_SUCCESS] ${contentType} ${contentId} başarıyla yayınlandı.`);
+    
+    return {
+      success: true,
+      message: "✅ İçeriğiniz başarıyla yayınlandı! Moderasyon geçti!"
+    };
+  } catch (error) {
+    console.error("İçerik yeniden gönderme hatası:", error);
     throw new functions.https.HttpsError("internal", error.message);
   }
 });
