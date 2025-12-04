@@ -1,0 +1,145 @@
+// ============================================================
+// FIREBASE STORAGE SECURITY RULES
+// ============================================================
+
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // ============================================================
+    // PHASE 1 STORAGE PATHS
+    // ============================================================
+    
+    // User Profile Pictures
+    match /users/{userId}/profile_picture/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if request.auth.uid == userId && isValidImage();
+      allow delete: if request.auth.uid == userId;
+    }
+    
+    // Ring/Sefer Photos
+    match /ring_sefer/{ringId}/photos/{allPaths=**} {
+      allow read: if true;
+      allow create: if request.auth != null && isValidImage();
+      allow update: if hasAdminRole(request.auth.uid);
+      allow delete: if hasAdminRole(request.auth.uid);
+    }
+    
+    // Forum Post Images
+    match /forum_posts/{postId}/images/{allPaths=**} {
+      allow read: if true;
+      allow create: if request.auth != null && isValidImage();
+      allow delete: if isResourceOwner(request.auth.uid, postId) || hasAdminRole(request.auth.uid);
+    }
+    
+    // Chat Media
+    match /chat_rooms/{roomId}/media/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && isValidImage();
+      allow delete: if hasAdminRole(request.auth.uid);
+    }
+    
+    // Poll Images
+    match /anket/{pollId}/images/{allPaths=**} {
+      allow read: if true;
+      allow create: if request.auth != null && isValidImage();
+      allow delete: if hasAdminRole(request.auth.uid);
+    }
+    
+    // ============================================================
+    // PHASE 2 STORAGE PATHS
+    // ============================================================
+    
+    // News Images
+    match /news/{newsId}/images/{allPaths=**} {
+      allow read: if true;
+      allow create: if request.auth != null && hasAdminRole(request.auth.uid) && isValidImage();
+      allow update: if request.auth != null && hasAdminRole(request.auth.uid);
+      allow delete: if request.auth != null && hasAdminRole(request.auth.uid);
+    }
+    
+    // Location Marker Icons
+    match /location_markers/{markerId}/images/{allPaths=**} {
+      allow read: if true;
+      allow create: if request.auth != null && isValidImage();
+      allow delete: if hasAdminRole(request.auth.uid);
+    }
+    
+    // Place Reviews
+    match /place_reviews/{reviewId}/photos/{allPaths=**} {
+      allow read: if true;
+      allow create: if request.auth != null && isValidImage();
+      allow delete: if isResourceOwner(request.auth.uid, reviewId) || hasAdminRole(request.auth.uid);
+    }
+    
+    // Emoji Packs
+    match /emoji_packs/{packId}/images/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null && hasAdminRole(request.auth.uid);
+    }
+    
+    // ============================================================
+    // PHASE 3 STORAGE PATHS
+    // ============================================================
+    
+    // User Feedback Evidence
+    match /user_feedback/{feedbackId}/evidence/{allPaths=**} {
+      allow read: if request.auth != null && hasAdminRole(request.auth.uid);
+      allow create: if request.auth != null && isValidImage();
+    }
+    
+    // Ring Photo Approvals
+    match /ring_photo_approvals/{approvalId}/photos/{allPaths=**} {
+      allow read: if request.auth != null && hasAdminRole(request.auth.uid);
+      allow create: if request.auth != null && isValidImage();
+    }
+    
+    // ============================================================
+    // PHASE 4 STORAGE PATHS
+    // ============================================================
+    
+    // Report Complaints Evidence
+    match /report_complaints/{reportId}/evidence/{allPaths=**} {
+      allow read: if request.auth != null && hasAdminRole(request.auth.uid);
+      allow create: if request.auth != null && isValidImage();
+    }
+    
+    // Ring Complaints Evidence
+    match /ring_complaints/{complaintId}/evidence/{allPaths=**} {
+      allow read: if request.auth != null && hasAdminRole(request.auth.uid);
+      allow create: if request.auth != null && isValidImage();
+    }
+    
+    // Change Request Evidence
+    match /change_requests/{requestId}/evidence/{allPaths=**} {
+      allow read: if request.auth != null && hasAdminRole(request.auth.uid);
+      allow create: if request.auth != null && isValidImage();
+    }
+    
+    // ============================================================
+    // HELPER FUNCTIONS
+    // ============================================================
+    
+    // Validate image file type and size (10MB max)
+    function isValidImage() {
+      return request.resource.size <= 10 * 1024 * 1024 &&
+             request.resource.contentType.matches('image/.*');
+    }
+    
+    // Check admin role
+    function hasAdminRole(userId) {
+      return get(/databases/(default)/documents/users/$(userId)).data.role == 'admin';
+    }
+    
+    // Check if user is resource owner
+    function isResourceOwner(userId, resourceId) {
+      let userData = get(/databases/(default)/documents/users/$(userId)).data;
+      return userData.uid == userId;
+    }
+    
+    // Catch all - deny by default
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

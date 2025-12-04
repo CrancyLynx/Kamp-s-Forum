@@ -1,0 +1,170 @@
+// ============================================================
+// PHASE 2-4 FIRESTORE SECURITY RULES
+// ============================================================
+
+// PHASE 2 COLLECTIONS
+match /news/{document=**} {
+  allow read: if true; // Public
+  allow create, update: if request.auth != null && hasAdminRole();
+  allow delete: if request.auth != null && hasAdminRole();
+}
+
+match /location_markers/{document=**} {
+  allow read: if true; // Public
+  allow create: if request.auth != null;
+  allow update: if request.auth != null && isResourceOwnerOrAdmin(resource.data.userId);
+  allow delete: if request.auth != null && hasAdminRole();
+}
+
+match /place_reviews/{document=**} {
+  allow read: if true; // Public
+  allow create: if request.auth != null;
+  allow update: if request.auth != null && isResourceOwnerOrAdmin(resource.data.reviewerId);
+  allow delete: if request.auth != null && isResourceOwnerOrAdmin(resource.data.reviewerId) || hasAdminRole();
+}
+
+match /emoji_packs/{document=**} {
+  allow read: if true; // Public
+  allow create: if request.auth != null && hasAdminRole();
+  allow update: if request.auth != null && hasAdminRole();
+  allow delete: if request.auth != null && hasAdminRole();
+}
+
+match /chat_moderation_rules/{document=**} {
+  allow read: if request.auth != null && hasModeratorRole();
+  allow create: if request.auth != null && hasAdminRole();
+  allow update: if request.auth != null && hasAdminRole();
+  allow delete: if request.auth != null && hasAdminRole();
+}
+
+match /users/{userId}/preferences/notifications {
+  allow read, write: if request.auth.uid == userId;
+}
+
+match /archived_messages/{document=**} {
+  allow read: if request.auth != null && isResourceOwnerOrAdmin(resource.data.userId);
+  allow create: if request.auth != null;
+  allow delete: if request.auth != null && isResourceOwnerOrAdmin(resource.data.userId);
+}
+
+match /activity_timeline/{document=**} {
+  allow read: if request.auth != null && (isResourceOwnerOrAdmin(resource.data.userId) || hasAdminRole());
+  allow create: if request.auth != null;
+}
+
+match /user_statistics/{userId} {
+  allow read: if request.auth != null && (request.auth.uid == userId || hasAdminRole());
+  allow write: if request.auth != null && hasAdminRole();
+}
+
+match /notification_templates/{document=**} {
+  allow read: if request.auth != null && hasAdminRole();
+  allow create, update, delete: if request.auth != null && hasAdminRole();
+}
+
+// PHASE 3 COLLECTIONS
+match /exam_calendar/{document=**} {
+  allow read: if true; // Public
+  allow create: if request.auth != null && hasAdminRole();
+  allow update: if request.auth != null && hasAdminRole();
+  allow delete: if request.auth != null && hasAdminRole();
+}
+
+match /vision_api_quota/{document=**} {
+  allow read: if request.auth != null && hasAdminRole();
+  allow write: if request.auth != null && hasAdminRole();
+}
+
+match /audit_logs/{document=**} {
+  allow read: if request.auth != null && hasAdminRole();
+  allow create: if request.auth != null && hasAdminRole();
+}
+
+match /error_logs/{document=**} {
+  allow read: if request.auth != null && hasAdminRole();
+  allow create: if true; // Anyone can report errors
+}
+
+match /user_feedback/{document=**} {
+  allow read: if request.auth != null && (isResourceOwnerOrAdmin(resource.data.userId) || hasAdminRole());
+  allow create: if request.auth != null;
+  allow update: if request.auth != null && hasAdminRole();
+}
+
+match /ring_photo_approvals/{document=**} {
+  allow read: if request.auth != null && (isResourceOwnerOrAdmin(resource.data.uploadedByUserId) || hasAdminRole());
+  allow create: if request.auth != null;
+  allow update: if request.auth != null && hasAdminRole();
+}
+
+match /system_bots/{document=**} {
+  allow read: if true; // Public
+  allow write: if request.auth != null && hasAdminRole();
+}
+
+// PHASE 4 COLLECTIONS
+match /blocked_users/{document=**} {
+  allow read: if request.auth != null && (isResourceOwnerOrAdmin(resource.data.blockerUserId) || hasAdminRole());
+  allow create: if request.auth != null;
+  allow delete: if request.auth != null && isResourceOwnerOrAdmin(resource.data.blockerUserId);
+}
+
+match /saved_posts/{document=**} {
+  allow read: if request.auth != null && isResourceOwnerOrAdmin(resource.data.userId);
+  allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+  allow delete: if request.auth != null && isResourceOwnerOrAdmin(resource.data.userId);
+}
+
+match /user_saved_collections/{document=**} {
+  allow read: if request.auth != null && isResourceOwnerOrAdmin(resource.data.userId);
+  allow create: if request.auth != null;
+  allow delete: if request.auth != null && isResourceOwnerOrAdmin(resource.data.userId);
+}
+
+match /change_requests/{document=**} {
+  allow read: if request.auth != null && (isResourceOwnerOrAdmin(resource.data.userId) || hasAdminRole());
+  allow create: if request.auth != null;
+  allow update: if request.auth != null && hasAdminRole();
+}
+
+match /report_complaints/{document=**} {
+  allow read: if request.auth != null && (isResourceOwnerOrAdmin(resource.data.reportedByUserId) || hasAdminRole());
+  allow create: if request.auth != null;
+  allow update: if request.auth != null && hasAdminRole();
+}
+
+match /advanced_moderation/{document=**} {
+  allow read: if request.auth != null && hasAdminRole();
+  allow create, update: if request.auth != null && hasAdminRole();
+}
+
+match /ring_complaints/{document=**} {
+  allow read: if request.auth != null && (isResourceOwnerOrAdmin(resource.data.complainantUserId) || hasAdminRole());
+  allow create: if request.auth != null;
+  allow update: if request.auth != null && hasAdminRole();
+}
+
+match /location_icons/{document=**} {
+  allow read: if true; // Public
+  allow write: if request.auth != null && hasAdminRole();
+}
+
+// ============================================================
+// HELPER FUNCTIONS
+// ============================================================
+
+function hasAdminRole() {
+  return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+}
+
+function hasModeratorRole() {
+  return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'moderator'];
+}
+
+function isResourceOwnerOrAdmin(userId) {
+  return request.auth.uid == userId || hasAdminRole();
+}
+
+function isValidEmail(email) {
+  return email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$');
+}
