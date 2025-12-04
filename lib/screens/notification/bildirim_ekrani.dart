@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../utils/app_colors.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import '../../utils/maskot_helper.dart';
+import '../../services/data_preload_service.dart';
 import '../forum/gonderi_detay_ekrani.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart';
 
@@ -27,6 +28,10 @@ class _BildirimEkraniState extends State<BildirimEkrani> {
   @override
   void initState() {
     super.initState();
+    // Arka planda notification cache'ini ısıt
+    DataPreloadService.getCachedData('notifications').catchError((e) {
+      debugPrint('Notification cache warm-up hatasi: $e');
+    });
     _cleanupOldNotifications();
   }
 

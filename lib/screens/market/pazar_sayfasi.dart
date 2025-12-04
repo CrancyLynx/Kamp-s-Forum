@@ -14,6 +14,7 @@ import '../../widgets/animated_list_item.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/maskot_helper.dart';
 import '../../widgets/app_header.dart';  // YENİ: Modern header widget'ı
+import '../../services/data_preload_service.dart';
 
 
 class PazarSayfasi extends StatefulWidget {
@@ -45,6 +46,10 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
   void initState() {
     super.initState();
     _loadFavorites();
+    // Arka planda market cache'ini ısıt
+    DataPreloadService.getCachedData('market_products').catchError((e) {
+      debugPrint('Market cache warm-up hatasi: $e');
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _showTutorial());
   }
 
