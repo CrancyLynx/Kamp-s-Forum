@@ -210,12 +210,12 @@ class _AdminPanelHomeEkraniState extends State<AdminPanelHomeEkrani> {
               ),
               _AdminCard(
                 icon: Icons.report_problem_rounded,
-                title: "Şikayetler",
-                subtitle: "Kullanıcı şikayetleri",
+                title: "İçerik Şikayetleri",
+                subtitle: "Uygunsuz içerik bildirimleri",
                 color: const Color(0xFFFFA502),
                 onTap: () => _navigateToTab(
                   const AdminReportsTab(),
-                  "Şikayetler",
+                  "İçerik Şikayetleri",
                 ),
               ),
             ]),
