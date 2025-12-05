@@ -434,6 +434,12 @@ class _AdminPanelHomeEkraniState extends State<AdminPanelHomeEkrani> {
       ),
     );
   }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Text(
+        title,
         style: const TextStyle(
           fontSize: 20,
           fontWeight: FontWeight.bold,
@@ -450,9 +456,9 @@ class _AdminPanelHomeEkraniState extends State<AdminPanelHomeEkrani> {
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
         childAspectRatio: 0.95,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
       ),
       itemCount: cards.length,
       itemBuilder: (context, index) => cards[index],
