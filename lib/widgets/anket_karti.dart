@@ -340,6 +340,10 @@ class _AnketKartiState extends State<AnketKarti> {
                                ],
                              ),
                            ),
+                           httpHeaders: const {
+                             'Accept': 'image/*',
+                             'Cache-Control': 'public, max-age=2592000',
+                           },
                          ),
 
                          // B. Karartma Gradyanı (Yazı okunurluğu için)

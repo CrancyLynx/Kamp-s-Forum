@@ -70,11 +70,12 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Maskot tutorialını bir kez göster
-    if (!_tutorialShown) {
+    // Maskot tutorialını SADECE İLK KERE göster
+    if (!_tutorialShown && mounted) {
       _tutorialShown = true;
-      Future.delayed(Duration(milliseconds: 700), () {
-        if (mounted) {
+      // Delayed initialization - but only once
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted && _tutorialShown) {
           _initializeMaskot();
         }
       });
@@ -333,8 +334,11 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                             if (_isOwnProfile)
                               IconButton(
                                 icon: const Icon(Icons.settings),
-                                color: Theme.of(context).textTheme.bodyLarge?.color,
-                                onPressed: () => _showSettingsModal(context, userData['role'] == 'admin'),
+                                tooltip: 'Ayarlar',
+                                onPressed: () {
+                                  debugPrint('Settings button pressed');
+                                  _showSettingsModal(context, userData['role'] == 'admin');
+                                },
                               ),
                             
                             // DÜZELTİLMİŞ TEMA BUTONU
