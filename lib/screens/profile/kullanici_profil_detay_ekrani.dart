@@ -384,7 +384,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                       children: [
                         _buildPostsList(_targetUserId), 
                         if (_isOwnProfile) 
-                          _buildSavedPostsList(List<String>.from(userData['savedPosts'] ?? [])),
+                          _buildSavedPostsListStream(),
                         if (_isOwnProfile) 
                           const Phase2to4IntegrationPanel(),
                       ],
@@ -868,41 +868,18 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     );
   }
 
-  Widget _buildSavedPostsList(List<String> savedPostIds) {
-    if (savedPostIds.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.bookmark_border, size: 60, color: Colors.grey[300]),
-            const SizedBox(height: 10),
-            Text(
-              "Kaydedilen gönderi yok.",
-              style: TextStyle(color: Colors.grey[500]),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final idsToShow = savedPostIds.reversed.take(10).toList();
-
-    return StreamBuilder<QuerySnapshot>(
+  Widget _buildSavedPostsListStream() {
+    return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
-          .collection('gonderiler')
-          .where(FieldPath.documentId, whereIn: idsToShow)
-          .orderBy('zaman', descending: true)
+          .collection('kullanicilar')
+          .doc(_currentUserId)
           .snapshots(),
-      builder: (context, snapshot) {
-        // Loading state
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
+      builder: (context, userSnapshot) {
+        if (userSnapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
         }
 
-        // Error state
-        if (snapshot.hasError) {
+        if (userSnapshot.hasError) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -916,7 +893,13 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                 const SizedBox(height: 15),
                 ElevatedButton(
                   onPressed: () {
-                    setState(() {});
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (context) => KullaniciProfilDetayEkrani(
+                          userId: _targetUserId,
+                        ),
+                      ),
+                    );
                   },
                   child: const Text("Yeniden Dene"),
                 ),
@@ -925,8 +908,11 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
           );
         }
 
-        // No data state
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        final savedPostIds = List<String>.from(
+          (userSnapshot.data?.data() as Map<String, dynamic>?)?['savedPosts'] ?? []
+        );
+
+        if (savedPostIds.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -934,7 +920,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                 Icon(Icons.bookmark_border, size: 60, color: Colors.grey[300]),
                 const SizedBox(height: 10),
                 Text(
-                  "Kaydedilenler bulunamadı.",
+                  "Kaydedilen gönderi yok.",
                   style: TextStyle(color: Colors.grey[500]),
                 ),
               ],
@@ -942,14 +928,48 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
           );
         }
 
-        // Success state
-        final docs = snapshot.data!.docs;
-        return ListView.builder(
-          padding: const EdgeInsets.all(12),
-          itemCount: docs.length,
-          itemBuilder: (context, index) {
-            final doc = docs[index];
-            return _buildPostItem(doc, doc.data() as Map<String, dynamic>);
+        final idsToShow = savedPostIds.reversed.take(10).toList();
+
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('gonderiler')
+              .where(FieldPath.documentId, whereIn: idsToShow)
+              .orderBy('zaman', descending: true)
+              .snapshots(),
+          builder: (context, postSnapshot) {
+            if (postSnapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (postSnapshot.hasError) {
+              return Center(child: Text("Hata: ${postSnapshot.error}"));
+            }
+
+            if (!postSnapshot.hasData || postSnapshot.data!.docs.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.bookmark_border, size: 60, color: Colors.grey[300]),
+                    const SizedBox(height: 10),
+                    Text(
+                      "Kaydedilenler bulunamadı.",
+                      style: TextStyle(color: Colors.grey[500]),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            final docs = postSnapshot.data!.docs;
+            return ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: docs.length,
+              itemBuilder: (context, index) {
+                final doc = docs[index];
+                return _buildPostItem(doc, doc.data() as Map<String, dynamic>);
+              },
+            );
           },
         );
       },
