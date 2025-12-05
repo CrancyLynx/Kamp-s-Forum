@@ -1,4 +1,3 @@
-// (Importlar aynı)
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -15,6 +14,7 @@ import '../../utils/app_colors.dart';
 import '../../widgets/app_header.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart';
 import 'gonderi_duzenleme_ekrani.dart';
+import 'forum_author_stats_widget.dart';
 import '../../widgets/animated_list_item.dart';
 import '../../services/gamification_service.dart'; // ✅ XP SİSTEMİ
 
@@ -632,6 +632,9 @@ class _GonderiDetayEkraniState extends State<GonderiDetayEkrani> with TickerProv
                                         )
                                       ),
                                       Text("$timeStr • ${widget.kategori}", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                                      const SizedBox(height: 6),
+                                      // Yazarın puan ve rozetlerini göster
+                                      ForumAuthorStatsWidget(authorUserId: widget.authorUserId),
                                     ],
                                   ),
                                 ),
