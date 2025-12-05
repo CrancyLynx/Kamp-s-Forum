@@ -304,7 +304,10 @@ class ExamDatesService {
   Future<Map<String, dynamic>> triggerExamDatesUpdate() async {
     try {
       final callable = _functions.httpsCallable('updateExamDates');
-      final result = await callable.call();
+      final now = DateTime.now();
+      final result = await callable.call({
+        'years': [now.year, now.year + 1]
+      });
       return {
         'success': true,
         'message': result.data['message'] ?? 'Sınav tarihleri güncellendi',

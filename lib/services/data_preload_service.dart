@@ -286,12 +286,50 @@ class DataPreloadService {
   static Future<void> cacheToDisk(String key, dynamic data) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final jsonData = jsonEncode(data);
+      // Timestamp nesnelerini ISO string'e çevir
+      final serializedData = _serializeForJson(data);
+      final jsonData = jsonEncode(serializedData);
       await prefs.setString('cache_$key', jsonData);
       await prefs.setString('cache_${key}_timestamp', DateTime.now().toIso8601String());
     } catch (e) {
       debugPrint('Cache save error ($key): $e');
     }
+  }
+
+  /// Firestore Timestamp objelerini JSON-compatible formata dönüştür
+  static dynamic _serializeForJson(dynamic data) {
+    if (data == null) return null;
+    
+    // Timestamp nesnesini kontrol et ve ISO string'e çevir
+    if (data.runtimeType.toString().contains('Timestamp')) {
+      try {
+        return data.toDate().toIso8601String();
+      } catch (e) {
+        debugPrint('Timestamp conversion error: $e');
+        return null;
+      }
+    }
+    
+    // DateTime'ı ISO string'e çevir
+    if (data is DateTime) {
+      return data.toIso8601String();
+    }
+    
+    // Liste içindeki nesneleri recursive olarak işle
+    if (data is List) {
+      return data.map((item) => _serializeForJson(item)).toList();
+    }
+    
+    // Map içindeki nesneleri recursive olarak işle
+    if (data is Map) {
+      final result = <String, dynamic>{};
+      data.forEach((key, value) {
+        result[key.toString()] = _serializeForJson(value);
+      });
+      return result;
+    }
+    
+    return data;
   }
 
   /// Cached veriyi oku
