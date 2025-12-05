@@ -3306,6 +3306,8 @@ exports.addUserPoints = functions.region(REGION).https.onCall(async (data, conte
     }
     
     const pointsRef = db.collection("user_points").doc(userId);
+    const univRef = db.collection("university_leaderboard").doc(universitesi || 'unknown');
+    
     await db.runTransaction(async (transaction) => {
       const doc = await transaction.get(pointsRef);
       const current = doc.data() || { totalPoints: 0, level: 1 };
@@ -3318,6 +3320,29 @@ exports.addUserPoints = functions.region(REGION).https.onCall(async (data, conte
         universitesi,
         lastUpdated: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
+      
+      // Üniversite leaderboard'unu güncelle
+      const univDoc = await transaction.get(univRef);
+      const userPointsDoc = await transaction.get(pointsRef);
+      const wasNewUser = !userPointsDoc.exists; // İlk puan alıyorsa yeni kullanıcı
+      
+      if (univDoc.exists) {
+        const univData = univDoc.data();
+        const memberCount = wasNewUser ? (univData.memberCount || 1) + 1 : (univData.memberCount || 1);
+        transaction.update(univRef, {
+          totalPoints: (univData.totalPoints || 0) + points,
+          memberCount: memberCount,
+          lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } else {
+        transaction.set(univRef, {
+          name: universitesi || 'Bilinmeyen',
+          totalPoints: points,
+          memberCount: 1,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
       
       transaction.set(db.collection("user_point_history").doc(), {
         userId,

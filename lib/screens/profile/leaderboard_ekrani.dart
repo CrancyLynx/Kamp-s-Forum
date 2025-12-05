@@ -19,7 +19,7 @@ class _LeaderboardEkraniState extends State<LeaderboardEkrani> with SingleTicker
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadUniversities();
   }
 
@@ -78,6 +78,7 @@ class _LeaderboardEkraniState extends State<LeaderboardEkrani> with SingleTicker
                 Tab(icon: Icon(FontAwesomeIcons.star), text: 'XP'),
                 Tab(icon: Icon(FontAwesomeIcons.fire), text: 'Haftalık'),
                 Tab(icon: Icon(FontAwesomeIcons.crown), text: 'Rozetler'),
+                Tab(icon: Icon(FontAwesomeIcons.building), text: 'Üniversiteler'),
               ],
             ),
           ),
@@ -89,6 +90,7 @@ class _LeaderboardEkraniState extends State<LeaderboardEkrani> with SingleTicker
                 _buildXPLeaderboard(),
                 _buildWeeklyLeaderboard(),
                 _buildBadgeLeaderboard(),
+                _buildUniversityLeaderboard(),
               ],
             ),
           ),
@@ -420,5 +422,112 @@ class _LeaderboardEkraniState extends State<LeaderboardEkrani> with SingleTicker
       default:
         return Colors.grey;
     }
+  }
+
+  // Üniversite Leaderboard
+  Widget _buildUniversityLeaderboard() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('university_leaderboard')
+          .orderBy('totalPoints', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red, size: 40),
+                  const SizedBox(height: 8),
+                  Text("Hata: ${snapshot.error}"),
+                ],
+              ),
+            ),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.school_outlined, size: 60, color: Colors.grey),
+                SizedBox(height: 10),
+                Text("Henüz veri yok", style: TextStyle(color: Colors.grey)),
+              ],
+            ),
+          );
+        }
+
+        final rankings = snapshot.data!.docs;
+        return ListView.builder(
+          padding: const EdgeInsets.all(12),
+          itemCount: rankings.length,
+          itemBuilder: (context, index) {
+            final data = rankings[index].data() as Map<String, dynamic>;
+            final univName = data['name'] ?? 'Bilinmeyen Üniversite';
+            final totalPoints = (data['totalPoints'] ?? 0).toInt();
+            final memberCount = (data['memberCount'] ?? 0).toInt();
+
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: _getMedalColor(index),
+                  child: index == 0
+                      ? const Icon(FontAwesomeIcons.crown, color: Colors.white)
+                      : index == 1
+                          ? const Icon(FontAwesomeIcons.medal, color: Colors.white)
+                          : index == 2
+                              ? const Icon(FontAwesomeIcons.medal, color: Colors.white)
+                              : Text(
+                                  '${index + 1}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                ),
+                title: Text(
+                  univName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: Text(
+                  '$memberCount üye',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                trailing: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '$totalPoints 💫',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const Text(
+                      'Toplam Puan',
+                      style: TextStyle(fontSize: 10, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 }

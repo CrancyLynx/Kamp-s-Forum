@@ -14,10 +14,10 @@ import '../../services/news_service.dart';
 import '../../services/exam_dates_service.dart';
 import '../../utils/app_colors.dart';
 import '../profile/kullanici_profil_detay_ekrani.dart'; 
+import '../profile/leaderboard_ekrani.dart';
 import '../event/etkinlik_detay_ekrani.dart';
 import '../chat/sohbet_listesi_ekrani.dart';
 import '../notification/bildirim_ekrani.dart';
-import 'points_summary_widget.dart';
 
 class KesfetSayfasi extends StatefulWidget {
   const KesfetSayfasi({super.key});
@@ -50,7 +50,7 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 8, vsync: this); // Phase 2 ekranları: Haberler, Konumlar, Emoji, Chat Mod, Aktivite, Yer Yorum, İstat, Şablonlar
+    _tabController = TabController(length: 7, vsync: this); // Phase 2 ekranları: Haberler, Konumlar, Emoji, Chat Mod, Aktivite, Yer Yorum, İstat, Şablonlar
     _leaderboardTabController = TabController(length: 2, vsync: this);
     _loadData();
   }
@@ -409,13 +409,6 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
 
               const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
-              // PUANLAR ÖZET KARŞI
-              const SliverToBoxAdapter(
-                child: PointsSummaryWidget(),
-              ),
-
-              const SliverToBoxAdapter(child: SizedBox(height: 24)),
-
               // LİDERLİK TABLOSU & POPÜLER TARTIŞMALAR
               SliverToBoxAdapter(
                 child: Column(
@@ -449,6 +442,16 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                                 Tab(child: Text("En İyi Katılımcılar", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
                               ],
                             ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.leaderboard_rounded, color: AppColors.primary),
+                            tooltip: 'Üniversite Sıralaması',
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => const LeaderboardEkrani()),
+                              );
+                            },
                           ),
                         ],
                       ),
