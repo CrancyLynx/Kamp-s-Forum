@@ -17,6 +17,7 @@ import '../profile/kullanici_profil_detay_ekrani.dart';
 import '../event/etkinlik_detay_ekrani.dart';
 import '../chat/sohbet_listesi_ekrani.dart';
 import '../notification/bildirim_ekrani.dart';
+import 'points_summary_widget.dart';
 
 class KesfetSayfasi extends StatefulWidget {
   const KesfetSayfasi({super.key});
@@ -404,6 +405,13 @@ class _KesfetSayfasiState extends State<KesfetSayfasi> with TickerProviderStateM
                     _buildEventsSlider(), 
                   ],
                 ),
+              ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+
+              // PUANLAR ÖZET KARŞI
+              const SliverToBoxAdapter(
+                child: PointsSummaryWidget(),
               ),
 
               const SliverToBoxAdapter(child: SizedBox(height: 24)),
