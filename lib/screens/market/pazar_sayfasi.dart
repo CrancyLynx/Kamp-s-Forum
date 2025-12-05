@@ -8,6 +8,7 @@ import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 // İMPORT DÜZELTMELERİ
 import 'urun_ekleme_ekrani.dart';
 import 'urun_detay_ekrani.dart';
+import 'market_seller_stats_widget.dart';
 import '../chat/sohbet_listesi_ekrani.dart';
 import '../notification/bildirim_ekrani.dart'; // DÜZELTİLDİ: Doğru dosya yolu
 import '../../widgets/animated_list_item.dart';
@@ -406,6 +407,10 @@ class _PazarSayfasiState extends State<PazarSayfasi> {
                       Expanded(child: Text(data['sellerName'] ?? 'Satıcı', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Colors.grey[600]))),
                     ],
                   ),
+                  const SizedBox(height: 4),
+                  // Satıcı istatistikleri
+                  if (data['sellerUserId'] != null)
+                    MarketSellerStatsWidget(sellerUserId: data['sellerUserId']),
                 ],
               ),
             ),
