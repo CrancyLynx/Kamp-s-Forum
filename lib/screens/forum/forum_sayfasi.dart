@@ -367,26 +367,29 @@ class _ForumSayfasiState extends State<ForumSayfasi> {
               subtitle: 'Soru, fikir ve tartışmaları paylaş',
               icon: Icons.forum_rounded,
               accentColor: AppColors.primary,
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (!widget.isGuest) ...[
-                    IconButton(
-                      icon: const Icon(Icons.chat_bubble_outline),
-                      tooltip: 'Mesajlar',
-                      onPressed: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const SohbetListesiEkrani()));
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.notifications_none),
-                      tooltip: 'Bildirimler',
-                      onPressed: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const BildirimEkrani()));
-                      },
-                    ),
-                  ]
-                ],
+              trailing: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!widget.isGuest) ...[
+                      IconButton(
+                        icon: const Icon(Icons.chat_bubble_outline),
+                        tooltip: 'Mesajlar',
+                        onPressed: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const SohbetListesiEkrani()));
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.notifications_none),
+                        tooltip: 'Bildirimler',
+                        onPressed: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const BildirimEkrani()));
+                        },
+                      ),
+                    ]
+                  ],
+                ),
               ),
             ),
 

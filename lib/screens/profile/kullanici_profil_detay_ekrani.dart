@@ -445,30 +445,38 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
     final bool isUserAdmin = (data['role'] == 'admin');
     final textColor = Theme.of(context).textTheme.bodyLarge?.color;
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          name,
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: textColor),
-        ),
-        if (isUserAdmin)
-          const Padding(
-            padding: EdgeInsets.only(left: 6),
-            child: Icon(Icons.verified, color: AppColors.primary, size: 22),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              name,
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: textColor),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppColors.primaryAccent.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(8),
+          if (isUserAdmin)
+            const Padding(
+              padding: EdgeInsets.only(left: 6),
+              child: Icon(Icons.verified, color: AppColors.primary, size: 22),
+            ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.primaryAccent.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text("Lv. ${data['seviye'] ?? 1}",
+                style: const TextStyle(color: AppColors.primaryAccent, fontWeight: FontWeight.bold, fontSize: 13)),
           ),
-          child: Text("Lv. ${data['seviye'] ?? 1}",
-              style: const TextStyle(color: AppColors.primaryAccent, fontWeight: FontWeight.bold, fontSize: 13)),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -542,17 +550,21 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
         color: cardColor.withOpacity(0.5),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildStatItem("Takipçi", data['followerCount'] ?? 0,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => KullaniciListesiEkrani(title: "$name Takipçileri", userIds: List<String>.from(data['followers'] ?? []))))),
-          Container(height: 30, width: 1, color: Colors.grey.withOpacity(0.2)),
-          _buildStatItem("Takip", data['followingCount'] ?? 0,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => KullaniciListesiEkrani(title: "$name Takip Ettikleri", userIds: List<String>.from(data['following'] ?? []))))),
-          Container(height: 30, width: 1, color: Colors.grey.withOpacity(0.2)),
-          _buildStatItem("Gönderi", data['postCount'] ?? 0),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildStatItem("Takipçi", data['followerCount'] ?? 0,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => KullaniciListesiEkrani(title: "$name Takipçileri", userIds: List<String>.from(data['followers'] ?? []))))),
+            Container(height: 30, width: 1, color: Colors.grey.withOpacity(0.2)),
+            _buildStatItem("Takip", data['followingCount'] ?? 0,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => KullaniciListesiEkrani(title: "$name Takip Ettikleri", userIds: List<String>.from(data['following'] ?? []))))),
+            Container(height: 30, width: 1, color: Colors.grey.withOpacity(0.2)),
+            _buildStatItem("Gönderi", data['postCount'] ?? 0),
+          ],
+        ),
       ),
     );
   }
@@ -568,14 +580,18 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
 
     return Padding(
       padding: const EdgeInsets.only(top: 20.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (github?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.github, "https://github.com/$github"),
-          if (linkedin?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.linkedin, "https://linkedin.com/in/$linkedin"),
-          if (instagram?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.instagram, "https://instagram.com/$instagram"),
-          if (xPlatform?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.xTwitter, "https://x.com/$xPlatform"),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (github?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.github, "https://github.com/$github"),
+            if (linkedin?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.linkedin, "https://linkedin.com/in/$linkedin"),
+            if (instagram?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.instagram, "https://instagram.com/$instagram"),
+            if (xPlatform?.isNotEmpty ?? false) _buildSocialIcon(FontAwesomeIcons.xTwitter, "https://x.com/$xPlatform"),
+          ],
+        ),
       ),
     );
   }
