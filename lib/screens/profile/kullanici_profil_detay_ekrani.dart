@@ -373,7 +373,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                                                         tabs: [
                                                           const Tab(text: "Gönderiler"),
                                                           if (_isOwnProfile) const Tab(text: "Kaydedilenler"),
-                                                          if (_isOwnProfile) const Tab(text: "Tüm Sistemler"),
                                                         ],
                                                       ),                          ),
                           pinned: true,
@@ -385,8 +384,6 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                         _buildPostsList(_targetUserId), 
                         if (_isOwnProfile) 
                           _buildSavedPostsListStream(),
-                        if (_isOwnProfile) 
-                          const Phase2to4IntegrationPanel(),
                       ],
                     ),
                   ),
@@ -1116,63 +1113,106 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
       context: context,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      isScrollControlled: true,
       builder: (context) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 8),
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
-              const SizedBox(height: 16),
-              if (isAdmin)
-                ListTile(
-                  leading: const Icon(Icons.shield_outlined, color: AppColors.primary),
-                  title: const Text('Admin Paneli'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminPanelEkrani()));
-                  },
+          child: DraggableScrollableSheet(
+            expand: false,
+            maxChildSize: 0.9,
+            initialChildSize: 0.7,
+            builder: (context, scrollController) {
+              return SingleChildScrollView(
+                controller: scrollController,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 8),
+                    Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'Profil Bilgileri & Ayarlar',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Tüm Sistemler Panel
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey[300]!),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Phase2to4IntegrationPanel(),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    // Ayarlar Başlığı
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Hesap Ayarları',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (isAdmin)
+                      ListTile(
+                        leading: const Icon(Icons.shield_outlined, color: AppColors.primary),
+                        title: const Text('Admin Paneli'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminPanelEkrani()));
+                        },
+                      ),
+                    ListTile(
+                      leading: const Icon(Icons.edit, color: Colors.blue),
+                      title: const Text('Profili Düzenle'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilDuzenlemeEkrani()));
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.block, color: Colors.red),
+                      title: const Text('Engellenen Kullanıcılar'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const EngellenenKullanicilarEkrani()));
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.logout, color: AppColors.error),
+                      title: const Text('Çıkış Yap', style: TextStyle(color: AppColors.error)),
+                      onTap: () async {
+                        Navigator.pop(context);
+                        await AuthService().signOut();
+                        if (mounted) {
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(builder: (context) => const GirisEkrani()),
+                            (route) => false,
+                          );
+                        }
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.delete_forever, color: Colors.red),
+                      title: const Text('Hesabı Sil', style: TextStyle(color: Colors.red)),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showDeleteAccountConfirmationDialog();
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ),
-              ListTile(
-                leading: const Icon(Icons.edit, color: Colors.blue),
-                title: const Text('Profili Düzenle'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilDuzenlemeEkrani()));
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.block, color: Colors.red),
-                title: const Text('Engellenen Kullanıcılar'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const EngellenenKullanicilarEkrani()));
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.logout, color: AppColors.error),
-                title: const Text('Çıkış Yap', style: TextStyle(color: AppColors.error)),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await AuthService().signOut();
-                  if (mounted) {
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (context) => const GirisEkrani()),
-                      (route) => false,
-                    );
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete_forever, color: Colors.red),
-                title: const Text('Hesabı Sil', style: TextStyle(color: Colors.red)),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showDeleteAccountConfirmationDialog();
-                },
-              ),
-              const SizedBox(height: 16),
-            ],
+              );
+            },
           ),
         );
       },
