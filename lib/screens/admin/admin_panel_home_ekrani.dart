@@ -22,6 +22,15 @@ import 'phase3_system_bots_tab.dart';
 import 'phase3_blocked_users_tab.dart';
 import 'phase3_moderation_logs_tab.dart';
 
+// Phase 4 - Tabs
+import 'phase4_ride_complaints_tab.dart';
+import 'phase4_scoring_tab.dart';
+import 'phase4_achievements_tab.dart';
+import 'phase4_rewards_tab.dart';
+import 'phase4_search_analytics_tab.dart';
+import 'phase4_ai_stats_tab.dart';
+import 'phase4_financial_tab.dart';
+
 class AdminPanelHomeEkrani extends StatefulWidget {
   const AdminPanelHomeEkrani({super.key});
 
@@ -342,49 +351,70 @@ class _AdminPanelHomeEkraniState extends State<AdminPanelHomeEkrani> {
                 title: "Ride Şikayetleri",
                 subtitle: "Sürüş güvenliği",
                 color: const Color(0xFF2F4F4F),
-                onTap: () => _showComingSoon("Ride Şikayetleri"),
+                onTap: () => _navigateToPhase4(
+                  "Ride Şikayetleri",
+                  const Phase4RideComplaintsTab(),
+                ),
               ),
               _AdminCard(
                 icon: Icons.grade_rounded,
                 title: "Puan Sistemi",
                 subtitle: "Kullanıcı puan yönetimi",
                 color: const Color(0xFF4169E1),
-                onTap: () => _showComingSoon("Puan Sistemi"),
+                onTap: () => _navigateToPhase4(
+                  "Puan Sistemi",
+                  const Phase4ScoringTab(),
+                ),
               ),
               _AdminCard(
                 icon: Icons.emoji_events_rounded,
                 title: "Başarılar",
                 subtitle: "Başarı rozeti yönetimi",
                 color: const Color(0xFFFF8C00),
-                onTap: () => _showComingSoon("Başarılar"),
+                onTap: () => _navigateToPhase4(
+                  "Başarılar",
+                  const Phase4AchievementsTab(),
+                ),
               ),
               _AdminCard(
                 icon: Icons.card_giftcard_rounded,
                 title: "Ödüller",
                 subtitle: "Ödül dağıtımı",
                 color: const Color(0xFF228B22),
-                onTap: () => _showComingSoon("Ödüller"),
+                onTap: () => _navigateToPhase4(
+                  "Ödüller",
+                  const Phase4RewardsTab(),
+                ),
               ),
               _AdminCard(
                 icon: Icons.search_rounded,
                 title: "Arama Analiz",
                 subtitle: "Popüler aramalar",
                 color: const Color(0xFF8B008B),
-                onTap: () => _showComingSoon("Arama Analiz"),
+                onTap: () => _navigateToPhase4(
+                  "Arama Analiz",
+                  const Phase4SearchAnalyticsTab(),
+                ),
               ),
               _AdminCard(
                 icon: Icons.auto_awesome_rounded,
                 title: "AI İstatistik",
                 subtitle: "Model metrikleri",
                 color: const Color(0xFF00CED1),
-                onTap: () => _showComingSoon("AI İstatistik"),
+                onTap: () => _navigateToPhase4(
+                  "AI İstatistik",
+                  const Phase4AIStatsTab(),
+                ),
               ),
               _AdminCard(
                 icon: Icons.monetization_on_rounded,
                 title: "Finansal Rapor",
                 subtitle: "Gelir analizi",
                 color: const Color(0xFF2E8B57),
-                onTap: () => _showComingSoon("Finansal Rapor"),
+                onTap: () => _navigateToPhase4(
+                  "Finansal Rapor",
+                  const Phase4FinancialTab(),
+                ),
               ),
             ]),
             const SizedBox(height: 24),
@@ -394,11 +424,16 @@ class _AdminPanelHomeEkraniState extends State<AdminPanelHomeEkrani> {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Text(
-        title,
+  void _navigateToPhase4(String title, Widget screen) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => AdminTabScaffold(
+          title: title,
+          child: screen,
+        ),
+      ),
+    );
+  }
         style: const TextStyle(
           fontSize: 20,
           fontWeight: FontWeight.bold,

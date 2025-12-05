@@ -1,482 +1,381 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/phase4_models.dart';
 
-class BlockedUserService {
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+// ============================================================
+// PHASE 4 - SERVİSLER
+// Tüm Türkiye'ye açık, üniversiteye özel veri filtreleme
+// ============================================================
 
-  /// Kullanıcıyı engelle
-  static Future<String> blockUser(String blockerUserId, String blockedUserId, {String? reason}) async {
+class Phase4Services {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // ============================================================
+  // 1. RIDE ŞİKAYETLERİ SERVİSİ
+  // ============================================================
+  
+  Future<String> createRideComplaint({
+    required String ringId,
+    required String seferId,
+    required String complainantUserId,
+    required String complainantName,
+    required String driverId,
+    required String driverName,
+    required String universityName,
+    required String category,
+    required String description,
+    required int severity,
+    List<String> witnessIds = const [],
+  }) async {
     try {
-      final docRef = await _firestore.collection('blocked_users').add({
-        'blockedUserId': blockedUserId,
-        'blockerUserId': blockerUserId,
-        'blockedAt': Timestamp.now(),
-        'reason': reason,
+      final docRef = await _firestore.collection('ride_complaints').add({
+        'ringId': ringId,
+        'seferId': seferId,
+        'complainantUserId': complainantUserId,
+        'complainantName': complainantName,
+        'driverId': driverId,
+        'driverName': driverName,
+        'universityName': universityName,
+        'category': category,
+        'description': description,
+        'severity': severity,
+        'witnessIds': witnessIds,
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+        'resolvedAt': null,
+        'resolutionNote': null,
       });
       return docRef.id;
     } catch (e) {
-      throw Exception('Kullanıcı engelleme hatası: $e');
+      throw Exception('Şikayet oluşturulamadı: $e');
     }
   }
 
-  /// Engellemeyi kaldır
-  static Future<void> unblockUser(String blockerUserId, String blockedUserId) async {
+  Stream<List<RideComplaint>> getRideComplaintsByUniversity(String universityName) {
+    return _firestore
+        .collection('ride_complaints')
+        .where('universityName', isEqualTo: universityName)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => RideComplaint.fromFirestore(doc))
+            .toList());
+  }
+
+  Future<void> updateRideComplaintStatus({
+    required String complaintId,
+    required String status,
+    String? resolutionNote,
+  }) async {
     try {
-      final snapshot = await _firestore
-          .collection('blocked_users')
-          .where('blockerUserId', isEqualTo: blockerUserId)
-          .where('blockedUserId', isEqualTo: blockedUserId)
-          .get();
-      
-      for (final doc in snapshot.docs) {
-        await doc.reference.delete();
+      await _firestore.collection('ride_complaints').doc(complaintId).update({
+        'status': status,
+        'resolutionNote': resolutionNote,
+        if (status == 'resolved') 'resolvedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw Exception('Şikayet güncellenemedi: $e');
+    }
+  }
+
+  // ============================================================
+  // 2. PUAN SİSTEMİ SERVİSİ
+  // ============================================================
+  
+  Future<UserPoints> getUserPoints({
+    required String userId,
+    required String universityName,
+  }) async {
+    try {
+      final doc = await _firestore.collection('user_points').doc(userId).get();
+      if (doc.exists) {
+        return UserPoints.fromFirestore(doc);
+      } else {
+        final newPoints = UserPoints(
+          userId: userId,
+          userName: '',
+          universityName: universityName,
+          totalPoints: 0,
+          level: 1,
+          nextLevelRequirement: 100,
+          lastPointUpdateAt: DateTime.now(),
+        );
+        await doc.reference.set(newPoints.toFirestore());
+        return newPoints;
       }
     } catch (e) {
-      throw Exception('Engelleme kaldırma hatası: $e');
+      throw Exception('Puanlar getirilemedi: $e');
     }
   }
 
-  /// Kullanıcının engelleme listesi
-  static Stream<List<BlockedUser>> getBlockedUsers(String userId) {
+  Future<void> addPoints({
+    required String userId,
+    required int points,
+    required String category,
+  }) async {
+    try {
+      final docRef = _firestore.collection('user_points').doc(userId);
+      await docRef.update({
+        'totalPoints': FieldValue.increment(points),
+        'pointsByCategory.$category': FieldValue.increment(points),
+        'lastPointUpdateAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw Exception('Puan eklenemedi: $e');
+    }
+  }
+
+  Stream<List<UserPoints>> getUniversityLeaderboard(String universityName) {
     return _firestore
-        .collection('blocked_users')
-        .where('blockerUserId', isEqualTo: userId)
+        .collection('user_points')
+        .where('universityName', isEqualTo: universityName)
+        .orderBy('totalPoints', descending: true)
+        .limit(100)
         .snapshots()
         .map((snapshot) => snapshot.docs
-            .map((doc) => BlockedUser.fromFirestore(doc))
+            .map((doc) => UserPoints.fromFirestore(doc))
             .toList());
   }
 
-  /// Engellendi mi kontrol et
-  static Future<bool> isUserBlocked(String blockerUserId, String blockedUserId) async {
-    try {
-      final snapshot = await _firestore
-          .collection('blocked_users')
-          .where('blockerUserId', isEqualTo: blockerUserId)
-          .where('blockedUserId', isEqualTo: blockedUserId)
-          .get();
-      return snapshot.docs.isNotEmpty;
-    } catch (e) {
-      throw Exception('Engelleme kontrolü hatası: $e');
-    }
-  }
-}
-
-class SavedPostService {
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  /// Gönderiyi kaydet
-  static Future<String> savePost(SavedPost savedPost) async {
-    try {
-      final docRef = await _firestore.collection('saved_posts').add(savedPost.toFirestore());
-      return docRef.id;
-    } catch (e) {
-      throw Exception('Gönderi kaydetme hatası: $e');
-    }
-  }
-
-  /// Kaydı kaldır
-  static Future<void> removeFromSaved(String userId, String postId) async {
-    try {
-      final snapshot = await _firestore
-          .collection('saved_posts')
-          .where('userId', isEqualTo: userId)
-          .where('postId', isEqualTo: postId)
-          .get();
-      
-      for (final doc in snapshot.docs) {
-        await doc.reference.delete();
-      }
-    } catch (e) {
-      throw Exception('Kaydı kaldırma hatası: $e');
-    }
-  }
-
-  /// Kullanıcının kaydedilen gönderileri
-  static Stream<List<SavedPost>> getSavedPostsOfUser(String userId) {
+  // ============================================================
+  // 3. BAŞARILAR SERVİSİ
+  // ============================================================
+  
+  Stream<List<Achievement>> getAchievements() {
     return _firestore
-        .collection('saved_posts')
-        .where('userId', isEqualTo: userId)
-        .orderBy('savedAt', descending: true)
+        .collection('achievements')
+        .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) => snapshot.docs
-            .map((doc) => SavedPost.fromFirestore(doc))
+            .map((doc) => Achievement.fromFirestore(doc))
             .toList());
   }
 
-  /// Koleksiyona göre kaydedilen gönderiler
-  static Stream<List<SavedPost>> getSavedPostsByCollection(String userId, String collectionName) {
+  Stream<List<UserAchievement>> getUserAchievements(String userId) {
     return _firestore
-        .collection('saved_posts')
-        .where('userId', isEqualTo: userId)
-        .where('collectionName', isEqualTo: collectionName)
-        .orderBy('savedAt', descending: true)
+        .collection('user_achievements')
+        .doc(userId)
+        .collection('achievements')
         .snapshots()
         .map((snapshot) => snapshot.docs
-            .map((doc) => SavedPost.fromFirestore(doc))
+            .map((doc) => UserAchievement.fromFirestore(doc))
             .toList());
   }
 
-  /// Kaydedilmiş mi kontrol et
-  static Future<bool> isPostSaved(String userId, String postId) async {
-    try {
-      final snapshot = await _firestore
-          .collection('saved_posts')
-          .where('userId', isEqualTo: userId)
-          .where('postId', isEqualTo: postId)
-          .get();
-      return snapshot.docs.isNotEmpty;
-    } catch (e) {
-      throw Exception('Kaydetme kontrolü hatası: $e');
-    }
-  }
-
-  /// Koleksiyon oluştur
-  static Future<void> createCollection(String userId, String collectionName) async {
+  Future<void> unlockAchievement({
+    required String userId,
+    required String achievementId,
+    required String achievementTitle,
+    required String achievementEmoji,
+  }) async {
     try {
       await _firestore
-          .collection('user_saved_collections')
+          .collection('user_achievements')
+          .doc(userId)
+          .collection('achievements')
           .add({
-            'userId': userId,
-            'collectionName': collectionName,
-            'createdAt': Timestamp.now(),
-          });
-    } catch (e) {
-      throw Exception('Koleksiyon oluşturma hatası: $e');
-    }
-  }
-}
-
-class ChangeRequestService {
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  /// Değişiklik talebini oluştur
-  static Future<String> createChangeRequest(ChangeRequest request) async {
-    try {
-      final docRef = await _firestore.collection('change_requests').add(request.toFirestore());
-      return docRef.id;
-    } catch (e) {
-      throw Exception('Değişiklik talebini oluşturma hatası: $e');
-    }
-  }
-
-  /// Talebini onayla
-  static Future<void> approveRequest(String requestId, String adminId) async {
-    try {
-      await _firestore.collection('change_requests').doc(requestId).update({
-        'status': 'approved',
-        'reviewedByAdminId': adminId,
+        'achievementId': achievementId,
+        'achievementTitle': achievementTitle,
+        'achievementEmoji': achievementEmoji,
+        'unlockedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      throw Exception('Talebini onaylama hatası: $e');
+      throw Exception('Başarı kilidi açılamadı: $e');
     }
   }
 
-  /// Talebini reddet
-  static Future<void> rejectRequest(String requestId, String adminId) async {
-    try {
-      await _firestore.collection('change_requests').doc(requestId).update({
-        'status': 'rejected',
-        'reviewedByAdminId': adminId,
-      });
-    } catch (e) {
-      throw Exception('Talebini reddetme hatası: $e');
-    }
-  }
-
-  /// Bekleyen istekler
-  static Stream<List<ChangeRequest>> getPendingRequests() {
+  // ============================================================
+  // 4. ÖDÜLLER SERVİSİ
+  // ============================================================
+  
+  Stream<List<Reward>> getActiveRewards() {
     return _firestore
-        .collection('change_requests')
-        .where('status', isEqualTo: 'pending')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => ChangeRequest.fromFirestore(doc))
-            .toList());
-  }
-
-  /// Kullanıcının istekleri
-  static Stream<List<ChangeRequest>> getUserRequests(String userId) {
-    return _firestore
-        .collection('change_requests')
-        .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => ChangeRequest.fromFirestore(doc))
-            .toList());
-  }
-}
-
-class ReportComplaintService {
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  /// Şikayeti raporla
-  static Future<String> submitReport(ReportComplaint report) async {
-    try {
-      final docRef = await _firestore.collection('report_complaints').add(report.toFirestore());
-      return docRef.id;
-    } catch (e) {
-      throw Exception('Rapor gönderme hatası: $e');
-    }
-  }
-
-  /// Raporu araştır
-  static Future<void> startInvestigation(String reportId, String adminId) async {
-    try {
-      await _firestore.collection('report_complaints').doc(reportId).update({
-        'status': 'investigating',
-        'reviewedByAdminId': adminId,
-      });
-    } catch (e) {
-      throw Exception('Araştırma başlatma hatası: $e');
-    }
-  }
-
-  /// Raporu çöz
-  static Future<void> resolveReport(String reportId, String resolution, String adminId) async {
-    try {
-      await _firestore.collection('report_complaints').doc(reportId).update({
-        'status': 'resolved',
-        'resolution': resolution,
-        'reviewedByAdminId': adminId,
-      });
-    } catch (e) {
-      throw Exception('Raporu çözme hatası: $e');
-    }
-  }
-
-  /// Bekleyen raporlar
-  static Stream<List<ReportComplaint>> getPendingReports() {
-    return _firestore
-        .collection('report_complaints')
-        .where('status', isEqualTo: 'pending')
-        .orderBy('reportedAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => ReportComplaint.fromFirestore(doc))
-            .toList());
-  }
-
-  /// Rapor tipine göre
-  static Stream<List<ReportComplaint>> getReportsByType(String reportType) {
-    return _firestore
-        .collection('report_complaints')
-        .where('reportType', isEqualTo: reportType)
-        .orderBy('reportedAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => ReportComplaint.fromFirestore(doc))
-            .toList());
-  }
-
-  /// Kullanıcının raporları
-  static Stream<List<ReportComplaint>> getUserReports(String userId) {
-    return _firestore
-        .collection('report_complaints')
-        .where('reportedByUserId', isEqualTo: userId)
-        .orderBy('reportedAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => ReportComplaint.fromFirestore(doc))
-            .toList());
-  }
-}
-
-class AdvancedModerationService {
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  /// Moderasyon eylemi uygula
-  static Future<String> applyModerationAction(AdvancedModeration moderation) async {
-    try {
-      final docRef = await _firestore.collection('advanced_moderation').add(moderation.toFirestore());
-      return docRef.id;
-    } catch (e) {
-      throw Exception('Moderasyon eylemi uygulama hatası: $e');
-    }
-  }
-
-  /// Eylemi kaldır
-  static Future<void> removeModerationAction(String moderationId) async {
-    try {
-      await _firestore.collection('advanced_moderation').doc(moderationId).update({
-        'isActive': false,
-      });
-    } catch (e) {
-      throw Exception('Moderasyon eylemi kaldırma hatası: $e');
-    }
-  }
-
-  /// Kullanıcının aktif moderasyon eylemleri
-  static Stream<List<AdvancedModeration>> getActiveModerationsForUser(String userId) {
-    return _firestore
-        .collection('advanced_moderation')
-        .where('targetUserId', isEqualTo: userId)
+        .collection('rewards')
         .where('isActive', isEqualTo: true)
         .snapshots()
         .map((snapshot) => snapshot.docs
-            .map((doc) => AdvancedModeration.fromFirestore(doc))
+            .map((doc) => Reward.fromFirestore(doc))
             .toList());
   }
 
-  /// Süresi dolmuş eylemleri kontrol et
-  static Future<void> cleanExpiredModerations() async {
+  Future<void> purchaseReward({
+    required String userId,
+    required String userName,
+    required String universityName,
+    required String rewardId,
+    required String rewardTitle,
+    required int pointCost,
+  }) async {
     try {
-      final now = DateTime.now();
-      final snapshot = await _firestore
-          .collection('advanced_moderation')
-          .where('expiresAt', isLessThan: Timestamp.fromDate(now))
+      await _firestore.collection('user_reward_purchases').add({
+        'userId': userId,
+        'userName': userName,
+        'universityName': universityName,
+        'rewardId': rewardId,
+        'rewardTitle': rewardTitle,
+        'pointsSpent': pointCost,
+        'purchasedAt': FieldValue.serverTimestamp(),
+      });
+
+      await addPoints(userId: userId, points: -pointCost, category: 'reward');
+    } catch (e) {
+      throw Exception('Ödül satın alınamadı: $e');
+    }
+  }
+
+  Stream<List<UserRewardPurchase>> getUserRewardPurchases(String userId) {
+    return _firestore
+        .collection('user_reward_purchases')
+        .where('userId', isEqualTo: userId)
+        .orderBy('purchasedAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => UserRewardPurchase.fromFirestore(doc))
+            .toList());
+  }
+
+  // ============================================================
+  // 5. ARAMA ANALİZİ SERVİSİ
+  // ============================================================
+  
+  Future<void> logSearch({
+    required String universityName,
+    required String query,
+    required String category,
+    required int resultCount,
+  }) async {
+    try {
+      await _firestore.collection('search_queries').add({
+        'universityName': universityName,
+        'query': query,
+        'category': category,
+        'resultCount': resultCount,
+        'searchedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw Exception('Arama kaydı oluşturulamadı: $e');
+    }
+  }
+
+  Stream<List<SearchTrend>> getSearchTrends(String universityName) {
+    return _firestore
+        .collection('search_trends')
+        .where('universityName', isEqualTo: universityName)
+        .orderBy('trendScore', descending: true)
+        .limit(50)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => SearchTrend.fromFirestore(doc))
+            .toList());
+  }
+
+  // ============================================================
+  // 6. AI İSTATİSTİK SERVİSİ
+  // ============================================================
+  
+  Future<void> saveAIMetrics({
+    required String modelName,
+    required String universityName,
+    required double accuracy,
+    required double precision,
+    required double recall,
+    required int totalPredictions,
+    required int correctPredictions,
+    required double averageResponseTime,
+  }) async {
+    try {
+      await _firestore.collection('ai_metrics').add({
+        'modelName': modelName,
+        'universityName': universityName,
+        'accuracy': accuracy,
+        'precision': precision,
+        'recall': recall,
+        'totalPredictions': totalPredictions,
+        'correctPredictions': correctPredictions,
+        'averageResponseTime': averageResponseTime,
+        'measuredAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw Exception('AI metrik kaydı yapılamadı: $e');
+    }
+  }
+
+  Stream<List<AIModelMetrics>> getAIMetrics(String universityName) {
+    return _firestore
+        .collection('ai_metrics')
+        .where('universityName', isEqualTo: universityName)
+        .orderBy('measuredAt', descending: true)
+        .limit(100)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => AIModelMetrics.fromFirestore(doc))
+            .toList());
+  }
+
+  // ============================================================
+  // 7. FİNANSAL RAPOR SERVİSİ
+  // ============================================================
+  
+  Future<void> addFinancialRecord({
+    required String universityName,
+    required String type,
+    required String category,
+    required double amount,
+    required String description,
+    required String status,
+  }) async {
+    try {
+      await _firestore.collection('financial_records').add({
+        'universityName': universityName,
+        'type': type,
+        'category': category,
+        'amount': amount,
+        'description': description,
+        'recordedAt': FieldValue.serverTimestamp(),
+        'status': status,
+      });
+    } catch (e) {
+      throw Exception('Finansal kaydı eklenemedi: $e');
+    }
+  }
+
+  Future<FinancialSummary?> getFinancialSummary({
+    required String universityName,
+    required DateTime periodStart,
+    required DateTime periodEnd,
+  }) async {
+    try {
+      final query = await _firestore
+          .collection('financial_summaries')
+          .where('universityName', isEqualTo: universityName)
+          .where('periodStart', isGreaterThanOrEqualTo: periodStart)
+          .where('periodEnd', isLessThanOrEqualTo: periodEnd)
+          .orderBy('periodStart', descending: true)
+          .limit(1)
           .get();
 
-      for (final doc in snapshot.docs) {
-        await doc.reference.update({'isActive': false});
+      if (query.docs.isNotEmpty) {
+        return FinancialSummary.fromFirestore(query.docs.first);
       }
+      return null;
     } catch (e) {
-      throw Exception('Süresi dolan moderasyonlar temizleme hatası: $e');
+      throw Exception('Finansal özet getirilemedi: $e');
     }
   }
 
-  /// Tüm moderasyon geçmişi
-  static Stream<List<AdvancedModeration>> getModerationHistory(String userId) {
+  Stream<List<FinancialRecord>> getFinancialRecords({
+    required String universityName,
+    required DateTime periodStart,
+    required DateTime periodEnd,
+  }) {
     return _firestore
-        .collection('advanced_moderation')
-        .where('targetUserId', isEqualTo: userId)
-        .orderBy('appliedAt', descending: true)
+        .collection('financial_records')
+        .where('universityName', isEqualTo: universityName)
+        .where('recordedAt', isGreaterThanOrEqualTo: periodStart)
+        .where('recordedAt', isLessThanOrEqualTo: periodEnd)
+        .orderBy('recordedAt', descending: true)
         .snapshots()
         .map((snapshot) => snapshot.docs
-            .map((doc) => AdvancedModeration.fromFirestore(doc))
-            .toList());
-  }
-}
-
-class RingComplaintService {
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  /// Ring şikayeti dosya
-  static Future<String> fileRingComplaint(RingComplaint complaint) async {
-    try {
-      final docRef = await _firestore.collection('ring_complaints').add(complaint.toFirestore());
-      return docRef.id;
-    } catch (e) {
-      throw Exception('Ring şikayeti dosya hatası: $e');
-    }
-  }
-
-  /// Şikayeti araştır
-  static Future<void> investigateComplaint(String complaintId, String adminId) async {
-    try {
-      await _firestore.collection('ring_complaints').doc(complaintId).update({
-        'status': 'investigating',
-      });
-    } catch (e) {
-      throw Exception('Şikayet araştırma hatası: $e');
-    }
-  }
-
-  /// Şikayeti çöz
-  static Future<void> resolveComplaint(String complaintId, String resolution) async {
-    try {
-      await _firestore.collection('ring_complaints').doc(complaintId).update({
-        'status': 'resolved',
-        'resolution': resolution,
-      });
-    } catch (e) {
-      throw Exception('Şikayet çözme hatası: $e');
-    }
-  }
-
-  /// Ring'e ait şikayetler
-  static Stream<List<RingComplaint>> getComplaintsForRing(String ringId) {
-    return _firestore
-        .collection('ring_complaints')
-        .where('ringId', isEqualTo: ringId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => RingComplaint.fromFirestore(doc))
-            .toList());
-  }
-
-  /// Bekleyen şikayetler
-  static Stream<List<RingComplaint>> getPendingComplaints() {
-    return _firestore
-        .collection('ring_complaints')
-        .where('status', isEqualTo: 'pending')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => RingComplaint.fromFirestore(doc))
-            .toList());
-  }
-
-  /// Kullanıcının şikayetleri
-  static Stream<List<RingComplaint>> getComplaintsFromUser(String userId) {
-    return _firestore
-        .collection('ring_complaints')
-        .where('complainantUserId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => RingComplaint.fromFirestore(doc))
-            .toList());
-  }
-
-  /// Şikayet tipine göre
-  static Stream<List<RingComplaint>> getComplaintsByType(String complaintType) {
-    return _firestore
-        .collection('ring_complaints')
-        .where('complaintType', isEqualTo: complaintType)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => RingComplaint.fromFirestore(doc))
-            .toList());
-  }
-}
-
-class LocationIconService {
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  /// İkon ekle
-  static Future<String> addLocationIcon(LocationIcon icon) async {
-    try {
-      final docRef = await _firestore.collection('location_icons').add(icon.toFirestore());
-      return docRef.id;
-    } catch (e) {
-      throw Exception('İkon ekleme hatası: $e');
-    }
-  }
-
-  /// Kategoriye göre ikonlar
-  static Stream<List<LocationIcon>> getIconsByCategory(String category) {
-    return _firestore
-        .collection('location_icons')
-        .where('category', isEqualTo: category)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => LocationIcon.fromFirestore(doc))
-            .toList());
-  }
-
-  /// Varsayılan ikonlar
-  static Stream<List<LocationIcon>> getDefaultIcons() {
-    return _firestore
-        .collection('location_icons')
-        .where('isDefault', isEqualTo: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => LocationIcon.fromFirestore(doc))
-            .toList());
-  }
-
-  /// Tüm ikonlar
-  static Stream<List<LocationIcon>> getAllIcons() {
-    return _firestore
-        .collection('location_icons')
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => LocationIcon.fromFirestore(doc))
+            .map((doc) => FinancialRecord.fromFirestore(doc))
             .toList());
   }
 }
