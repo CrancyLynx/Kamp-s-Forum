@@ -218,6 +218,34 @@ service firebase.storage {
       allow delete: if isSignedIn();
     }
     
+    // 25. Ceza Belgesi Resimleri (User Penalty Documentation)
+    match /penalty_docs/{userId}/{fileName} {
+      allow read: if isOwnerOfFile(fileName) || false; // Sadece admin panel görecek (backend)
+      allow write: if false; // Sadece system
+      allow delete: if false;
+    }
+    
+    // 26. İçerik Moderasyon Kanıt Resimleri
+    match /moderation_evidence/{caseId}/{fileName} {
+      allow read: if false; // Sadece admin
+      allow write: if false; // Sadece system
+      allow delete: if false;
+    }
+    
+    // 27. Forum Kuralları Görselleri (Visual Examples)
+    match /forum_rule_examples/{ruleId}/{fileName} {
+      allow read: if true;
+      allow write: if false; // Sadece admin
+      allow delete: if false;
+    }
+    
+    // 28. Sohbet Odası Banner Resimleri
+    match /chat_room_banners/{roomId}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && isValidImage();
+      allow delete: if isSignedIn();
+    }
+    
     // ⚠️ CATCH-ALL RULE - Tüm kalan istekler reddi (GÜVENLİ VERSİYON)
     match /{document=**} {
       allow read, write: if false;

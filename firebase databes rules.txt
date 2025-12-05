@@ -410,6 +410,50 @@ match /{document=**} {
       allow delete: if isAdmin();
     }
     
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // PHASE 3-4 EKSİK KOLEKSİYONLAR
+    // ═══════════════════════════════════════════════════════════════════════════════
+    
+    // Kullanıcı Cezaları (Yasak, Uyarı vb)
+    match /user_penalties/{penaltyId} {
+      allow read: if isOwner(resource.data.userId) || isAdmin() || isModerator();
+      allow create: if isAdmin() || isModerator();
+      allow update: if isAdmin() || isModerator();
+      allow delete: if isAdmin();
+    }
+    
+    // İçerik Filtreleri (Spam, Uygunsuz Kelimeler vb)
+    match /content_filters/{filterId} {
+      allow read: if isAdmin() || isModerator();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    // Kural İhlalleri (İhlal Takibi)
+    match /rule_violations/{violationId} {
+      allow read: if isAdmin() || isModerator() || isOwner(resource.data.ihlalEdenUserId);
+      allow create: if isSignedIn() && request.resource.data.raporEdenUserId == request.auth.uid;
+      allow update: if isAdmin() || isModerator();
+      allow delete: if isAdmin();
+    }
+    
+    // Sohbet Moderasyon Kuralları
+    match /chat_moderation_rules/{ruleId} {
+      allow read: if isAdmin() || isModerator();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    // Emoji Paketleri
+    match /emoji_packs/{packId} {
+      allow read: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+    
     // ⚠️  CATCH-ALL RULE - Tüm kalan istekler reddi (GÜVENLİ VERSİYON)
     // Bu rule, yukarıda tanımlanmayan herhangi bir koleksiyon/belge erişimini reddeder
     match /{document=**} {
