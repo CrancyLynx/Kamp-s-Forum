@@ -371,8 +371,9 @@ class _AnketKartiState extends State<AnketKarti> {
                                        style: const TextStyle(
                                          color: Colors.white,
                                          fontWeight: FontWeight.bold,
-                                         fontSize: 16,
-                                         shadows: [Shadow(color: Colors.black, blurRadius: 4)]
+                                         fontSize: 15,
+                                         shadows: [Shadow(color: Colors.black, blurRadius: 4)],
+                                         height: 1.2,
                                        ),
                                        maxLines: 2,
                                        overflow: TextOverflow.ellipsis,
@@ -452,8 +453,8 @@ class _AnketKartiState extends State<AnketKarti> {
                           Expanded(
                             child: Text(
                               text,
-                              maxLines: 5, // DÜZELTME: Uzun metinler için alan açıldı
-                              overflow: TextOverflow.visible,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 color: isSelected ? AppColors.primary : Theme.of(context).textTheme.bodyLarge?.color,
                                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
