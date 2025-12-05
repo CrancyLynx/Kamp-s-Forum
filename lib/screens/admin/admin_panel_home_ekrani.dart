@@ -402,8 +402,8 @@ class _AdminPanelHomeEkraniState extends State<AdminPanelHomeEkrani> {
                 subtitle: "Model metrikleri",
                 color: const Color(0xFF00CED1),
                 onTap: () => _navigateToPhase4(
-                  "AI İstatistik",
-                  const Phase4AIStatsTab(),
+                  'AI İstatistikleri',
+                  const Phase4AiStatsTab(),
                 ),
               ),
               _AdminCard(
