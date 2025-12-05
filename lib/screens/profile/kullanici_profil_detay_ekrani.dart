@@ -380,6 +380,7 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                       ];
                     },
                     body: TabBarView(
+                      key: ValueKey(_isOwnProfile ? 'profile_tabs_3' : 'profile_tabs_1'),
                       children: [
                         _buildPostsList(_targetUserId), 
                         if (_isOwnProfile) 
@@ -854,7 +855,10 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
 
         // Success state
         return ListView.builder(
+          key: ValueKey('posts_list_$userId'),
           padding: const EdgeInsets.all(12),
+          shrinkWrap: false,
+          physics: const AlwaysScrollableScrollPhysics(),
           itemCount: snapshot.data!.docs.length,
           itemBuilder: (context, index) {
             final doc = snapshot.data!.docs[index];
@@ -960,7 +964,10 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
 
             final docs = postSnapshot.data!.docs;
             return ListView.builder(
+              key: ValueKey('saved_posts_list_${docs.length}'),
               padding: const EdgeInsets.all(12),
+              shrinkWrap: false,
+              physics: const AlwaysScrollableScrollPhysics(),
               itemCount: docs.length,
               itemBuilder: (context, index) {
                 final doc = docs[index];

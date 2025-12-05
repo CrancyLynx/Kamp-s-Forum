@@ -325,8 +325,21 @@ class _AnketKartiState extends State<AnketKarti> {
                            imageUrl: imgUrl,
                            cacheManager: CustomCacheManager.instance,
                            fit: BoxFit.cover,
-                           placeholder: (_,__) => Container(color: Colors.grey[200]),
-                           errorWidget: (_,__,_) => Container(color: Colors.grey[300], child: const Icon(Icons.error)),
+                           placeholder: (_,__) => Container(
+                             color: Colors.grey[200],
+                             child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                           ),
+                           errorWidget: (_,__,___) => Container(
+                             color: Colors.grey[300],
+                             child: Column(
+                               mainAxisAlignment: MainAxisAlignment.center,
+                               children: [
+                                 Icon(Icons.image_not_supported, size: 32, color: Colors.grey[500]),
+                                 const SizedBox(height: 4),
+                                 Text('Resim yüklenemedi', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                               ],
+                             ),
+                           ),
                          ),
 
                          // B. Karartma Gradyanı (Yazı okunurluğu için)
