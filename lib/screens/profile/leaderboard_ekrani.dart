@@ -97,16 +97,12 @@ class _LeaderboardEkraniState extends State<LeaderboardEkrani> with SingleTicker
     );
   }
 
-  // XP Leaderboard
+  // XP Leaderboard (Puan Sistemi)
   Widget _buildXPLeaderboard() {
     Query query = FirebaseFirestore.instance
-        .collection('kullanicilar')
-        .orderBy('toplam_xp', descending: true)
+        .collection('user_points')
+        .orderBy('totalPoints', descending: true)
         .limit(100);
-
-    if (_selectedUniversity != 'Tümü') {
-      query = query.where('universitesi', isEqualTo: _selectedUniversity);
-    }
 
     return StreamBuilder<QuerySnapshot>(
       stream: query.snapshots(),
@@ -125,9 +121,9 @@ class _LeaderboardEkraniState extends State<LeaderboardEkrani> with SingleTicker
           itemCount: users.length,
           itemBuilder: (context, index) {
             final user = users[index];
-            final totalXP = user['toplam_xp'] ?? 0;
-            final userName = user['ad_soyad'] ?? 'Bilinmeyen';
-            final userLevel = user['seviye'] ?? 1;
+            final totalPoints = (user['totalPoints'] ?? 0) as int;
+            final level = (user['level'] ?? 1) as int;
+            final userName = user['userName'] ?? 'Bilinmeyen';
 
             return Container(
               margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -176,9 +172,9 @@ class _LeaderboardEkraniState extends State<LeaderboardEkrani> with SingleTicker
                 ),
                 subtitle: Row(
                   children: [
-                    const Icon(FontAwesomeIcons.book, size: 12),
+                    const Icon(FontAwesomeIcons.star, size: 12, color: Colors.blue),
                     const SizedBox(width: 4),
-                    Text('Seviye $userLevel'),
+                    Text('Level $level'),
                   ],
                 ),
                 trailing: Column(
@@ -186,7 +182,7 @@ class _LeaderboardEkraniState extends State<LeaderboardEkrani> with SingleTicker
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '$totalXP XP',
+                      '$totalPoints 💫',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         color: AppColors.primary,
@@ -194,7 +190,7 @@ class _LeaderboardEkraniState extends State<LeaderboardEkrani> with SingleTicker
                       ),
                     ),
                     const Text(
-                      'Toplam',
+                      'Puan',
                       style: TextStyle(fontSize: 10, color: Colors.grey),
                     ),
                   ],
@@ -303,19 +299,13 @@ class _LeaderboardEkraniState extends State<LeaderboardEkrani> with SingleTicker
     );
   }
 
-  // Badge Leaderboard
+  // Rozetler Leaderboard (Başarılar Sistemi)
   Widget _buildBadgeLeaderboard() {
-    Query query = FirebaseFirestore.instance
-        .collection('kullanicilar')
-        .orderBy('unlockedBadgeIds', descending: true)
-        .limit(100);
-
-    if (_selectedUniversity != 'Tümü') {
-      query = query.where('universitesi', isEqualTo: _selectedUniversity);
-    }
-
     return StreamBuilder<QuerySnapshot>(
-      stream: query.snapshots(),
+      stream: FirebaseFirestore.instance
+          .collection('user_achievements')
+          .where('unlockedAt', isNotEqualTo: null)
+          .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -325,63 +315,93 @@ class _LeaderboardEkraniState extends State<LeaderboardEkrani> with SingleTicker
           return const Center(child: Text('Veri bulunamadı'));
         }
 
-        final users = snapshot.data!.docs;
+        // Kullanıcı başına açılmış başarıları say
+        final userAchievements = <String, int>{};
+        for (var doc in snapshot.data!.docs) {
+          final userId = doc['userId'] as String;
+          userAchievements[userId] = (userAchievements[userId] ?? 0) + 1;
+        }
+
+        // En çok başarısı açan kullanıcıları sırala
+        final sortedUsers = userAchievements.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
 
         return ListView.builder(
-          itemCount: users.length,
+          itemCount: sortedUsers.length,
           itemBuilder: (context, index) {
-            final user = users[index];
-            final userName = user['ad_soyad'] ?? 'Bilinmeyen';
-            final badgeCount = (user['unlockedBadgeIds'] as List?)?.length ?? 0;
+            final userId = sortedUsers[index].key;
+            final achievementCount = sortedUsers[index].value;
 
-            return Container(
-              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ListTile(
-                leading: SizedBox(
-                  width: 36,
-                  child: Center(
-                    child: Text(
-                      '${index + 1}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+            return FutureBuilder<DocumentSnapshot>(
+              future: FirebaseFirestore.instance.collection('kullanicilar').doc(userId).get(),
+              builder: (context, userSnapshot) {
+                if (!userSnapshot.hasData) {
+                  return const SizedBox.shrink();
+                }
+
+                final userData = userSnapshot.data!.data() as Map<String, dynamic>;
+                final userName = userData['ad_soyad'] ?? 'Bilinmeyen';
+
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: index < 3
+                        ? Border.all(
+                            color: _getMedalColor(index),
+                            width: 2,
+                          )
+                        : null,
+                  ),
+                  child: ListTile(
+                    leading: SizedBox(
+                      width: 50,
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 36,
+                            child: Center(
+                              child: index == 0
+                                  ? const Icon(FontAwesomeIcons.medal, color: Colors.amber)
+                                  : index == 1
+                                      ? const Icon(FontAwesomeIcons.medal, color: Color(0xFFC0C0C0))
+                                      : index == 2
+                                          ? const Icon(FontAwesomeIcons.medal, color: Color(0xFFCD7F32))
+                                          : Text(
+                                              '${index + 1}',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ),
-                title: Text(userName),
-                trailing: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: List.generate(
-                        badgeCount > 5 ? 5 : badgeCount,
-                        (i) => const Padding(
-                          padding: EdgeInsets.only(left: 4),
-                          child: Icon(
-                            FontAwesomeIcons.solidStar,
-                            size: 14,
-                            color: Colors.amber,
+                    title: Text(userName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '🏆 $achievementCount',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                            fontSize: 14,
                           ),
                         ),
-                      ),
+                        const Text(
+                          'Başarı',
+                          style: TextStyle(fontSize: 10, color: Colors.grey),
+                        ),
+                      ],
                     ),
-                    Text(
-                      '$badgeCount Rozet',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             );
           },
         );
