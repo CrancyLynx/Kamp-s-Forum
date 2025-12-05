@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../models/phase2_models.dart';
+import '../../models/content_models.dart';
 
 // Basit bir haber servisi (mevcut news_service.dart yerine)
 class NewsServiceWrapper {

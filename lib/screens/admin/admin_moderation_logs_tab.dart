@@ -1,7 +1,7 @@
-// lib/screens/admin/phase3_moderation_logs_tab.dart
+// lib/screens/admin/admin_moderation_logs_tab.dart
 import 'package:flutter/material.dart';
-import '../../models/phase3_complete_models.dart';
-import '../../services/phase3_complete_services.dart';
+import '../../models/admin_models.dart';
+import '../../services/admin_services.dart';
 
 class ModerationLogsTab extends StatefulWidget {
   const ModerationLogsTab({Key? key}) : super(key: key);

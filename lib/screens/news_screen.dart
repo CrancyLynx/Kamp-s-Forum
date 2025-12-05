@@ -1,8 +1,8 @@
 // lib/screens/news_screen.dart
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../models/phase2_complete_models.dart';
-import '../services/phase2_complete_services.dart';
+import '../models/content_models.dart';
+import '../services/content_services.dart';
 
 class NewsScreen extends StatefulWidget {
   const NewsScreen({Key? key}) : super(key: key);

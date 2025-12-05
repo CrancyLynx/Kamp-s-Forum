@@ -12,24 +12,24 @@ import 'etkinlik_listesi_ekrani.dart';
 import 'admin_ring_moderation_tab.dart';
 import 'admin_statistics_tab.dart';
 
-// Phase 3 - Tabs
-import 'phase3_audit_log_tab.dart';
-import 'phase3_api_quota_tab.dart';
-import 'phase3_error_logs_tab.dart';
-import 'phase3_feedback_tab.dart';
-import 'phase3_photo_approval_tab.dart';
-import 'phase3_system_bots_tab.dart';
-import 'phase3_blocked_users_tab.dart';
-import 'phase3_moderation_logs_tab.dart';
+// Admin System Tabs (formerly Phase 3)
+import 'admin_audit_log_tab.dart';
+import 'admin_api_quota_tab.dart';
+import 'admin_error_logs_tab.dart';
+import 'admin_feedback_tab.dart';
+import 'admin_photo_approval_tab.dart';
+import 'admin_system_bots_tab.dart';
+import 'admin_blocked_users_tab.dart';
+import 'admin_moderation_logs_tab.dart';
 
-// Phase 4 - Tabs
-import 'phase4_ride_complaints_tab.dart';
-import 'phase4_scoring_tab.dart';
-import 'phase4_achievements_tab.dart';
-import 'phase4_rewards_tab.dart';
-import 'phase4_search_analytics_tab.dart';
-import 'phase4_ai_stats_tab.dart';
-import 'phase4_financial_tab.dart';
+// Advanced Features Tabs (formerly Phase 4)
+import 'features_ride_complaints_tab.dart';
+import 'features_scoring_tab.dart';
+import 'features_achievements_tab.dart';
+import 'features_rewards_tab.dart';
+import 'features_search_analytics_tab.dart';
+import 'features_ai_stats_tab.dart';
+import 'features_financial_tab.dart';
 
 class AdminPanelHomeEkrani extends StatefulWidget {
   const AdminPanelHomeEkrani({super.key});

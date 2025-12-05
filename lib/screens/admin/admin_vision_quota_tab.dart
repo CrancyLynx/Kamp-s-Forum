@@ -1,7 +1,7 @@
-// lib/screens/admin/phase3_vision_quota_tab.dart
+// lib/screens/admin/admin_vision_quota_tab.dart
 import 'package:flutter/material.dart';
-import '../../models/phase3_complete_models.dart';
-import '../../services/phase3_complete_services.dart';
+import '../../models/admin_models.dart';
+import '../../services/admin_services.dart';
 
 class VisionQuotaTab extends StatefulWidget {
   const VisionQuotaTab({Key? key}) : super(key: key);

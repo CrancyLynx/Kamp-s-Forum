@@ -1,6 +1,6 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/phase2_models.dart';
+import '../models/content_models.dart';
 import '../models/emoji_sticker_model.dart' as emoji_model;
 
 /// NEWS SERVICE

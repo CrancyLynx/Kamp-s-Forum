@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/phase3_models.dart';
+import '../models/admin_models.dart';
 
 class ExamCalendarService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;

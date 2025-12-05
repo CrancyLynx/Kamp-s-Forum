@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../models/phase2_models.dart';
-import '../../services/phase2_services.dart';
+import '../../models/content_models.dart';
+    import '../../services/content_services.dart';
 import '../../utils/app_colors.dart';
 
 /// Harita Konumları - Location Markers Screen

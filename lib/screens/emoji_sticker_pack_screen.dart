@@ -1,7 +1,7 @@
 // lib/screens/emoji_sticker_pack_screen.dart
 import 'package:flutter/material.dart';
-import '../models/phase2_complete_models.dart';
-import '../services/phase2_complete_services.dart';
+import '../models/content_models.dart';
+import '../services/content_services.dart';
 
 class EmojiStickerPackScreen extends StatefulWidget {
   const EmojiStickerPackScreen({Key? key}) : super(key: key);

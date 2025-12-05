@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../models/phase4_models.dart';
-import '../../services/phase4_services.dart';
-
-class Phase4AiStatsTab extends StatefulWidget {
+import '../../models/advanced_features_models.dart';
+    import '../../services/advanced_features_services.dart';class Phase4AiStatsTab extends StatefulWidget {
   const Phase4AiStatsTab({Key? key}) : super(key: key);
 
   @override

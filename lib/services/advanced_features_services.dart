@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import '../models/phase4_models.dart';
+import '../models/advanced_features_models.dart';
 
 // ============================================================
 // PHASE 4 - SERVİSLER
