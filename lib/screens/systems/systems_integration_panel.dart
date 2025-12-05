@@ -27,52 +27,17 @@ class _Phase2to4IntegrationPanelState extends State<Phase2to4IntegrationPanel> w
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 7,
-      child: Column(
-        children: [
-          TabBar(
-            isScrollable: true,
-            indicatorColor: const Color(0xFF00BCD4),
-            indicatorWeight: 3,
-            labelColor: const Color(0xFF00BCD4),
-            unselectedLabelColor: Colors.grey[400],
-            labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-            tabs: const [
-              // Gamification (3)
-              Tab(text: "🎮 Puanlar"),
-              Tab(text: "🏆 Başarılar"),
-              Tab(text: "🎁 Ödüller"),
-              // Safety (1)
-              Tab(text: "🛡️ Güvenlik"),
-              // Analytics (3)
-              Tab(text: "🔍 Trendler"),
-              Tab(text: "🤖 AI"),
-              Tab(text: "💰 Mali"),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(
-              children: [
-                // 1. Points System (Gamification)
-                _buildPointsTab(),
-                // 2. Achievements System (Gamification)
-                _buildAchievementsTab(),
-                // 3. Rewards System (Gamification)
-                _buildRewardsTab(),
-                // 4. Ride Complaints (Safety)
-                _buildSafetyTab(),
-                // 5. Search Analytics (Analytics)
-                _buildSearchTrendsTab(),
-                // 6. AI Metrics (Analytics)
-                _buildAiMetricsTab(),
-                // 7. Financial (Analytics)
-                _buildFinancialTab(),
-              ],
-            ),
-          ),
-        ],
-      ),
+    // Modal içinde sorun yaratmamak için basit ListView kullanıyoruz
+    return ListView(
+      shrinkWrap: true,
+      physics: const ClampingScrollPhysics(),
+      children: [
+        _buildPointsTab(),
+        const Divider(height: 16),
+        _buildAchievementsTab(),
+        const Divider(height: 16),
+        _buildRewardsTab(),
+      ],
     );
   }
 
@@ -128,65 +93,9 @@ class _Phase2to4IntegrationPanelState extends State<Phase2to4IntegrationPanel> w
     );
   }
 
-  // SAFETY SECTION
+  // SAFETY SECTION (KULLANILMIYOR - Removed)
 
-  Widget _buildSafetyTab() {
-    return _buildSystemPanel(
-      title: '🛡️ Sürüş Güvenliği',
-      description: 'Tehlikeli sürüş davranışlarını bildirin',
-      emoji: '🚗',
-      children: [
-        _buildInfoCard('⚠️ Şikayet Nedir?', 'Hız yapma, tehlikeli sürüş ve güvenlik sorunlarını bildirip track edebilirsiniz'),
-        _buildInfoCard('🚨 Şiddeti Belirtme', '1-5 arası şiddet seviyesi seçerek sorunun ciddiyetini gösterin'),
-        _buildInfoCard('👥 Tanık Ekleme', 'Olay şahitlerine referanslar ekleyerek iddialarınızı güçlendirin'),
-        _buildInfoCard('📋 İzleme', 'Şikayetinizin durumunu gerçek zamanda takip edebilirsiniz'),
-      ],
-    );
-  }
-
-  // ANALYTICS SECTION
-
-  Widget _buildSearchTrendsTab() {
-    return _buildSystemPanel(
-      title: '🔍 Arama Trendleri',
-      description: 'Popüler aramalar ve trendler',
-      emoji: '📈',
-      children: [
-        _buildInfoCard('🔥 Trend Nedir?', 'En sık araşan konuları ve popüler kelimeleri görmek'),
-        _buildInfoCard('📊 Analiz', 'Hangi konulara ilgi olduğunu verilerle takip edin'),
-        _buildInfoCard('💡 İlham Al', 'Popüler konuları öğrenerek yeni gönderi fikirler bulun'),
-        _buildInfoCard('🎯 Optimize Et', 'Trendleri bilin ve kendi içeriğinizi optimize edin'),
-      ],
-    );
-  }
-
-  Widget _buildAiMetricsTab() {
-    return _buildSystemPanel(
-      title: '🤖 AI Model Metrikleri',
-      description: 'Yapay zeka performansı ve istatistikler',
-      emoji: '🔬',
-      children: [
-        _buildInfoCard('📊 Model Başarısı', 'Sistem yapay zekasının ne kadar iyi çalıştığını görmek'),
-        _buildInfoCard('⚡ İşlem Hızı', 'İstekler ne kadar hızlı işleniyor ve sistem durumu nedir'),
-        _buildInfoCard('📈 Yükselişler', 'AI modeli sürekli geliştirilir ve iyileştirilir'),
-        _buildInfoCard('🔧 Optimizasyon', 'Sistem performansı maksimum düzeyinde tutulur'),
-      ],
-    );
-  }
-
-  Widget _buildFinancialTab() {
-    return _buildSystemPanel(
-      title: '💰 Mali Raporlar',
-      description: 'Gelir ve gider analizi',
-      emoji: '💵',
-      children: [
-        _buildInfoCard('📊 Finansal Veriler', 'Sistem gelir/giderleri ve mali durumu görmek'),
-        _buildInfoCard('📈 Grafikler', 'Zaman içinde finansal trendleri visual olarak görmek'),
-        _buildInfoCard('🏦 Kategori Analizi', 'Masraflar ne kategorilere dağılıyor, gelir nerelerden geliyor'),
-        _buildInfoCard('📋 Raporlar', 'Detaylı finansal raporları indirip paylaşabilirsiniz'),
-      ],
-    );
-  }
+  // ANALYTICS SECTION (KULLANILMIYOR - Removed)
 
   Widget _buildSystemPanel({
     required String title,

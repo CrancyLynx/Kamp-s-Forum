@@ -1148,15 +1148,18 @@ class _KullaniciProfilDetayEkraniState extends State<KullaniciProfilDetayEkrani>
                       ),
                     ),
                     const SizedBox(height: 16),
-                    // Tüm Sistemler Panel
+                    // Tüm Sistemler Panel - BASIT VERSİYON (Modal içinde sorun yaratmıyacak şekilde)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey[300]!),
-                          borderRadius: BorderRadius.circular(12),
+                      child: SizedBox(
+                        height: 200,  // Fixed height
+                        child: Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[300]!),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Phase2to4IntegrationPanel(),
                         ),
-                        child: const Phase2to4IntegrationPanel(),
                       ),
                     ),
                     const SizedBox(height: 24),

@@ -246,23 +246,50 @@ class _AnketEklemeEkraniState extends State<AnketEklemeEkrani> {
           // Resim varsa yükle
           if (_optionImages[i] != null) {
             final timestamp = DateTime.now().millisecondsSinceEpoch;
-            final ref = FirebaseStorage.instance.ref().child('anket_resimleri/$userId-$timestamp-$i.jpg');
+            final storagePath = 'anket_resimleri/$userId-$timestamp-$i.jpg';
+            final ref = FirebaseStorage.instance.ref().child(storagePath);
+            
+            debugPrint('[POLL_UPLOAD] Resim yükleniyor: $storagePath');
+            debugPrint('[POLL_UPLOAD] Dosya boyutu: ${_optionImages[i]!.lengthSync()} bytes');
             
             final uploadTask = ref.putFile(
               _optionImages[i]!,
               SettableMetadata(
                 contentType: 'image/jpeg',
-                customMetadata: {'pollOption': i.toString()},
+                customMetadata: {'pollOption': i.toString(), 'userId': userId},
               ),
             );
             
             final snapshot = await uploadTask;
             imageUrl = await snapshot.ref.getDownloadURL();
-            debugPrint('Anket resimi yüklendi: $imageUrl');
+            debugPrint('[POLL_UPLOAD] ✅ Resim başarıyla yüklendi: $imageUrl');
+            
+            if (imageUrl.isEmpty) {
+              throw Exception('Download URL boş döndü');
+            }
           }
         } on FirebaseException catch (e) {
-          debugPrint("Anket resim yükleme hatası: ${e.code} - ${e.message}");
+          debugPrint("[POLL_UPLOAD] ❌ Firebase hatası - Kod: ${e.code}");
+          debugPrint("[POLL_UPLOAD] ❌ Mesaj: ${e.message}");
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text("Resim yükleme hatası: ${e.message}"),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
           // Resim yüklenemezse devam et, resim olmadan seçenek ekle
+        } catch (e) {
+          debugPrint("[POLL_UPLOAD] ❌ Genel hata: $e");
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text("Resim yükleme hatası: $e"),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
         }
 
         optionsData.add({
