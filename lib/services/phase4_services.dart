@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../models/phase4_models.dart';
 
 // ============================================================
@@ -377,6 +378,199 @@ class Phase4Services {
         .map((snapshot) => snapshot.docs
             .map((doc) => FinancialRecord.fromFirestore(doc))
             .toList());
+  }
+}
+
+// ============================================================
+// PHASE 4 - CLOUD FUNCTIONS HELPER
+// Cloud Functions çağrıları
+// ============================================================
+
+class Phase4CloudFunctions {
+  final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(region: 'europe-west1');
+
+  // Ride Complaint
+  Future<String> createRideComplaint({
+    required String rideId,
+    required String complaint,
+    required int severity,
+    required String universitesi,
+  }) async {
+    try {
+      final result = await _functions.httpsCallable('createRideComplaint').call({
+        'rideId': rideId,
+        'complaint': complaint,
+        'severity': severity,
+        'universitesi': universitesi,
+      });
+      return result.data['complaintId'] ?? '';
+    } catch (e) {
+      throw Exception('Şikayet oluşturulamadı: $e');
+    }
+  }
+
+  // Add User Points
+  Future<void> addUserPoints({
+    required String userId,
+    required int points,
+    required String reason,
+    required String universitesi,
+  }) async {
+    try {
+      await _functions.httpsCallable('addUserPoints').call({
+        'userId': userId,
+        'points': points,
+        'reason': reason,
+        'universitesi': universitesi,
+      });
+    } catch (e) {
+      throw Exception('Puan eklenemedi: $e');
+    }
+  }
+
+  // Unlock Achievement
+  Future<void> unlockAchievement({
+    required String userId,
+    required String achievementId,
+    required String universitesi,
+  }) async {
+    try {
+      await _functions.httpsCallable('unlockAchievement').call({
+        'userId': userId,
+        'achievementId': achievementId,
+        'universitesi': universitesi,
+      });
+    } catch (e) {
+      throw Exception('Başarı açılamadı: $e');
+    }
+  }
+
+  // Purchase Reward
+  Future<void> purchaseReward({
+    required String rewardId,
+    required String universitesi,
+  }) async {
+    try {
+      await _functions.httpsCallable('purchaseReward').call({
+        'rewardId': rewardId,
+        'universitesi': universitesi,
+      });
+    } catch (e) {
+      throw Exception('Ödül satın alınamadı: $e');
+    }
+  }
+
+  // Log Search Query
+  Future<void> logSearchQuery({
+    required String query,
+    required String universitesi,
+    int resultCount = 0,
+  }) async {
+    try {
+      await _functions.httpsCallable('logSearchQuery').call({
+        'query': query,
+        'universitesi': universitesi,
+        'resultCount': resultCount,
+      });
+    } catch (e) {
+      throw Exception('Arama kaydedilemedi: $e');
+    }
+  }
+
+  // Save AI Metrics
+  Future<String> saveAIMetrics({
+    required String modelName,
+    required double accuracy,
+    required double precision,
+    required double recall,
+    required String universitesi,
+    int predictions = 0,
+  }) async {
+    try {
+      final result = await _functions.httpsCallable('saveAIMetrics').call({
+        'modelName': modelName,
+        'accuracy': accuracy,
+        'precision': precision,
+        'recall': recall,
+        'universitesi': universitesi,
+        'predictions': predictions,
+      });
+      return result.data['metricsId'] ?? '';
+    } catch (e) {
+      throw Exception('Metrikler kaydedilemedi: $e');
+    }
+  }
+
+  // Add Financial Record
+  Future<String> addFinancialRecord({
+    required String recordType,
+    required double amount,
+    required String description,
+    required String universitesi,
+    String category = 'other',
+  }) async {
+    try {
+      final result = await _functions.httpsCallable('addFinancialRecord').call({
+        'recordType': recordType,
+        'amount': amount,
+        'description': description,
+        'universitesi': universitesi,
+        'category': category,
+      });
+      return result.data['recordId'] ?? '';
+    } catch (e) {
+      throw Exception('Mali kayıt eklenemedi: $e');
+    }
+  }
+
+  // Paid API Quota Status
+  Future<Map<String, dynamic>> checkPaidApiQuotaStatus(String apiName) async {
+    try {
+      final result = await _functions.httpsCallable('checkPaidApiQuotaStatus').call({
+        'apiName': apiName,
+      });
+      return Map<String, dynamic>.from(result.data ?? {});
+    } catch (e) {
+      throw Exception('Kota durumu kontrol edilemedi: $e');
+    }
+  }
+
+  // Get All Paid API Quotas
+  Future<List<Map<String, dynamic>>> getAllPaidApiQuotaStatus() async {
+    try {
+      final result = await _functions.httpsCallable('getAllPaidApiQuotaStatus').call();
+      return List<Map<String, dynamic>>.from(
+        (result.data['quotas'] ?? []).map((q) => Map<String, dynamic>.from(q))
+      );
+    } catch (e) {
+      throw Exception('Tüm kotalar getirilemedi: $e');
+    }
+  }
+
+  // Reset Paid API Quota (Admin)
+  Future<void> resetPaidApiQuota(String apiName) async {
+    try {
+      await _functions.httpsCallable('resetPaidApiQuota').call({
+        'apiName': apiName,
+      });
+    } catch (e) {
+      throw Exception('Kota sıfırlanamadı: $e');
+    }
+  }
+
+  // Toggle Paid API Status (Admin)
+  Future<void> togglePaidApiStatus({
+    required String apiName,
+    required bool enabled,
+  }) async {
+    try {
+      await _functions.httpsCallable('togglePaidApiStatus').call({
+        'apiName': apiName,
+        'enabled': enabled,
+      });
+    } catch (e) {
+      throw Exception('API durumu değiştirilemedi: $e');
+    }
   }
 }
 

@@ -3117,3 +3117,554 @@ exports.checkAndAlertQuotaStatus = functions.region(REGION).pubsub
       return { error: error.message };
     }
   });
+
+/**
+ * =================================================================================
+ * PHASE 4: PAID API QUOTA MANAGEMENT CONFIG
+ * =================================================================================
+ * Vision API pattern'i tüm ücretli API'ler için standartlaştır
+ */
+const PAID_API_QUOTAS = {
+  VISION: {
+    name: "Vision API",
+    monthlyQuota: 1000,
+    costPer1000: 3.50,
+    enabled: true,
+    fallbackStrategy: "deny",
+    cacheTTL: 24
+  },
+  TRANSLATE: {
+    name: "Google Translate API",
+    monthlyQuota: 2000,
+    costPer1000: 15.00,
+    enabled: true,
+    fallbackStrategy: "deny",
+    cacheTTL: 24
+  },
+  SPEECH_TO_TEXT: {
+    name: "Google Speech-to-Text",
+    monthlyQuota: 5000,
+    costPer1000: 1.44,
+    enabled: true,
+    fallbackStrategy: "deny",
+    cacheTTL: 24
+  },
+  TEXT_TO_SPEECH: {
+    name: "Google Text-to-Speech",
+    monthlyQuota: 4000,
+    costPer1000: 16.00,
+    enabled: true,
+    fallbackStrategy: "deny",
+    cacheTTL: 24
+  }
+};
+
+/**
+ * Helper: Get monthly key for quota tracking (YYYY-MM format)
+ */
+const getMonthKey = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+};
+
+/**
+ * Helper: Check quota status for a paid API
+ */
+const checkPaidApiQuota = async (apiName) => {
+  try {
+    const config = PAID_API_QUOTAS[apiName];
+    if (!config) throw new Error(`Unknown API: ${apiName}`);
+    
+    const monthKey = getMonthKey();
+    const quotaRef = db.collection(`${apiName.toLowerCase()}_api_quota`).doc(monthKey);
+    const quotaDoc = await quotaRef.get();
+    
+    let quotaData = quotaDoc.data() || { usage: 0, limit: config.monthlyQuota, enabled: config.enabled };
+    const percentageUsed = Math.round((quotaData.usage / quotaData.limit) * 100);
+    
+    return {
+      api: apiName,
+      monthKey,
+      usage: quotaData.usage,
+      limit: quotaData.limit,
+      remaining: Math.max(0, quotaData.limit - quotaData.usage),
+      percentageUsed,
+      enabled: quotaData.enabled,
+      costPerCall: (config.costPer1000 / 1000).toFixed(6)
+    };
+  } catch (error) {
+    console.error(`[QUOTA_CHECK_ERROR] ${apiName}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Helper: Increment quota usage and auto-disable if exceeded
+ */
+const incrementPaidApiQuota = async (apiName, count = 1) => {
+  try {
+    const config = PAID_API_QUOTAS[apiName];
+    if (!config) throw new Error(`Unknown API: ${apiName}`);
+    
+    const monthKey = getMonthKey();
+    const quotaRef = db.collection(`${apiName.toLowerCase()}_api_quota`).doc(monthKey);
+    
+    // Use transaction to avoid race conditions
+    const result = await db.runTransaction(async (transaction) => {
+      const doc = await transaction.get(quotaRef);
+      let data = doc.data() || { usage: 0, limit: config.monthlyQuota, enabled: config.enabled };
+      
+      data.usage = (data.usage || 0) + count;
+      data.lastUpdated = admin.firestore.FieldValue.serverTimestamp();
+      
+      // AUTO-DISABLE when quota exceeded
+      if (data.usage >= data.limit && data.enabled) {
+        data.enabled = false;
+        data.disabledAt = admin.firestore.FieldValue.serverTimestamp();
+        data.disabledReason = "Monthly quota exceeded";
+        
+        console.warn(`[AUTO_DISABLE] ${apiName} quota exceeded! Disabling API.`);
+        
+        // Send alert to admins
+        const adminsRef = await db.collection("users").where("userRole", "==", "admin").get();
+        const batch = db.batch();
+        
+        adminsRef.docs.forEach(doc => {
+          batch.set(db.collection("admin_alerts").doc(), {
+            adminId: doc.id,
+            type: "quota_exceeded",
+            api: apiName,
+            usage: data.usage,
+            limit: data.limit,
+            message: `${apiName} ${monthKey} aylık kota tükendi! Sistem otomatik kapatıldı.`,
+            isRead: false,
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+          });
+        });
+        
+        await batch.commit();
+      }
+      
+      transaction.set(quotaRef, data);
+      return data;
+    });
+    
+    return result;
+  } catch (error) {
+    console.error(`[QUOTA_INCREMENT_ERROR] ${apiName}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * =================================================================================
+ * PHASE 4: RIDE COMPLAINTS SYSTEM
+ * =================================================================================
+ */
+exports.createRideComplaint = functions.region(REGION).https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Giriş yapmalısınız");
+    
+    const { rideId, complaint, severity, universitesi } = data;
+    
+    if (!rideId || !complaint || !severity) {
+      throw new functions.https.HttpsError("invalid-argument", "Eksik alan: rideId, complaint, severity");
+    }
+    
+    const complaintRef = db.collection("ride_complaints").doc();
+    await complaintRef.set({
+      rideId,
+      userId: context.auth.uid,
+      complaint,
+      severity,
+      universitesi,
+      status: "pending",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    return { success: true, complaintId: complaintRef.id };
+  } catch (error) {
+    console.error("[RIDE_COMPLAINT_ERROR]", error);
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * =================================================================================
+ * PHASE 4: USER POINTS SYSTEM
+ * =================================================================================
+ */
+exports.addUserPoints = functions.region(REGION).https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Giriş yapmalısınız");
+    
+    const { userId, points, reason, universitesi } = data;
+    
+    if (!userId || !points || !reason) {
+      throw new functions.https.HttpsError("invalid-argument", "Eksik alan: userId, points, reason");
+    }
+    
+    const pointsRef = db.collection("user_points").doc(userId);
+    await db.runTransaction(async (transaction) => {
+      const doc = await transaction.get(pointsRef);
+      const current = doc.data() || { totalPoints: 0, level: 1 };
+      const newTotal = (current.totalPoints || 0) + points;
+      
+      transaction.set(pointsRef, {
+        userId,
+        totalPoints: newTotal,
+        level: Math.floor(newTotal / 100) + 1,
+        universitesi,
+        lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      
+      transaction.set(db.collection("user_point_history").doc(), {
+        userId,
+        points,
+        reason,
+        universitesi,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+    });
+    
+    return { success: true, message: "Puan eklendi" };
+  } catch (error) {
+    console.error("[ADD_POINTS_ERROR]", error);
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * =================================================================================
+ * PHASE 4: ACHIEVEMENTS SYSTEM
+ * =================================================================================
+ */
+exports.unlockAchievement = functions.region(REGION).https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Giriş yapmalısınız");
+    
+    const { userId, achievementId, universitesi } = data;
+    
+    if (!userId || !achievementId) {
+      throw new functions.https.HttpsError("invalid-argument", "Eksik alan: userId, achievementId");
+    }
+    
+    const userAchievementId = `${userId}_${achievementId}`;
+    const ref = db.collection("user_achievements").doc(userAchievementId);
+    
+    const doc = await ref.get();
+    if (doc.exists) {
+      return { success: false, message: "Başarı zaten açılmış" };
+    }
+    
+    await ref.set({
+      userId,
+      achievementId,
+      universitesi,
+      unlockedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    return { success: true, message: "Başarı açıldı!" };
+  } catch (error) {
+    console.error("[UNLOCK_ACHIEVEMENT_ERROR]", error);
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * =================================================================================
+ * PHASE 4: REWARDS SYSTEM
+ * =================================================================================
+ */
+exports.purchaseReward = functions.region(REGION).https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Giriş yapmalısınız");
+    
+    const { rewardId, universitesi } = data;
+    
+    if (!rewardId) {
+      throw new functions.https.HttpsError("invalid-argument", "Eksik alan: rewardId");
+    }
+    
+    const userId = context.auth.uid;
+    
+    await db.runTransaction(async (transaction) => {
+      // Check user points
+      const userPointsRef = db.collection("user_points").doc(userId);
+      const userDoc = await transaction.get(userPointsRef);
+      const userPoints = userDoc.data()?.totalPoints || 0;
+      
+      // Get reward
+      const rewardRef = db.collection("rewards").doc(rewardId);
+      const rewardDoc = await transaction.get(rewardRef);
+      const reward = rewardDoc.data();
+      
+      if (!reward) throw new Error("Ödül bulunamadı");
+      if (userPoints < reward.points) throw new Error("Yeterli puan yok");
+      
+      // Create purchase record
+      transaction.set(db.collection("user_reward_purchases").doc(), {
+        userId,
+        rewardId,
+        universitesi,
+        pointsSpent: reward.points,
+        purchasedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      // Update user points
+      transaction.set(userPointsRef, {
+        totalPoints: userPoints - reward.points,
+        universitesi
+      }, { merge: true });
+    });
+    
+    return { success: true, message: "Ödül satın alındı!" };
+  } catch (error) {
+    console.error("[PURCHASE_REWARD_ERROR]", error);
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * =================================================================================
+ * PHASE 4: SEARCH ANALYTICS SYSTEM
+ * =================================================================================
+ */
+exports.logSearchQuery = functions.region(REGION).https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Giriş yapmalısınız");
+    
+    const { query, universitesi, resultCount } = data;
+    
+    if (!query) {
+      throw new functions.https.HttpsError("invalid-argument", "Eksik alan: query");
+    }
+    
+    const queryId = `${universitesi}_${query}_${getMonthKey()}`;
+    const trendRef = db.collection("search_trends").doc(queryId);
+    
+    await db.runTransaction(async (transaction) => {
+      const doc = await transaction.get(trendRef);
+      const current = doc.data() || { searchCount: 0, trendScore: 0 };
+      
+      transaction.set(trendRef, {
+        query,
+        universitesi,
+        searchCount: (current.searchCount || 0) + 1,
+        trendScore: (current.trendScore || 0) + 1,
+        lastSearched: admin.firestore.FieldValue.serverTimestamp(),
+        month: getMonthKey()
+      }, { merge: true });
+    });
+    
+    // Log individual query
+    await db.collection("search_queries").add({
+      userId: context.auth.uid,
+      query,
+      universitesi,
+      resultCount: resultCount || 0,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    return { success: true, message: "Arama kaydedildi" };
+  } catch (error) {
+    console.error("[LOG_SEARCH_ERROR]", error);
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * =================================================================================
+ * PHASE 4: AI MODEL METRICS SYSTEM
+ * =================================================================================
+ */
+exports.saveAIMetrics = functions.region(REGION).https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Giriş yapmalısınız");
+    
+    const { modelName, accuracy, precision, recall, universitesi, predictions } = data;
+    
+    if (!modelName || accuracy === undefined) {
+      throw new functions.https.HttpsError("invalid-argument", "Eksik alan: modelName, accuracy");
+    }
+    
+    const metricsRef = db.collection("ai_metrics").doc();
+    await metricsRef.set({
+      modelName,
+      accuracy: parseFloat(accuracy),
+      precision: parseFloat(precision || 0),
+      recall: parseFloat(recall || 0),
+      universitesi,
+      predictions: predictions || 0,
+      recordedAt: admin.firestore.FieldValue.serverTimestamp(),
+      month: getMonthKey()
+    });
+    
+    return { success: true, metricsId: metricsRef.id };
+  } catch (error) {
+    console.error("[SAVE_AI_METRICS_ERROR]", error);
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * =================================================================================
+ * PHASE 4: FINANCIAL REPORTS SYSTEM
+ * =================================================================================
+ */
+exports.addFinancialRecord = functions.region(REGION).https.onCall(async (data, context) => {
+  try {
+    // Only admin can add financial records
+    const user = await admin.auth().getUser(context.auth.uid);
+    const userDoc = await db.collection("users").doc(context.auth.uid).get();
+    
+    if (userDoc.data()?.userRole !== "admin") {
+      throw new functions.https.HttpsError("permission-denied", "Sadece admin kayıt ekleyebilir");
+    }
+    
+    const { recordType, amount, description, universitesi, category } = data;
+    
+    if (!recordType || amount === undefined) {
+      throw new functions.https.HttpsError("invalid-argument", "Eksik alan: recordType, amount");
+    }
+    
+    const recordRef = db.collection("financial_records").doc();
+    await recordRef.set({
+      recordType,
+      amount: parseFloat(amount),
+      description: description || "",
+      universitesi,
+      category: category || "other",
+      createdBy: context.auth.uid,
+      recordedAt: admin.firestore.FieldValue.serverTimestamp(),
+      month: getMonthKey()
+    });
+    
+    return { success: true, recordId: recordRef.id };
+  } catch (error) {
+    console.error("[ADD_FINANCIAL_RECORD_ERROR]", error);
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * =================================================================================
+ * PAID API QUOTA CHECK ENDPOINTS
+ * =================================================================================
+ */
+exports.checkPaidApiQuotaStatus = functions.region(REGION).https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Giriş yapmalısınız");
+    
+    const { apiName } = data;
+    
+    if (!apiName) {
+      throw new functions.https.HttpsError("invalid-argument", "Eksik alan: apiName");
+    }
+    
+    const quotaStatus = await checkPaidApiQuota(apiName);
+    return quotaStatus;
+  } catch (error) {
+    console.error("[PAID_API_QUOTA_CHECK_ERROR]", error);
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * Get all paid API quota statuses
+ */
+exports.getAllPaidApiQuotaStatus = functions.region(REGION).https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Giriş yapmalısınız");
+    
+    const quotaStatuses = [];
+    
+    for (const apiName of Object.keys(PAID_API_QUOTAS)) {
+      const status = await checkPaidApiQuota(apiName);
+      quotaStatuses.push(status);
+    }
+    
+    return { success: true, quotas: quotaStatuses };
+  } catch (error) {
+    console.error("[GET_ALL_QUOTAS_ERROR]", error);
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * Reset paid API quota (admin only)
+ */
+exports.resetPaidApiQuota = functions.region(REGION).https.onCall(async (data, context) => {
+  try {
+    const userDoc = await db.collection("users").doc(context.auth.uid).get();
+    
+    if (userDoc.data()?.userRole !== "admin") {
+      throw new functions.https.HttpsError("permission-denied", "Sadece admin kota sıfırlayabilir");
+    }
+    
+    const { apiName } = data;
+    
+    if (!apiName || !PAID_API_QUOTAS[apiName]) {
+      throw new functions.https.HttpsError("invalid-argument", "Bilinmeyen API: " + apiName);
+    }
+    
+    const config = PAID_API_QUOTAS[apiName];
+    const monthKey = getMonthKey();
+    const quotaRef = db.collection(`${apiName.toLowerCase()}_api_quota`).doc(monthKey);
+    
+    await quotaRef.set({
+      usage: 0,
+      limit: config.monthlyQuota,
+      enabled: config.enabled,
+      resetAt: admin.firestore.FieldValue.serverTimestamp(),
+      resetBy: context.auth.uid
+    });
+    
+    console.log(`[QUOTA_RESET] ${apiName} quota reset for ${monthKey}`);
+    
+    return { success: true, message: `${apiName} kota sıfırlandı` };
+  } catch (error) {
+    console.error("[RESET_PAID_API_QUOTA_ERROR]", error);
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * Toggle paid API enabled status (admin only)
+ */
+exports.togglePaidApiStatus = functions.region(REGION).https.onCall(async (data, context) => {
+  try {
+    const userDoc = await db.collection("users").doc(context.auth.uid).get();
+    
+    if (userDoc.data()?.userRole !== "admin") {
+      throw new functions.https.HttpsError("permission-denied", "Sadece admin değiştirebilir");
+    }
+    
+    const { apiName, enabled } = data;
+    
+    if (!apiName || enabled === undefined) {
+      throw new functions.https.HttpsError("invalid-argument", "Eksik alan: apiName, enabled");
+    }
+    
+    if (!PAID_API_QUOTAS[apiName]) {
+      throw new functions.https.HttpsError("invalid-argument", "Bilinmeyen API");
+    }
+    
+    const monthKey = getMonthKey();
+    const quotaRef = db.collection(`${apiName.toLowerCase()}_api_quota`).doc(monthKey);
+    
+    await quotaRef.set({
+      enabled: enabled,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedBy: context.auth.uid
+    }, { merge: true });
+    
+    console.log(`[API_TOGGLE] ${apiName} set to ${enabled}`);
+    
+    return { success: true, message: `${apiName} ${enabled ? 'aktifleştirildi' : 'devre dışı bırakıldı'}` };
+  } catch (error) {
+    console.error("[TOGGLE_PAID_API_ERROR]", error);
+    throw new functions.https.HttpsError("internal", error.message);
+  }
+});
