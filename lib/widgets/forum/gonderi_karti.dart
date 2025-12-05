@@ -10,6 +10,7 @@ import '../../utils/app_colors.dart';
 import '../../models/badge_model.dart';
 import '../badge_widget.dart';
 import '../../screens/forum/gonderi_detay_ekrani.dart';
+import '../../screens/forum/forum_author_stats_widget.dart';
 import '../../screens/profile/kullanici_profil_detay_ekrani.dart';
 import '../../services/cloud_functions_service.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
@@ -534,6 +535,10 @@ class _GonderiKartiState extends State<GonderiKarti> with SingleTickerProviderSt
                                   const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.verified, size: 14, color: AppColors.primary)),
                               ],
                             ),
+                            // Yazarın puan ve rozetlerini göster
+                            const SizedBox(height: 4),
+                            ForumAuthorStatsWidget(authorUserId: widget.authorUserId),
+                            const SizedBox(height: 6),
                             Row(
                               children: [
                                 Text(widget.zaman, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
