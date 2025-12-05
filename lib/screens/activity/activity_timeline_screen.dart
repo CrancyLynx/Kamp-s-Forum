@@ -1,7 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import '../../models/phase2_models.dart';
-import '../../services/phase2_services.dart';
+import '../../models/content_models.dart';
+import '../../services/content_services.dart';
 
 /// Aktivite Zaman Çizelgesi
 class ActivityTimelineScreen extends StatefulWidget {
