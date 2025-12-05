@@ -23,7 +23,9 @@ class LoadingItem {
 }
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  final VoidCallback? onNavigateComplete;
+  
+  const SplashScreen({super.key, this.onNavigateComplete});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -200,18 +202,26 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
   void _navigateToHome() {
     if (mounted) {
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 1000),
-          pageBuilder: (_, __, ___) => const AnaKontrolcu(),
-          transitionsBuilder: (_, animation, __, child) {
-            return FadeTransition(
-              opacity: animation,
-              child: child,
-            );
-          },
-        ),
-      );
+      // Callback'i çağır (parent widget'a splash tamamlandığını söyle)
+      widget.onNavigateComplete?.call();
+      
+      // Kısa bir gecikmeden sonra AnaKontrolcu'ye navigate et
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            PageRouteBuilder(
+              transitionDuration: const Duration(milliseconds: 1000),
+              pageBuilder: (_, __, ___) => const AnaKontrolcu(),
+              transitionsBuilder: (_, animation, __, child) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: child,
+                );
+              },
+            ),
+          );
+        }
+      });
     }
   }
 

@@ -144,6 +144,7 @@ class AppLogic extends StatefulWidget {
 
 class _AppLogicState extends State<AppLogic> {
   final PushNotificationService _notificationService = PushNotificationService();
+  bool _splashComplete = false;
 
   @override
   void initState() {
@@ -157,6 +158,12 @@ class _AppLogicState extends State<AppLogic> {
           message.notification!.body ?? '',
         );
       }
+    });
+  }
+  
+  void _onSplashComplete() {
+    setState(() {
+      _splashComplete = true;
     });
   }
 
@@ -210,7 +217,10 @@ class _AppLogicState extends State<AppLogic> {
 
   @override
   Widget build(BuildContext context) {
-    return const SplashScreen();
+    // Splash tamamlanmışsa AnaKontrolcu'yü göster, değilse SplashScreen göster
+    return _splashComplete 
+      ? const AnaKontrolcu()
+      : SplashScreen(onNavigateComplete: _onSplashComplete);
   }
 }
 
