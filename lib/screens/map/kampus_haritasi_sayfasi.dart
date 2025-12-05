@@ -14,8 +14,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 // Servis ve Yardımcılar
 import '../../services/map_data_service.dart';
-import '../../services/phase2_services.dart'; // LocationMarkerService için
-import '../../models/phase2_models.dart'; // LocationMarker model için
+import '../../services/map_data_service.dart'; // LocationMarkerService için
+import '../../models/location_marker_model.dart'; // LocationMarker model için
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/maskot_helper.dart';

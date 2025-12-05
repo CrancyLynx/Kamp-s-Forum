@@ -23,7 +23,7 @@ import 'rozetler_sayfasi.dart';
 import '../admin/admin_panel_ekrani.dart';
 import '../auth/giris_ekrani.dart'; 
 import '../admin/kullanici_listesi_ekrani.dart';
-import '../systems/phase2to4_integration_panel.dart';
+import '../systems/systems_integration_panel.dart';
 
 import '../../services/auth_service.dart';
 import '../../services/cloud_functions_service.dart';

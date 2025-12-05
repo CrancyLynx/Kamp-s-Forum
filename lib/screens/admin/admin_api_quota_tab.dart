@@ -32,9 +32,9 @@ class _Phase3ApiQuotaTabState extends State<Phase3ApiQuotaTab> {
               .get(),
           builder: (context, quotaSnapshot) {
             final quotaData = quotaSnapshot.data?.data() as Map<String, dynamic>?;
-            final used = quotaData?['usageCount'] ?? 0;
+            final used = (quotaData?['usageCount'] ?? 0) as int;
             final limit = 1000; // Aylık sınır
-            final percentage = ((used as int) / limit * 100).toStringAsFixed(1);
+            final percentage = (used / limit * 100).toStringAsFixed(1);
 
             return SingleChildScrollView(
               padding: const EdgeInsets.all(16),
@@ -102,11 +102,11 @@ class _Phase3ApiQuotaTabState extends State<Phase3ApiQuotaTab> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: LinearProgressIndicator(
-                      value: (used as int) / limit,
+                      value: used / limit,
                       minHeight: 12,
                       backgroundColor: Colors.grey.withValues(alpha: 0.3),
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        (used as int) / limit > 0.8 ? Colors.red : Colors.blue,
+                        used / limit > 0.8 ? Colors.red : Colors.blue,
                       ),
                     ),
                   ),

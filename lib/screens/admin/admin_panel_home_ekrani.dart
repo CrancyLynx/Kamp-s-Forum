@@ -464,16 +464,6 @@ class _AdminPanelHomeEkraniState extends State<AdminPanelHomeEkrani> {
       itemBuilder: (context, index) => cards[index],
     );
   }
-
-  void _showComingSoon(String title) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("🚀 $title - Yakında aktif olacak"),
-        backgroundColor: AppColors.info,
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
 }
 
 class _AdminCard extends StatefulWidget {

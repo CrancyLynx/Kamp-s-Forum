@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../models/phase2_models.dart';
-import '../../services/phase2_services.dart';
+import '../../models/activity_timeline_model.dart';
+import '../../services/content_services.dart';
 import '../../utils/app_colors.dart';
 
 /// Kullanıcı aktivite zaman çizelgesi ekranı
