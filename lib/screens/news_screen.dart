@@ -12,44 +12,21 @@ class NewsScreen extends StatefulWidget {
 }
 
 class _NewsScreenState extends State<NewsScreen> with SingleTickerProviderStateMixin {
-  final NewsService _newsService = NewsService();
   late TabController _tabController;
-  List<NewsArticle> _allNews = [];
-  List<NewsArticle> _filteredNews = [];
-  bool _isLoading = true;
+  String _selectedCategory = 'Hepsi';
 
-  final List<String> _categories = ['Hepsi', 'Haber', 'Duyuru', 'Etkinlik', 'Teknoloji'];
+  final List<String> _categories = ['Hepsi', 'akademik', 'etkinlik', 'bildirim', 'ozel'];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: _categories.length, vsync: this);
-    _loadNews();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadNews() async {
-    setState(() => _isLoading = true);
-    final news = await _newsService.getAllNews();
-    setState(() {
-      _allNews = news;
-      _filteredNews = news;
-      _isLoading = false;
-    });
-  }
-
-  void _filterByCategory(int index) {
-    if (index == 0) {
-      setState(() => _filteredNews = _allNews);
-    } else {
-      final category = _categories[index].toLowerCase();
-      setState(() => _filteredNews = _allNews.where((n) => n.category.toLowerCase() == category).toList());
-    }
   }
 
   @override
@@ -59,26 +36,42 @@ class _NewsScreenState extends State<NewsScreen> with SingleTickerProviderStateM
         title: const Text('Haberler'),
         bottom: TabBar(
           controller: _tabController,
-          onTap: _filterByCategory,
-          tabs: _categories.map((cat) => Tab(text: cat)).toList(),
+          onTap: (index) {
+            setState(() => _selectedCategory = _categories[index]);
+          },
+          tabs: _categories.map((cat) => Tab(text: cat == 'Hepsi' ? 'Hepsi' : cat)).toList(),
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadNews,
-              child: ListView.builder(
-                itemCount: _filteredNews.length,
-                itemBuilder: (context, index) {
-                  final article = _filteredNews[index];
-                  return _buildNewsCard(article);
-                },
-              ),
+      body: StreamBuilder<List<News>>(
+        stream: _selectedCategory == 'Hepsi'
+            ? NewsService.getActiveNews()
+            : NewsService.getNewsByCategory(_selectedCategory),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return const Center(child: Text('Haber bulunamadı'));
+          }
+
+          final news = snapshot.data!;
+          return RefreshIndicator(
+            onRefresh: () async => setState(() {}),
+            child: ListView.builder(
+              itemCount: news.length,
+              itemBuilder: (context, index) {
+                final article = news[index];
+                return _buildNewsCard(article);
+              },
             ),
+          );
+        },
+      ),
     );
   }
 
-  Widget _buildNewsCard(NewsArticle article) {
+  Widget _buildNewsCard(News article) {
     return Card(
       margin: const EdgeInsets.all(8),
       child: Column(
@@ -106,7 +99,7 @@ class _NewsScreenState extends State<NewsScreen> with SingleTickerProviderStateM
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  article.description,
+                  article.content,
                   style: Theme.of(context).textTheme.bodyMedium,
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
@@ -117,33 +110,10 @@ class _NewsScreenState extends State<NewsScreen> with SingleTickerProviderStateM
                   children: [
                     Expanded(
                       child: Text(
-                        '${article.sourceName} • ${article.views} görüntüleme',
+                        '${article.category} • ${article.viewCount} görüntüleme',
                         style: Theme.of(context).textTheme.bodySmall,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    IconButton(
-                      icon: Icon(article.isBookmarked ? Icons.bookmark : Icons.bookmark_border),
-                      onPressed: () {
-                        _newsService.toggleBookmark(article.id, !article.isBookmarked);
-                        setState(() {
-                          final index = _filteredNews.indexOf(article);
-                          if (index != -1) {
-                            _filteredNews[index] = NewsArticle(
-                              id: article.id,
-                              title: article.title,
-                              description: article.description,
-                              imageUrl: article.imageUrl,
-                              sourceUrl: article.sourceUrl,
-                              category: article.category,
-                              publishedAt: article.publishedAt,
-                              sourceName: article.sourceName,
-                              views: article.views,
-                              isBookmarked: !article.isBookmarked,
-                            );
-                          }
-                        });
-                      },
                     ),
                   ],
                 ),

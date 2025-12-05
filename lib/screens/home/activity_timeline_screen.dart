@@ -1,3 +1,5 @@
+// TODO: ActivityTimeline model ve servisi ile senkronize etmek gerekiyor
+/*
 import 'package:flutter/material.dart';
 import '../../models/activity_timeline_model.dart';
 import '../../services/content_services.dart';
@@ -208,3 +210,4 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
     }
   }
 }
+*/

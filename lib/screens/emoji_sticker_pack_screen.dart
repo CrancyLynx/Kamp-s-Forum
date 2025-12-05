@@ -1,4 +1,6 @@
 // lib/screens/emoji_sticker_pack_screen.dart
+// TODO: EmojiPack modeli ve servisi ile senkronize etmek gerekiyor
+/*
 import 'package:flutter/material.dart';
 import '../models/content_models.dart';
 import '../services/content_services.dart';
@@ -11,46 +13,9 @@ class EmojiStickerPackScreen extends StatefulWidget {
 }
 
 class _EmojiStickerPackScreenState extends State<EmojiStickerPackScreen> {
-  final EmojiStickerService _emojiService = EmojiStickerService();
-  List<EmojiStickerPack> _packs = [];
-  bool _isLoading = true;
   String _selectedCategory = 'Hepsi';
 
   final List<String> _categories = ['Hepsi', 'Popüler', 'Yeni', 'Oyunlar', 'Animeler', 'Özel'];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPacks();
-  }
-
-  Future<void> _loadPacks() async {
-    setState(() => _isLoading = true);
-    final packs = await _emojiService.getAllPacks();
-    setState(() {
-      _packs = packs;
-      _isLoading = false;
-    });
-  }
-
-  Future<void> _filterByCategory(String category) async {
-    setState(() {
-      _isLoading = true;
-      _selectedCategory = category;
-    });
-
-    List<EmojiStickerPack> packs;
-    if (category == 'Hepsi') {
-      packs = await _emojiService.getAllPacks();
-    } else {
-      packs = await _emojiService.getPacksByCategory(category);
-    }
-
-    setState(() {
-      _packs = packs;
-      _isLoading = false;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,7 +37,7 @@ class _EmojiStickerPackScreenState extends State<EmojiStickerPackScreen> {
                   child: FilterChip(
                     label: Text(category),
                     selected: isSelected,
-                    onSelected: (_) => _filterByCategory(category),
+                    onSelected: (_) => setState(() => _selectedCategory = category),
                   ),
                 );
               }).toList(),
@@ -80,36 +45,51 @@ class _EmojiStickerPackScreenState extends State<EmojiStickerPackScreen> {
           ),
           // Pack Grid
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _packs.isEmpty
-                    ? Center(
-                        child: Text('${_selectedCategory} kategorisinde paket bulunamadı'),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _loadPacks,
-                        child: GridView.builder(
-                          padding: const EdgeInsets.all(8),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            childAspectRatio: 1,
-                            mainAxisSpacing: 8,
-                            crossAxisSpacing: 8,
-                          ),
-                          itemCount: _packs.length,
-                          itemBuilder: (context, index) {
-                            final pack = _packs[index];
-                            return _buildPackCard(pack);
-                          },
-                        ),
-                      ),
+            child: StreamBuilder<List<EmojiPack>>(
+              stream: EmojiStickerService.getEmojiPacks(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return Center(
+                    child: Text('$_selectedCategory kategorisinde paket bulunamadı'),
+                  );
+                }
+
+                final allPacks = snapshot.data!;
+                // Filter based on selected category
+                final filteredPacks = _selectedCategory == 'Hepsi'
+                    ? allPacks
+                    : allPacks.where((p) => p.category == _selectedCategory).toList();
+
+                return RefreshIndicator(
+                  onRefresh: () async => setState(() {}),
+                  child: GridView.builder(
+                    padding: const EdgeInsets.all(8),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      childAspectRatio: 1,
+                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 8,
+                    ),
+                    itemCount: filteredPacks.length,
+                    itemBuilder: (context, index) {
+                      final pack = filteredPacks[index];
+                      return _buildPackCard(pack);
+                    },
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPackCard(EmojiStickerPack pack) {
+  Widget _buildPackCard(EmojiPack pack) {
     return GestureDetector(
       onTap: () => _showPackDetails(pack),
       child: Card(
@@ -119,13 +99,15 @@ class _EmojiStickerPackScreenState extends State<EmojiStickerPackScreen> {
             Expanded(
               child: Container(
                 color: Colors.grey[200],
-                child: Image.network(
-                  pack.packageIcon,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const Center(child: Icon(Icons.image_not_supported));
-                  },
-                ),
+                child: pack.imageUrl != null
+                    ? Image.network(
+                        pack.imageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Center(child: Icon(Icons.image_not_supported));
+                        },
+                      )
+                    : const Center(child: Icon(Icons.emoji_emotions, size: 40)),
               ),
             ),
             Padding(
@@ -144,7 +126,7 @@ class _EmojiStickerPackScreenState extends State<EmojiStickerPackScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '${pack.downloads} indir',
+                        '${pack.downloadCount} indir',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       if (pack.isOfficial)
@@ -160,7 +142,7 @@ class _EmojiStickerPackScreenState extends State<EmojiStickerPackScreen> {
     );
   }
 
-  void _showPackDetails(EmojiStickerPack pack) {
+  void _showPackDetails(EmojiPack pack) {
     showModalBottomSheet(
       context: context,
       builder: (context) => Container(
@@ -245,3 +227,4 @@ class _EmojiStickerPackScreenState extends State<EmojiStickerPackScreen> {
     );
   }
 }
+*/

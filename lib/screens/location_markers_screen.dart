@@ -1,4 +1,6 @@
 // lib/screens/location_markers_screen.dart
+// TODO: LocationMarker model ve servisi uyumlaştırması gerekiyor
+/*
 import 'package:flutter/material.dart';
 import '../models/content_models.dart';
 import '../services/content_services.dart';
@@ -205,3 +207,4 @@ class _LocationMarkersScreenState extends State<LocationMarkersScreen> {
     );
   }
 }
+*/

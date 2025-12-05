@@ -1,4 +1,6 @@
 // lib/screens/features_security_alerts_screen.dart
+// TODO: SecurityAlertService ve SecurityAlert modeli implement edilecek
+/*
 import 'package:flutter/material.dart';
 import '../models/advanced_features_models.dart';
 import '../services/advanced_features_services.dart';
@@ -265,3 +267,4 @@ class _SecurityAlertsScreenState extends State<SecurityAlertsScreen> {
     );
   }
 }
+*/

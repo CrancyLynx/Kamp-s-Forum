@@ -1,6 +1,8 @@
 // lib/screens/admin/admin_vision_quota_tab.dart
+// TODO: VisionQuotaService implement edilecek
+/*
 import 'package:flutter/material.dart';
-import '../../models/admin_models.dart';
+import '../../models/vision_quota_model.dart';
 import '../../services/admin_services.dart';
 
 class VisionQuotaTab extends StatefulWidget {
@@ -179,3 +181,4 @@ class _VisionQuotaTabState extends State<VisionQuotaTab> {
     );
   }
 }
+*/

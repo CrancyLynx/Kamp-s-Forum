@@ -54,7 +54,12 @@ class ErrorLogCard extends StatelessWidget {
   final String message;
   final String severity;
 
-  const ErrorLogCard({required this.title, required this.message, required this.severity});
+  const ErrorLogCard({
+    super.key,
+    required this.title,
+    required this.message,
+    required this.severity,
+  });
 
   @override
   Widget build(BuildContext context) {

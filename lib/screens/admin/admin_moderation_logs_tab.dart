@@ -11,24 +11,7 @@ class ModerationLogsTab extends StatefulWidget {
 }
 
 class _ModerationLogsTabState extends State<ModerationLogsTab> {
-  final AuditLogService _auditService = AuditLogService();
-  List<AuditLog> _logs = [];
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadLogs();
-  }
-
-  Future<void> _loadLogs() async {
-    setState(() => _isLoading = true);
-    final logs = await _auditService.getRecentLogs(limit: 100);
-    setState(() {
-      _logs = logs;
-      _isLoading = false;
-    });
-  }
+  String _filterType = 'create';
 
   @override
   Widget build(BuildContext context) {
@@ -38,30 +21,40 @@ class _ModerationLogsTabState extends State<ModerationLogsTab> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadLogs,
+            onPressed: () => setState(() {}),
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _logs.isEmpty
-              ? const Center(child: Text('Günlük bulunamadı'))
-              : RefreshIndicator(
-                  onRefresh: _loadLogs,
-                  child: ListView.builder(
-                    itemCount: _logs.length,
-                    itemBuilder: (context, index) {
-                      final log = _logs[index];
-                      return _buildLogCard(log);
-                    },
-                  ),
-                ),
+      body: StreamBuilder<List<AuditLog>>(
+        stream: AuditLogService.getActionsByType(_filterType),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return const Center(child: Text('Günlük bulunamadı'));
+          }
+
+          final logs = snapshot.data!;
+          return RefreshIndicator(
+            onRefresh: () async => setState(() {}),
+            child: ListView.builder(
+              itemCount: logs.length,
+              itemBuilder: (context, index) {
+                final log = logs[index];
+                return _buildLogCard(log);
+              },
+            ),
+          );
+        },
+      ),
     );
   }
 
   Widget _buildLogCard(AuditLog log) {
     final Color actionColor = _getActionColor(log.action);
-    
+
     return Card(
       margin: const EdgeInsets.all(8),
       child: Padding(
@@ -106,22 +99,11 @@ class _ModerationLogsTabState extends State<ModerationLogsTab> {
               ],
             ),
             const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    log.details,
-                    style: Theme.of(context).textTheme.bodySmall,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Chip(
-                  label: Text(log.status),
-                  backgroundColor: log.status == 'completed' ? Colors.green.shade100 : Colors.orange.shade100,
-                ),
-              ],
+            Text(
+              log.targetType,
+              style: Theme.of(context).textTheme.bodySmall,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 8),
             Row(
@@ -145,11 +127,12 @@ class _ModerationLogsTabState extends State<ModerationLogsTab> {
       case 'delete':
         return Colors.red;
       case 'edit':
+      case 'update':
         return Colors.blue;
       case 'create':
         return Colors.green;
-      case 'suspend':
-        return Colors.orange;
+      case 'view':
+        return Colors.purple;
       default:
         return Colors.grey;
     }
@@ -160,13 +143,14 @@ class _ModerationLogsTabState extends State<ModerationLogsTab> {
       case 'delete':
         return Icons.delete;
       case 'edit':
+      case 'update':
         return Icons.edit;
       case 'create':
         return Icons.add;
-      case 'suspend':
-        return Icons.block;
+      case 'view':
+        return Icons.visibility;
       default:
-        return Icons.description;
+        return Icons.help;
     }
   }
 }

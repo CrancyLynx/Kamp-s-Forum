@@ -14,7 +14,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 // Servis ve Yardımcılar
 import '../../services/map_data_service.dart';
-import '../../services/map_data_service.dart'; // LocationMarkerService için
 import '../../models/location_marker_model.dart'; // LocationMarker model için
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import '../../utils/app_colors.dart';
@@ -1550,10 +1549,11 @@ class _KampusHaritasiSayfasiState extends State<KampusHaritasiSayfasi> {
   // YENİ: Location Marker yardımcı metodlar
   Future<void> _loadCustomLocationMarkers() async {
     try {
-      final markers = await LocationMarkerService.getAllMarkers().first;
+      // TODO: LocationMarkerService implement edilecek
+      // final markers = await LocationMarkerService.getAllMarkers().first;
       if (mounted) {
         setState(() {
-          _customLocationMarkers = markers;
+          _customLocationMarkers = [];
         });
         _updateMarkers();
       }

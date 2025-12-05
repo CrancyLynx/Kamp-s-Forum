@@ -1,4 +1,6 @@
 // lib/screens/features_cache_management_screen.dart
+// TODO: CacheService implement edilecek
+/*
 import 'package:flutter/material.dart';
 import '../services/advanced_features_services.dart';
 
@@ -141,3 +143,4 @@ class _CacheManagementScreenState extends State<CacheManagementScreen> {
     );
   }
 }
+*/

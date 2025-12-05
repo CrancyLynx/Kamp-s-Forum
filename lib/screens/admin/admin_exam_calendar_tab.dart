@@ -12,8 +12,7 @@ class ExamCalendarTab extends StatefulWidget {
 }
 
 class _ExamCalendarTabState extends State<ExamCalendarTab> {
-  final ExamCalendarService _examService = ExamCalendarService();
-  List<ExamCalendar> _exams = [];
+  List<ExamCalendarEntry> _exams = [];
   bool _isLoading = true;
 
   @override
@@ -24,7 +23,8 @@ class _ExamCalendarTabState extends State<ExamCalendarTab> {
 
   Future<void> _loadExams() async {
     setState(() => _isLoading = true);
-    final exams = await _examService.getUpcomingExams();
+    final examsStream = ExamCalendarService.getUpcomingExams();
+    final exams = await examsStream.first;
     setState(() {
       _exams = exams;
       _isLoading = false;
@@ -61,7 +61,7 @@ class _ExamCalendarTabState extends State<ExamCalendarTab> {
     );
   }
 
-  Widget _buildExamCard(ExamCalendar exam) {
+  Widget _buildExamCard(ExamCalendarEntry exam) {
     return Card(
       margin: const EdgeInsets.all(8),
       child: Padding(
@@ -89,31 +89,32 @@ class _ExamCalendarTabState extends State<ExamCalendarTab> {
                 Text(DateFormat('dd/MM/yyyy HH:mm').format(exam.examDate)),
               ],
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.location_on, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text('${exam.building} - ${exam.classroom}'),
+            if (exam.location != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.location_on, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(exam.location!),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
             const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.timer, size: 18),
-                    const SizedBox(width: 8),
-                    Text('${exam.duration} dakika'),
-                  ],
-                ),
                 Chip(
-                  label: Text(exam.instructorName),
-                  avatar: const Icon(Icons.person, size: 18),
+                  label: Text(exam.examType),
+                  avatar: const Icon(Icons.assignment, size: 18),
                 ),
+                if (exam.professor != null)
+                  Chip(
+                    label: Text(exam.professor!),
+                    avatar: const Icon(Icons.person, size: 18),
+                  ),
               ],
             ),
           ],
